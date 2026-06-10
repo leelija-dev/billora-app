@@ -59,7 +59,7 @@ export const brandsAPI = {
       }
       
       console.log('Update brand API payload:', payload);
-      const response = await apiClient.put(`/brands/${id}`, payload);
+      const response = await apiClient.post(`/brands/${id}`, payload);
       return response.data;
     } catch (error) {
       console.error('Update brand API error:', error.response?.data || error.message);

@@ -1,29 +1,28 @@
 // screens/reports/ReportDetailScreen.js
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useState, useEffect, useMemo, useRef } from "react";
+import * as FileSystem from "expo-file-system";
+import { LinearGradient } from "expo-linear-gradient";
+import * as MediaLibrary from "expo-media-library";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   ScrollView,
+  Share,
   StatusBar,
   Text,
   TouchableOpacity,
-  View,
-  ActivityIndicator,
-  Share,
-  Alert,
-  Modal,
-  Platform,
+  View
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { LinearGradient } from "expo-linear-gradient";
-import * as Print from 'expo-print';
+import { WebView } from "react-native-webview";
+import * as XLSX from "xlsx";
+import { reportsAPI } from "../../api";
 import { useThemeStore } from "../../store/themeStore";
-import { reportsAPI } from "../../api"; 
 import { formatDate } from "../../utils/dateFormatter";
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
-import * as XLSX from 'xlsx';
-import * as MediaLibrary from 'expo-media-library';
-import { WebView } from 'react-native-webview';
 
 const ReportDetailScreen = () => {
   const navigation = useNavigation();
@@ -36,7 +35,7 @@ const ReportDetailScreen = () => {
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [printModalVisible, setPrintModalVisible] = useState(false);
   const [printPreviewVisible, setPrintPreviewVisible] = useState(false);
-  const [printHTML, setPrintHTML] = useState('');
+  const [printHTML, setPrintHTML] = useState("");
   const [exportDropdownVisible, setExportDropdownVisible] = useState(false);
   const reportViewRef = useRef();
 
@@ -47,15 +46,20 @@ const ReportDetailScreen = () => {
   const loadReportData = async () => {
     setLoading(true);
     try {
-      console.log('Loading report data for reportId:', reportId, 'reportType:', reportType);
-      
+      console.log(
+        "Loading report data for reportId:",
+        reportId,
+        "reportType:",
+        reportType,
+      );
+
       // Try to get single report by ID first
       let reportData = null;
-      
+
       try {
         const response = await reportsAPI.getSingleReport(reportId);
-        console.log('Single report API response:', response);
-        
+        console.log("Single report API response:", response);
+
         if (response && response.data) {
           reportData = response.data;
         } else if (response && response.report) {
@@ -64,21 +68,24 @@ const ReportDetailScreen = () => {
           reportData = response;
         }
       } catch (singleReportError) {
-        console.log('Single report fetch failed, trying with date range:', singleReportError);
-        
+        console.log(
+          "Single report fetch failed, trying with date range:",
+          singleReportError,
+        );
+
         // If single report fetch fails, try fetching with date range
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 30);
-        
+
         const response = await reportsAPI.getReports(
-          startDate.toISOString().split('T')[0],
-          endDate.toISOString().split('T')[0],
-          1
+          startDate.toISOString().split("T")[0],
+          endDate.toISOString().split("T")[0],
+          1,
         );
-        
-        console.log('Reports API Response:', response);
-        
+
+        console.log("Reports API Response:", response);
+
         let reportsData = [];
         if (response && response.data) {
           reportsData = response.data.reports || response.data || [];
@@ -89,19 +96,21 @@ const ReportDetailScreen = () => {
         } else {
           reportsData = response || [];
         }
-        
-        reportData = reportsData.find(r => r.id == reportId || r.invoice_number == reportId);
+
+        reportData = reportsData.find(
+          (r) => r.id == reportId || r.invoice_number == reportId,
+        );
       }
-      
+
       if (reportData) {
         const formattedReport = formatReportData(reportData);
         setReport(formattedReport);
       } else {
-        console.log('Report not found, creating summary report');
+        console.log("Report not found, creating summary report");
         createSummaryReport();
       }
     } catch (error) {
-      console.error('Error loading report:', error);
+      console.error("Error loading report:", error);
       createSummaryReport();
     } finally {
       setLoading(false);
@@ -111,14 +120,17 @@ const ReportDetailScreen = () => {
   const formatReportData = (data) => {
     // Format the report data based on the API response structure
     return {
-      id: data.id || data.invoice_number || 'N/A',
-      title: data.title || `${data.type || 'Report'} - ${formatDate(data.date || data.created_at, 'MMM DD, YYYY')}`,
-      type: data.type || reportType || 'general',
+      id: data.id || data.invoice_number || "N/A",
+      title:
+        data.title ||
+        `${data.type || "Report"} - ${formatDate(data.date || data.created_at, "MMM DD, YYYY")}`,
+      type: data.type || reportType || "general",
       amount: parseFloat(data.amount || data.total_amount || data.total || 0),
       count: parseInt(data.count || data.total_items || data.items_count || 1),
       date: data.date || data.created_at || new Date(),
-      status: data.status || 'completed',
-      description: data.description || `${data.type || 'Report'} details for period`,
+      status: data.status || "completed",
+      description:
+        data.description || `${data.type || "Report"} details for period`,
       invoice_items: data.invoice_items || data.items || [],
       customer_id: data.customer_id,
       store_id: data.store_id,
@@ -128,30 +140,51 @@ const ReportDetailScreen = () => {
       customer_name: data.customer_name,
       store_name: data.store_name,
       details: [
-        { label: 'Report ID', value: `#${data.id || data.invoice_number}` },
-        { label: 'Type', value: data.type || reportType || 'General' },
-        { label: 'Date', value: formatDate(data.date || data.created_at, 'MMMM DD, YYYY') },
-        { label: 'Time', value: formatDate(data.date || data.created_at, 'HH:mm') },
-        { label: 'Total Amount', value: formatCurrency(data.amount || data.total_amount || data.total || 0) },
-        { label: 'Items Count', value: (data.count || data.total_items || data.items_count || 1).toString() },
-        { label: 'Status', value: data.status || 'Completed' },
-      ].filter(detail => detail.value !== undefined && detail.value !== null),
-      data: data.items || data.invoice_items || data.data || [
-        { name: 'Item 1', quantity: 1, amount: data.amount || 0 },
-      ]
+        { label: "Report ID", value: `#${data.id || data.invoice_number}` },
+        { label: "Type", value: data.type || reportType || "General" },
+        {
+          label: "Date",
+          value: formatDate(data.date || data.created_at, "MMMM DD, YYYY"),
+        },
+        {
+          label: "Time",
+          value: formatDate(data.date || data.created_at, "HH:mm"),
+        },
+        {
+          label: "Total Amount",
+          value: formatCurrency(
+            data.amount || data.total_amount || data.total || 0,
+          ),
+        },
+        {
+          label: "Items Count",
+          value: (
+            data.count ||
+            data.total_items ||
+            data.items_count ||
+            1
+          ).toString(),
+        },
+        { label: "Status", value: data.status || "Completed" },
+      ].filter((detail) => detail.value !== undefined && detail.value !== null),
+      data: data.items ||
+        data.invoice_items ||
+        data.data || [
+          { name: "Item 1", quantity: 1, amount: data.amount || 0 },
+        ],
     };
   };
 
   const createSummaryReport = () => {
     const summaryReport = {
-      id: reportId || 'summary',
-      type: reportType || 'summary',
-      title: `${reportType ? reportType.charAt(0).toUpperCase() + reportType.slice(1) : 'Summary'} Report`,
+      id: reportId || "summary",
+      type: reportType || "summary",
+      title: `${reportType ? reportType.charAt(0).toUpperCase() + reportType.slice(1) : "Summary"} Report`,
       date: new Date(),
       amount: 0,
       count: 0,
-      status: 'completed',
-      description: `Overall ${reportType || 'summary'} report for the selected period`,
+      status: "completed",
+      description: `Overall ${reportType || "summary"} report for the selected period`,
       totalSales: 0,
       totalOrders: 0,
       totalDue: 0,
@@ -159,16 +192,16 @@ const ReportDetailScreen = () => {
       topProducts: [],
       lowStockItems: 0,
       details: [
-        { label: 'Total Sales', value: formatCurrency(0) },
-        { label: 'Total Orders', value: '0' },
-        { label: 'Total Due', value: formatCurrency(0) },
-        { label: 'Low Stock Items', value: '0' },
+        { label: "Total Sales", value: formatCurrency(0) },
+        { label: "Total Orders", value: "0" },
+        { label: "Total Due", value: formatCurrency(0) },
+        { label: "Low Stock Items", value: "0" },
       ],
       data: [
-        { name: 'Sample Product A', quantity: 10, amount: 500 },
-        { name: 'Sample Product B', quantity: 8, amount: 400 },
-        { name: 'Sample Product C', quantity: 5, amount: 250 },
-      ]
+        { name: "Sample Product A", quantity: 10, amount: 500 },
+        { name: "Sample Product B", quantity: 8, amount: 400 },
+        { name: "Sample Product C", quantity: 5, amount: 250 },
+      ],
     };
     setReport(summaryReport);
   };
@@ -176,8 +209,8 @@ const ReportDetailScreen = () => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${report?.title || 'Report'} - ${formatCurrency(report?.amount)}\nDate: ${formatDate(report?.date)}\nType: ${report?.type}`,
-        title: report?.title || 'Report Details',
+        message: `${report?.title || "Report"} - ${formatCurrency(report?.amount)}\nDate: ${formatDate(report?.date)}\nType: ${report?.type}`,
+        title: report?.title || "Report Details",
       });
     } catch (error) {
       Alert.alert("Error", "Failed to share report");
@@ -188,14 +221,14 @@ const ReportDetailScreen = () => {
   const generatePrintHTML = () => {
     const typeIcon = getTypeIcon();
     const currentDate = new Date().toLocaleString();
-    
+
     return `
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${report?.title || 'Report'}</title>
+          <title>${report?.title || "Report"}</title>
           <style>
             @page {
               size: A4;
@@ -240,10 +273,17 @@ const ReportDetailScreen = () => {
             .report-badge {
               display: inline-block;
               padding: 8px 20px;
-              background: ${typeIcon.bg === 'bg-green-500' ? '#10b981' : 
-                           typeIcon.bg === 'bg-orange-500' ? '#f59e0b' :
-                           typeIcon.bg === 'bg-purple-500' ? '#8b5cf6' :
-                           typeIcon.bg === 'bg-blue-500' ? '#3b82f6' : '#6b7280'};
+              background: ${
+                typeIcon.bg === "bg-green-500"
+                  ? "#10b981"
+                  : typeIcon.bg === "bg-orange-500"
+                    ? "#f59e0b"
+                    : typeIcon.bg === "bg-purple-500"
+                      ? "#8b5cf6"
+                      : typeIcon.bg === "bg-blue-500"
+                        ? "#3b82f6"
+                        : "#6b7280"
+              };
               color: white;
               border-radius: 30px;
               font-size: 14px;
@@ -398,8 +438,8 @@ const ReportDetailScreen = () => {
         <body>
           <div class="report-container">
             <div class="header">
-              <div class="report-badge">${report?.type?.toUpperCase() || 'REPORT'}</div>
-              <h1>${report?.title || 'Business Report'}</h1>
+              <div class="report-badge">${report?.type?.toUpperCase() || "REPORT"}</div>
+              <h1>${report?.title || "Business Report"}</h1>
               <div class="subtitle">Generated on: ${currentDate}</div>
             </div>
             
@@ -417,8 +457,8 @@ const ReportDetailScreen = () => {
               </div>
               <div class="info-card">
                 <h3>Date</h3>
-                <div class="value">${formatDate(report?.date, 'MMM DD, YYYY')}</div>
-                <div class="label">${formatDate(report?.date, 'HH:mm')}</div>
+                <div class="value">${formatDate(report?.date, "MMM DD, YYYY")}</div>
+                <div class="label">${formatDate(report?.date, "HH:mm")}</div>
               </div>
             </div>
 
@@ -443,31 +483,41 @@ const ReportDetailScreen = () => {
             <div class="details-section">
               <h2 class="metrics-title">Report Details</h2>
               <table class="details-table">
-                ${report?.details?.map(detail => `
+                ${report?.details
+                  ?.map(
+                    (detail) => `
                   <tr>
                     <td class="label">${detail.label}</td>
                     <td class="value">${detail.value}</td>
                   </tr>
-                `).join('')}
+                `,
+                  )
+                  .join("")}
                 <tr>
                   <td class="label">Status</td>
                   <td class="value">
-                    <span class="status-badge ${report?.status === 'completed' ? 'status-completed' : 'status-pending'}">
-                      ${report?.status || 'Completed'}
+                    <span class="status-badge ${report?.status === "completed" ? "status-completed" : "status-pending"}">
+                      ${report?.status || "Completed"}
                     </span>
                    </td>
                 </tr>
               </table>
             </div>
 
-            ${report?.description ? `
+            ${
+              report?.description
+                ? `
               <div class="metrics-section">
                 <h2 class="metrics-title">Description</h2>
                 <p style="color: #475569; line-height: 1.8;">${report?.description}</p>
               </div>
-            ` : ''}
+            `
+                : ""
+            }
 
-            ${report?.data && report?.data.length > 0 ? `
+            ${
+              report?.data && report?.data.length > 0
+                ? `
               <div class="metrics-section">
                 <h2 class="metrics-title">Data Details</h2>
                 <table class="data-table">
@@ -479,13 +529,17 @@ const ReportDetailScreen = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    ${report?.data.map(item => `
+                    ${report?.data
+                      .map(
+                        (item) => `
                       <tr>
-                        <td>${item.name || item.product_name || 'Item'}</td>
+                        <td>${item.name || item.product_name || "Item"}</td>
                         <td>${item.quantity || item.qty || 1}</td>
                         <td>${formatCurrency(item.amount || item.price || item.total || 0)}</td>
                       </tr>
-                    `).join('')}
+                    `,
+                      )
+                      .join("")}
                     <tr class="total-row">
                       <td><strong>Total</strong></td>
                       <td><strong>${report?.data.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0)}</strong></td>
@@ -494,7 +548,9 @@ const ReportDetailScreen = () => {
                   </tbody>
                 </table>
               </div>
-            ` : ''}
+            `
+                : ""
+            }
 
             <div class="footer">
               <p>This is a system-generated report. For any queries, please contact support.</p>
@@ -542,25 +598,25 @@ const ReportDetailScreen = () => {
         html,
         base64: false,
       });
-      
-      const fileName = `Report_${report?.id || 'summary'}_${new Date().getTime()}.pdf`;
+
+      const fileName = `Report_${report?.id || "summary"}_${new Date().getTime()}.pdf`;
       const newUri = FileSystem.documentDirectory + fileName;
-      
+
       await FileSystem.copyAsync({
         from: uri,
         to: newUri,
       });
-      
+
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(newUri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Export PDF',
+          mimeType: "application/pdf",
+          dialogTitle: "Export PDF",
         });
       } else {
         const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
+        if (status === "granted") {
           const asset = await MediaLibrary.createAssetAsync(newUri);
-          await MediaLibrary.createAlbumAsync('Reports', asset, false);
+          await MediaLibrary.createAlbumAsync("Reports", asset, false);
           Alert.alert("Success", "PDF saved to gallery");
         } else {
           Alert.alert("Success", `PDF saved to: ${newUri}`);
@@ -577,67 +633,81 @@ const ReportDetailScreen = () => {
     setExportDropdownVisible(false);
     try {
       const excelData = [];
-      
-      excelData.push(['Report Export', report?.title || 'Report']);
-      excelData.push(['Generated On', new Date().toLocaleString()]);
+
+      excelData.push(["Report Export", report?.title || "Report"]);
+      excelData.push(["Generated On", new Date().toLocaleString()]);
       excelData.push([]);
-      
-      excelData.push(['REPORT INFORMATION']);
-      excelData.push(['Report ID', report?.id]);
-      excelData.push(['Type', report?.type]);
-      excelData.push(['Date', formatDate(report?.date, 'MMMM DD, YYYY')]);
-      excelData.push(['Status', report?.status || 'Completed']);
+
+      excelData.push(["REPORT INFORMATION"]);
+      excelData.push(["Report ID", report?.id]);
+      excelData.push(["Type", report?.type]);
+      excelData.push(["Date", formatDate(report?.date, "MMMM DD, YYYY")]);
+      excelData.push(["Status", report?.status || "Completed"]);
       excelData.push([]);
-      
-      excelData.push(['KEY METRICS']);
-      excelData.push(['Total Amount', formatCurrency(report?.amount)]);
-      excelData.push(['Total Items', report?.count || 0]);
-      excelData.push(['Average Value', formatCurrency(report?.count ? report?.amount / report?.count : 0)]);
+
+      excelData.push(["KEY METRICS"]);
+      excelData.push(["Total Amount", formatCurrency(report?.amount)]);
+      excelData.push(["Total Items", report?.count || 0]);
+      excelData.push([
+        "Average Value",
+        formatCurrency(report?.count ? report?.amount / report?.count : 0),
+      ]);
       excelData.push([]);
-      
+
       if (report?.details && report?.details.length > 0) {
-        excelData.push(['DETAILS']);
-        report?.details.forEach(detail => {
+        excelData.push(["DETAILS"]);
+        report?.details.forEach((detail) => {
           excelData.push([detail.label, detail.value]);
         });
         excelData.push([]);
       }
-      
+
       if (report?.data && report?.data.length > 0) {
-        excelData.push(['DATA TABLE']);
-        excelData.push(['Item', 'Quantity', 'Amount']);
-        report?.data.forEach(item => {
-          excelData.push([item.name || item.product_name || 'Item', item.quantity || item.qty || 1, formatCurrency(item.amount || item.price || item.total || 0)]);
+        excelData.push(["DATA TABLE"]);
+        excelData.push(["Item", "Quantity", "Amount"]);
+        report?.data.forEach((item) => {
+          excelData.push([
+            item.name || item.product_name || "Item",
+            item.quantity || item.qty || 1,
+            formatCurrency(item.amount || item.price || item.total || 0),
+          ]);
         });
         excelData.push([]);
-        
-        const totalQty = report?.data.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0);
-        const totalAmt = report?.data.reduce((sum, item) => sum + (item.amount || item.price || item.total || 0), 0);
-        excelData.push(['TOTAL', totalQty, formatCurrency(totalAmt)]);
+
+        const totalQty = report?.data.reduce(
+          (sum, item) => sum + (item.quantity || item.qty || 0),
+          0,
+        );
+        const totalAmt = report?.data.reduce(
+          (sum, item) => sum + (item.amount || item.price || item.total || 0),
+          0,
+        );
+        excelData.push(["TOTAL", totalQty, formatCurrency(totalAmt)]);
       }
-      
+
       const ws = XLSX.utils.aoa_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Report");
-      
-      const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-      const fileName = `Report_${report?.id || 'summary'}_${new Date().getTime()}.xlsx`;
+
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      const fileName = `Report_${report?.id || "summary"}_${new Date().getTime()}.xlsx`;
       const fileUri = FileSystem.documentDirectory + fileName;
-      
+
       await FileSystem.writeAsStringAsync(fileUri, wbout, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      
+
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          dialogTitle: 'Export Excel',
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: "Export Excel",
         });
       } else {
         const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
+        if (status === "granted") {
           const asset = await MediaLibrary.createAssetAsync(fileUri);
-          await MediaLibrary.createAlbumAsync('Reports', asset, false);
+          await MediaLibrary.createAlbumAsync("Reports", asset, false);
           Alert.alert("Success", "Excel file saved to gallery");
         } else {
           Alert.alert("Success", `Excel file saved to: ${fileUri}`);
@@ -654,23 +724,23 @@ const ReportDetailScreen = () => {
     setExportDropdownVisible(false);
     try {
       const html = generatePrintHTML();
-      const fileName = `Report_${report?.id || 'summary'}_${new Date().getTime()}.doc`;
+      const fileName = `Report_${report?.id || "summary"}_${new Date().getTime()}.doc`;
       const fileUri = FileSystem.documentDirectory + fileName;
-      
+
       await FileSystem.writeAsStringAsync(fileUri, html, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-      
+
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, {
-          mimeType: 'application/msword',
-          dialogTitle: 'Export Document',
+          mimeType: "application/msword",
+          dialogTitle: "Export Document",
         });
       } else {
         const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
+        if (status === "granted") {
           const asset = await MediaLibrary.createAssetAsync(fileUri);
-          await MediaLibrary.createAlbumAsync('Reports', asset, false);
+          await MediaLibrary.createAlbumAsync("Reports", asset, false);
           Alert.alert("Success", "Document saved to gallery");
         } else {
           Alert.alert("Success", `Document saved to: ${fileUri}`);
@@ -691,8 +761,9 @@ const ReportDetailScreen = () => {
   };
 
   const getTypeIcon = () => {
-    if (!report?.type) return { name: "file-document", color: "#6b7280", bg: "bg-gray-500" };
-    
+    if (!report?.type)
+      return { name: "file-document", color: "#6b7280", bg: "bg-gray-500" };
+
     switch (report.type.toLowerCase()) {
       case "sales":
         return { name: "cash", color: "#10b981", bg: "bg-green-500" };
@@ -718,9 +789,13 @@ const ReportDetailScreen = () => {
 
   if (loading) {
     return (
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} items-center justify-center`}>
+      <View
+        className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}
+      >
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+        <Text
+          className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+        >
           Loading report details...
         </Text>
       </View>
@@ -729,12 +804,18 @@ const ReportDetailScreen = () => {
 
   if (!report) {
     return (
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} items-center justify-center p-5`}>
+      <View
+        className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center p-5`}
+      >
         <Icon name="file-document-remove" size={80} color="#9ca3af" />
-        <Text className={`text-xl font-semibold mt-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+        <Text
+          className={`text-xl font-semibold mt-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+        >
           Report Not Found
         </Text>
-        <Text className={`text-center mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+        <Text
+          className={`text-center mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+        >
           The report you're looking for doesn't exist or has been removed.
         </Text>
         <TouchableOpacity
@@ -748,7 +829,9 @@ const ReportDetailScreen = () => {
   }
 
   return (
-    <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <View
+      className={`flex-1 pb-4 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
+    >
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
       <LinearGradient
@@ -759,80 +842,101 @@ const ReportDetailScreen = () => {
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             className={`w-10 h-10 rounded-2xl items-center justify-center ${
-              isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
+              isDarkMode ? "bg-gray-800" : "bg-gray-200"
             }`}
           >
-            <Icon name="arrow-left" size={22} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            <Icon
+              name="arrow-left"
+              size={22}
+              color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+            />
           </TouchableOpacity>
-          
+
           <View className="flex-row">
             <TouchableOpacity
               onPress={() => setPrintModalVisible(true)}
               className={`w-10 h-10 rounded-2xl items-center justify-center mr-2 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
+                isDarkMode ? "bg-gray-800" : "bg-gray-200"
               }`}
             >
-              <Icon name="printer" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+              <Icon
+                name="printer"
+                size={20}
+                color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+              />
             </TouchableOpacity>
-            
+
             <View className="relative">
               <TouchableOpacity
                 onPress={toggleExportDropdown}
                 className={`w-10 h-10 rounded-2xl items-center justify-center mr-2 ${
-                  isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
+                  isDarkMode ? "bg-gray-800" : "bg-gray-200"
                 }`}
               >
-                <Icon name="export" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+                <Icon
+                  name="export"
+                  size={20}
+                  color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+                />
               </TouchableOpacity>
-              
+
               {exportDropdownVisible && (
                 <>
                   <TouchableOpacity
                     style={{
-                      position: 'absolute',
+                      position: "absolute",
                       top: -100,
                       left: -100,
                       right: -100,
                       bottom: -100,
-                      backgroundColor: 'transparent',
+                      backgroundColor: "transparent",
                     }}
                     onPress={() => setExportDropdownVisible(false)}
                     activeOpacity={1}
                   />
-                  
-                  <View className={`absolute right-0 top-12 rounded-xl overflow-hidden shadow-lg z-50 ${
-                    isDarkMode ? 'bg-gray-800' : 'bg-white'
-                  }`} style={{ minWidth: 150 }}>
+
+                  <View
+                    className={`absolute right-0 top-12 rounded-xl overflow-hidden shadow-lg z-50 ${
+                      isDarkMode ? "bg-gray-800" : "bg-white"
+                    }`}
+                    style={{ minWidth: 150 }}
+                  >
                     <TouchableOpacity
                       onPress={handleExportPDF}
                       className={`flex-row items-center px-4 py-3 border-b ${
-                        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                        isDarkMode ? "border-gray-700" : "border-gray-200"
                       }`}
                     >
                       <Icon name="file-pdf-box" size={20} color="#ef4444" />
-                      <Text className={`ml-3 font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <Text
+                        className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                      >
                         PDF
                       </Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                       onPress={handleExportExcel}
                       className={`flex-row items-center px-4 py-3 border-b ${
-                        isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                        isDarkMode ? "border-gray-700" : "border-gray-200"
                       }`}
                     >
                       <Icon name="microsoft-excel" size={20} color="#10b981" />
-                      <Text className={`ml-3 font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <Text
+                        className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                      >
                         Excel
                       </Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                       onPress={handleExportDoc}
                       className="flex-row items-center px-4 py-3"
                     >
                       <Icon name="file-word" size={20} color="#3b82f6" />
-                      <Text className={`ml-3 font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <Text
+                        className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                      >
                         Word (DOC)
                       </Text>
                     </TouchableOpacity>
@@ -840,34 +944,46 @@ const ReportDetailScreen = () => {
                 </>
               )}
             </View>
-            
+
             <TouchableOpacity
               onPress={handleShare}
               className={`w-10 h-10 rounded-2xl items-center justify-center ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-200'
+                isDarkMode ? "bg-gray-800" : "bg-gray-200"
               }`}
             >
-              <Icon name="share-variant" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+              <Icon
+                name="share-variant"
+                size={20}
+                color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+              />
             </TouchableOpacity>
           </View>
         </View>
 
         <View className="flex-row items-center">
-          <View className={`w-16 h-16 rounded-2xl ${typeIcon.bg} items-center justify-center mr-4`}>
+          <View
+            className={`w-16 h-16 rounded-2xl ${typeIcon.bg} items-center justify-center mr-4`}
+          >
             <Icon name={typeIcon.name} size={32} color="#ffffff" />
           </View>
           <View className="flex-1">
-            <Text className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <Text
+              className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+            >
               {report.title || `${report.type} Report`}
             </Text>
             <View className="flex-row items-center mt-1">
               <Icon name="calendar" size={16} color="#9ca3af" />
-              <Text className={`text-sm ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {formatDate(report.date, 'MMMM DD, YYYY')}
+              <Text
+                className={`text-sm ml-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              >
+                {formatDate(report.date, "MMMM DD, YYYY")}
               </Text>
               <View className="w-1 h-1 rounded-full bg-gray-400 mx-2" />
               <View className={`px-2 py-0.5 rounded-full ${typeIcon.bg}`}>
-                <Text className="text-white text-xs capitalize">{report.type}</Text>
+                <Text className="text-white text-xs capitalize">
+                  {report.type}
+                </Text>
               </View>
             </View>
           </View>
@@ -882,20 +998,30 @@ const ReportDetailScreen = () => {
               onPress={() => setActiveTab(tab.id)}
               className={`flex-row items-center mr-2 px-3 py-1.5 rounded-full ${
                 activeTab === tab.id
-                  ? 'bg-blue-500'
-                  : isDarkMode ? 'bg-gray-800' : 'bg-white'
+                  ? "bg-blue-500"
+                  : isDarkMode
+                    ? "bg-gray-800"
+                    : "bg-white"
               }`}
             >
               <Icon
                 name={tab.icon}
                 size={16}
-                color={activeTab === tab.id ? "#ffffff" : isDarkMode ? "#9CA3AF" : "#4b5563"}
+                color={
+                  activeTab === tab.id
+                    ? "#ffffff"
+                    : isDarkMode
+                      ? "#9CA3AF"
+                      : "#4b5563"
+                }
               />
               <Text
                 className={`ml-1.5 text-xs font-medium ${
                   activeTab === tab.id
-                    ? 'text-white'
-                    : isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                    ? "text-white"
+                    : isDarkMode
+                      ? "text-gray-300"
+                      : "text-gray-700"
                 }`}
               >
                 {tab.label}
@@ -905,36 +1031,50 @@ const ReportDetailScreen = () => {
         </ScrollView>
       </View>
 
-      <ScrollView 
+      <ScrollView
         ref={reportViewRef}
-        className="flex-1 px-4" 
+        className="flex-1 px-4"
         showsVerticalScrollIndicator={false}
       >
         {activeTab === "overview" && (
           <View className="pt-4 pb-24">
-            <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-              <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <View
+              className={`p-5 rounded-2xl mb-4 ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+            >
+              <Text
+                className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              >
                 Report Information
               </Text>
               <View className="flex-row flex-wrap justify-between">
                 <View className="w-[48%] mb-3">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     Report ID
                   </Text>
-                  <Text className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  <Text
+                    className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
                     #{report.id}
                   </Text>
                 </View>
                 <View className="w-[48%] mb-3">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     Type
                   </Text>
-                  <Text className={`text-2xl font-bold capitalize ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  <Text
+                    className={`text-2xl font-bold capitalize ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
                     {report.type}
                   </Text>
                 </View>
                 <View className="w-[48%]">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     Total Amount
                   </Text>
                   <Text className="text-2xl font-bold text-green-600">
@@ -942,17 +1082,27 @@ const ReportDetailScreen = () => {
                   </Text>
                 </View>
                 <View className="w-[48%]">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     Status
                   </Text>
                   <View className="flex-row items-center mt-1">
-                    <View className={`w-2 h-2 rounded-full ${
-                      report.status === 'completed' ? 'bg-green-500' : 'bg-orange-500'
-                    } mr-2`} />
-                    <Text className={`text-base font-medium capitalize ${
-                      report.status === 'completed' ? 'text-green-500' : 'text-orange-500'
-                    }`}>
-                      {report.status || 'Completed'}
+                    <View
+                      className={`w-2 h-2 rounded-full ${
+                        report.status === "completed"
+                          ? "bg-green-500"
+                          : "bg-orange-500"
+                      } mr-2`}
+                    />
+                    <Text
+                      className={`text-base font-medium capitalize ${
+                        report.status === "completed"
+                          ? "text-green-500"
+                          : "text-orange-500"
+                      }`}
+                    >
+                      {report.status || "Completed"}
                     </Text>
                   </View>
                 </View>
@@ -960,16 +1110,27 @@ const ReportDetailScreen = () => {
             </View>
 
             {report.details && report.details.length > 0 && (
-              <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-                <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              <View
+                className={`p-5 rounded-2xl mb-4 ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+              >
+                <Text
+                  className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Report Details
                 </Text>
                 {report.details.map((detail, index) => (
-                  <View key={index} className="flex-row justify-between py-2 border-b border-gray-200">
-                    <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <View
+                    key={index}
+                    className="flex-row justify-between py-2 border-b border-gray-200"
+                  >
+                    <Text
+                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                    >
                       {detail.label}:
                     </Text>
-                    <Text className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                    <Text
+                      className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                    >
                       {detail.value}
                     </Text>
                   </View>
@@ -978,11 +1139,17 @@ const ReportDetailScreen = () => {
             )}
 
             {report.description && (
-              <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-                <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              <View
+                className={`p-5 rounded-2xl mb-4 ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+              >
+                <Text
+                  className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Description
                 </Text>
-                <Text className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                <Text
+                  className={`text-base ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                >
                   {report.description}
                 </Text>
               </View>
@@ -992,82 +1159,90 @@ const ReportDetailScreen = () => {
 
         {activeTab === "details" && (
           <View className="pt-4 pb-24">
-            <View className={`p-5 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-              <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <View
+              className={`p-5 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+            >
+              <Text
+                className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              >
                 Report Details
               </Text>
-              
+
               <View className="space-y-3">
-                <DetailRow 
-                  label="Report ID" 
-                  value={report.id?.toString() || 'N/A'} 
-                  isDarkMode={isDarkMode} 
-                />
-                <DetailRow 
-                  label="Type" 
-                  value={report.type || 'N/A'} 
+                <DetailRow
+                  label="Report ID"
+                  value={report.id?.toString() || "N/A"}
                   isDarkMode={isDarkMode}
-                  capitalize 
                 />
-                <DetailRow 
-                  label="Date" 
-                  value={formatDate(report.date, 'MMMM DD, YYYY')} 
-                  isDarkMode={isDarkMode} 
-                />
-                <DetailRow 
-                  label="Time" 
-                  value={formatDate(report.date, 'HH:mm')} 
-                  isDarkMode={isDarkMode} 
-                />
-                <DetailRow 
-                  label="Amount" 
-                  value={formatCurrency(report.amount)} 
+                <DetailRow
+                  label="Type"
+                  value={report.type || "N/A"}
                   isDarkMode={isDarkMode}
-                  highlight 
+                  capitalize
                 />
-                <DetailRow 
-                  label="Items Count" 
-                  value={report.count?.toString() || '0'} 
-                  isDarkMode={isDarkMode} 
-                />
-                <DetailRow 
-                  label="Status" 
-                  value={report.status || 'Completed'} 
+                <DetailRow
+                  label="Date"
+                  value={formatDate(report.date, "MMMM DD, YYYY")}
                   isDarkMode={isDarkMode}
-                  status 
+                />
+                <DetailRow
+                  label="Time"
+                  value={formatDate(report.date, "HH:mm")}
+                  isDarkMode={isDarkMode}
+                />
+                <DetailRow
+                  label="Amount"
+                  value={formatCurrency(report.amount)}
+                  isDarkMode={isDarkMode}
+                  highlight
+                />
+                <DetailRow
+                  label="Items Count"
+                  value={report.count?.toString() || "0"}
+                  isDarkMode={isDarkMode}
+                />
+                <DetailRow
+                  label="Status"
+                  value={report.status || "Completed"}
+                  isDarkMode={isDarkMode}
+                  status
                 />
               </View>
             </View>
 
             {report.invoice_number && (
-              <View className={`p-5 rounded-2xl mt-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-                <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              <View
+                className={`p-5 rounded-2xl mt-4 ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+              >
+                <Text
+                  className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Invoice Information
                 </Text>
-                <DetailRow 
-                  label="Invoice Number" 
-                  value={report.invoice_number} 
-                  isDarkMode={isDarkMode} 
+                <DetailRow
+                  label="Invoice Number"
+                  value={report.invoice_number}
+                  isDarkMode={isDarkMode}
                 />
                 {report.customer_name && (
-                  <DetailRow 
-                    label="Customer" 
-                    value={report.customer_name} 
-                    isDarkMode={isDarkMode} 
+                  <DetailRow
+                    label="Customer"
+                    value={report.customer_name}
+                    isDarkMode={isDarkMode}
                   />
                 )}
                 {report.store_name && (
-                  <DetailRow 
-                    label="Store" 
-                    value={report.store_name} 
-                    isDarkMode={isDarkMode} 
+                  <DetailRow
+                    label="Store"
+                    value={report.store_name}
+                    isDarkMode={isDarkMode}
                   />
                 )}
                 {report.paid_amount && (
-                  <DetailRow 
-                    label="Paid Amount" 
-                    value={formatCurrency(report.paid_amount)} 
-                    isDarkMode={isDarkMode} 
+                  <DetailRow
+                    label="Paid Amount"
+                    value={formatCurrency(report.paid_amount)}
+                    isDarkMode={isDarkMode}
                   />
                 )}
               </View>
@@ -1077,25 +1252,41 @@ const ReportDetailScreen = () => {
 
         {activeTab === "charts" && (
           <View className="pt-4 pb-24">
-            <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-              <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <View
+              className={`p-5 rounded-2xl mb-4 ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+            >
+              <Text
+                className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              >
                 Performance Chart
               </Text>
-              <View className={`h-64 rounded-xl ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} items-center justify-center`}>
+              <View
+                className={`h-64 rounded-xl ${isDarkMode ? "bg-gray-700" : "bg-gray-100"} items-center justify-center`}
+              >
                 <Icon name="chart-line" size={48} color="#9ca3af" />
-                <Text className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Text
+                  className={`mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                >
                   Chart visualization will appear here
                 </Text>
               </View>
             </View>
 
-            <View className={`p-5 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-              <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <View
+              className={`p-5 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+            >
+              <Text
+                className={`text-lg font-semibold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              >
                 Distribution
               </Text>
-              <View className={`h-48 rounded-xl ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} items-center justify-center`}>
+              <View
+                className={`h-48 rounded-xl ${isDarkMode ? "bg-gray-700" : "bg-gray-100"} items-center justify-center`}
+              >
                 <Icon name="chart-pie" size={48} color="#9ca3af" />
-                <Text className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Text
+                  className={`mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                >
                   Pie chart will appear here
                 </Text>
               </View>
@@ -1105,9 +1296,13 @@ const ReportDetailScreen = () => {
 
         {activeTab === "data" && (
           <View className="pt-4 pb-24">
-            <View className={`p-5 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
+            <View
+              className={`p-5 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+            >
               <View className="flex-row justify-between items-center mb-4">
-                <Text className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                <Text
+                  className={`text-lg font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Raw Data
                 </Text>
                 <TouchableOpacity
@@ -1119,28 +1314,47 @@ const ReportDetailScreen = () => {
                 </TouchableOpacity>
               </View>
 
-              <View className={`flex-row p-3 rounded-lg mb-2 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <Text className={`flex-1 text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              <View
+                className={`flex-row p-3 rounded-lg mb-2 ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+              >
+                <Text
+                  className={`flex-1 text-sm font-semibold ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                >
                   Item
                 </Text>
-                <Text className={`w-20 text-sm font-semibold text-right ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                <Text
+                  className={`w-20 text-sm font-semibold text-right ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                >
                   Quantity
                 </Text>
-                <Text className={`w-24 text-sm font-semibold text-right ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                <Text
+                  className={`w-24 text-sm font-semibold text-right ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                >
                   Amount
                 </Text>
               </View>
 
               {report.data?.map((item, index) => (
-                <View key={index} className="flex-row p-3 border-b border-gray-200">
-                  <Text className={`flex-1 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                <View
+                  key={index}
+                  className="flex-row p-3 border-b border-gray-200"
+                >
+                  <Text
+                    className={`flex-1 text-sm ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                  >
                     {item.name || item.product_name || `Item ${index + 1}`}
                   </Text>
-                  <Text className={`w-20 text-sm text-right ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  <Text
+                    className={`w-20 text-sm text-right ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+                  >
                     {item.quantity || item.qty || 0}
                   </Text>
-                  <Text className={`w-24 text-sm text-right font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    {formatCurrency(item.amount || item.price || item.total || 0)}
+                  <Text
+                    className={`w-24 text-sm text-right font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
+                    {formatCurrency(
+                      item.amount || item.price || item.total || 0,
+                    )}
                   </Text>
                 </View>
               ))}
@@ -1148,22 +1362,41 @@ const ReportDetailScreen = () => {
               {(!report.data || report.data.length === 0) && (
                 <View className="items-center justify-center py-8">
                   <Icon name="table-off" size={48} color="#9ca3af" />
-                  <Text className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     No data available
                   </Text>
                 </View>
               )}
 
               {report.data && report.data.length > 0 && (
-                <View className={`flex-row p-3 mt-2 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                  <Text className={`flex-1 text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                <View
+                  className={`flex-row p-3 mt-2 rounded-lg ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+                >
+                  <Text
+                    className={`flex-1 text-sm font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
                     Total
                   </Text>
-                  <Text className={`w-20 text-sm font-semibold text-right ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    {report.data.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0)}
+                  <Text
+                    className={`w-20 text-sm font-semibold text-right ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
+                    {report.data.reduce(
+                      (sum, item) => sum + (item.quantity || item.qty || 0),
+                      0,
+                    )}
                   </Text>
-                  <Text className={`w-24 text-sm font-semibold text-right text-blue-600`}>
-                    {formatCurrency(report.data.reduce((sum, item) => sum + (item.amount || item.price || item.total || 0), 0))}
+                  <Text
+                    className={`w-24 text-sm font-semibold text-right text-blue-600`}
+                  >
+                    {formatCurrency(
+                      report.data.reduce(
+                        (sum, item) =>
+                          sum + (item.amount || item.price || item.total || 0),
+                        0,
+                      ),
+                    )}
                   </Text>
                 </View>
               )}
@@ -1180,10 +1413,14 @@ const ReportDetailScreen = () => {
         onRequestClose={() => setPrintModalVisible(false)}
       >
         <View className="flex-1 justify-end bg-black/50">
-          <View className={`rounded-t-3xl p-6 ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <View
+            className={`rounded-t-3xl p-6 ${isDarkMode ? "bg-gray-800" : "bg-white"}`}
+          >
             <View className="items-center mb-4">
               <View className="w-12 h-1 rounded-full bg-gray-300 mb-4" />
-              <Text className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              <Text
+                className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              >
                 Print Options
               </Text>
             </View>
@@ -1191,17 +1428,21 @@ const ReportDetailScreen = () => {
             <TouchableOpacity
               onPress={handlePrint}
               className={`flex-row items-center p-4 rounded-xl mb-3 ${
-                isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                isDarkMode ? "bg-gray-700" : "bg-gray-100"
               }`}
             >
               <View className="w-10 h-10 rounded-full bg-blue-500 items-center justify-center mr-3">
                 <Icon name="eye" size={20} color="#ffffff" />
               </View>
               <View className="flex-1">
-                <Text className={`text-base font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                <Text
+                  className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Preview & Print
                 </Text>
-                <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Text
+                  className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                >
                   Preview before printing
                 </Text>
               </View>
@@ -1211,17 +1452,21 @@ const ReportDetailScreen = () => {
             <TouchableOpacity
               onPress={handleDirectPrint}
               className={`flex-row items-center p-4 rounded-xl mb-3 ${
-                isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                isDarkMode ? "bg-gray-700" : "bg-gray-100"
               }`}
             >
               <View className="w-10 h-10 rounded-full bg-green-500 items-center justify-center mr-3">
                 <Icon name="printer" size={20} color="#ffffff" />
               </View>
               <View className="flex-1">
-                <Text className={`text-base font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                <Text
+                  className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Direct Print
                 </Text>
-                <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Text
+                  className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                >
                   Print immediately
                 </Text>
               </View>
@@ -1231,17 +1476,21 @@ const ReportDetailScreen = () => {
             <TouchableOpacity
               onPress={handleExportPDF}
               className={`flex-row items-center p-4 rounded-xl mb-3 ${
-                isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                isDarkMode ? "bg-gray-700" : "bg-gray-100"
               }`}
             >
               <View className="w-10 h-10 rounded-full bg-red-500 items-center justify-center mr-3">
                 <Icon name="file-pdf-box" size={20} color="#ffffff" />
               </View>
               <View className="flex-1">
-                <Text className={`text-base font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                <Text
+                  className={`text-base font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                >
                   Save as PDF
                 </Text>
-                <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <Text
+                  className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                >
                   Export as PDF file
                 </Text>
               </View>
@@ -1252,7 +1501,9 @@ const ReportDetailScreen = () => {
               onPress={() => setPrintModalVisible(false)}
               className="p-4 rounded-xl bg-red-500 mt-2"
             >
-              <Text className="text-white text-center font-semibold">Cancel</Text>
+              <Text className="text-white text-center font-semibold">
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1264,17 +1515,27 @@ const ReportDetailScreen = () => {
         visible={printPreviewVisible}
         onRequestClose={() => setPrintPreviewVisible(false)}
       >
-        <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-          <View className={`flex-row justify-between items-center p-4 border-b ${
-            isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'
-          }`}>
+        <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+          <View
+            className={`flex-row justify-between items-center p-4 border-b ${
+              isDarkMode
+                ? "border-gray-700 bg-gray-800"
+                : "border-gray-200 bg-white"
+            }`}
+          >
             <TouchableOpacity
               onPress={() => setPrintPreviewVisible(false)}
               className="p-2"
             >
-              <Icon name="close" size={24} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+              <Icon
+                name="close"
+                size={24}
+                color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+              />
             </TouchableOpacity>
-            <Text className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <Text
+              className={`text-lg font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+            >
               Print Preview
             </Text>
             <TouchableOpacity
@@ -1284,7 +1545,7 @@ const ReportDetailScreen = () => {
               <Text className="text-white font-semibold">Print</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={{ flex: 1 }}>
             <PrintHTMLView html={printHTML} />
           </View>
@@ -1294,29 +1555,40 @@ const ReportDetailScreen = () => {
   );
 };
 
-const DetailRow = ({ label, value, isDarkMode, capitalize, highlight, status }) => {
+const DetailRow = ({
+  label,
+  value,
+  isDarkMode,
+  capitalize,
+  highlight,
+  status,
+}) => {
   const getStatusColor = (val) => {
-    const statusVal = val?.toLowerCase() || '';
-    if (statusVal === 'completed') return 'text-green-500';
-    if (statusVal === 'pending') return 'text-orange-500';
-    if (statusVal === 'failed') return 'text-red-500';
-    return isDarkMode ? 'text-white' : 'text-gray-800';
+    const statusVal = val?.toLowerCase() || "";
+    if (statusVal === "completed") return "text-green-500";
+    if (statusVal === "pending") return "text-orange-500";
+    if (statusVal === "failed") return "text-red-500";
+    return isDarkMode ? "text-white" : "text-gray-800";
   };
 
   return (
     <View className="flex-row justify-between py-2 border-b border-gray-200">
-      <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+      <Text
+        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+      >
         {label}:
       </Text>
-      <Text 
+      <Text
         className={`text-sm font-medium ${
-          highlight 
-            ? 'text-blue-600 font-bold' 
-            : status 
+          highlight
+            ? "text-blue-600 font-bold"
+            : status
               ? getStatusColor(value)
-              : capitalize 
-                ? `capitalize ${isDarkMode ? 'text-white' : 'text-gray-800'}`
-                : isDarkMode ? 'text-white' : 'text-gray-800'
+              : capitalize
+                ? `capitalize ${isDarkMode ? "text-white" : "text-gray-800"}`
+                : isDarkMode
+                  ? "text-white"
+                  : "text-gray-800"
         }`}
       >
         {value}
@@ -1328,7 +1600,7 @@ const DetailRow = ({ label, value, isDarkMode, capitalize, highlight, status }) 
 const PrintHTMLView = ({ html }) => {
   return (
     <WebView
-      originWhitelist={['*']}
+      originWhitelist={["*"]}
       source={{ html }}
       style={{ flex: 1 }}
       javaScriptEnabled={true}

@@ -1,8 +1,12 @@
-import { Ionicons } from "@expo/vector-icons";
+// screens/DashboardScreen.js
 import { useNavigation } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState, useMemo } from "react";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   RefreshControl,
@@ -12,185 +16,133 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { LineChart } from "react-native-chart-kit";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useThemeStore } from "../../store/themeStore";
-import { useAuthStore } from "../../store/authStore";
-import { useDashboard } from "../../hooks/useDashboard";
+import * as XLSX from "xlsx";
+import { dashboardAPI } from "../../api/dashboard";
 import Header from "../../components/common/Header";
+import OrderStatusChart from "../../components/dashboard/OrderStatusChart";
+import RecentOrdersTable from "../../components/dashboard/RecentOrdersTable";
+import RevenueChart from "../../components/dashboard/RevenueChart";
 import StatsCard from "../../components/dashboard/StatsCard";
-import { getNavigationItemsWithBadges } from "../../constants/navigationItems"; // Import the helper
+import TopProductsChart from "../../components/dashboard/TopProductsChart";
+import { getNavigationItemsWithBadges } from "../../constants/navigationItems";
+import { useAuthStore } from "../../store/authStore";
+import { useThemeStore } from "../../store/themeStore";
 
-const { width } = Dimensions.get("window");
+const { width: screenWidth } = Dimensions.get("window");
 
 const DashboardScreen = () => {
   const { width } = useWindowDimensions();
   const { isDarkMode } = useThemeStore();
-  const { user } = useAuthStore();
-  
-  // Use real API data instead of static data
-  const { dashboardData, loading, error, refreshData } = useDashboard();
-  
-  const cardWidth = Math.min(200, width * 0.8);
-  const gap = 16;
+  const { user, company } = useAuthStore();
   const navigation = useNavigation();
-  const [selectedPeriod, setSelectedPeriod] = useState("week");
-  const [viewMode, setViewMode] = useState("grid");
-  const [notificationCount] = useState(5);
+
+  const [timeRange, setTimeRange] = useState("7d");
+  const [stats, setStats] = useState({
+    revenue: 0,
+    orders: 0,
+    products: 0,
+    customers: 0,
+    lowStock: 0,
+    revenueChange: null,
+    ordersChange: null,
+    productsChange: null,
+    customersChange: null,
+  });
+  const [revenueData, setRevenueData] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [salesDistribution, setSalesDistribution] = useState([]);
+  const [orderStatus, setOrderStatus] = useState({});
+  const [topProducts, setTopProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [notificationCount] = useState(5);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-  // Use real API data
-  const data = dashboardData;
+  const exportDropdownRef = useRef(null);
 
-  // Safely access stats with default values and convert string numbers to actual numbers
-  const stats = {
-    totalRevenue: typeof data?.stats?.totalRevenue === 'string' ? parseFloat(data.stats.totalRevenue) : (data?.stats?.totalRevenue || 0),
-    totalDue: typeof data?.stats?.totalDue === 'string' ? parseFloat(data.stats.totalDue) : (data?.stats?.totalDue || 0),
-    totalOrders: typeof data?.stats?.totalOrders === 'string' ? parseInt(data.stats.totalOrders) : (data?.stats?.totalOrders || 0),
-    totalCustomers: typeof data?.stats?.totalCustomers === 'string' ? parseInt(data.stats.totalCustomers) : (data?.stats?.totalCustomers || 0),
-    totalProducts: typeof data?.stats?.totalProducts === 'string' ? parseInt(data.stats.totalProducts) : (data?.stats?.totalProducts || 0),
-    revenueTrend: typeof data?.stats?.revenueTrend === 'string' ? parseFloat(data.stats.revenueTrend) : (data?.stats?.revenueTrend || 0),
-    ordersTrend: typeof data?.stats?.ordersTrend === 'string' ? parseFloat(data.stats.ordersTrend) : (data?.stats?.ordersTrend || 0),
-    customersTrend: typeof data?.stats?.customersTrend === 'string' ? parseFloat(data.stats.customersTrend) : (data?.stats?.customersTrend || 0),
-    productsTrend: typeof data?.stats?.productsTrend === 'string' ? parseFloat(data.stats.productsTrend) : (data?.stats?.productsTrend || 0),
-  };
-
-  // Safely access and convert topProducts data
-  const topProducts = (data?.topProducts || []).map(product => ({
-    ...product,
-    sales: typeof product.sales === 'string' ? parseFloat(product.sales) : (product.sales || 0),
-    revenue: typeof product.revenue === 'string' ? parseFloat(product.revenue) : (product.revenue || 0),
-  }));
-
-  // Safely access and convert recentOrders data
-  const recentOrders = (data?.recentOrders || []).map(order => ({
-    ...order,
-    total: typeof order.total === 'string' ? parseFloat(order.total) : (order.total || 0),
-    items: order.items || [],
-  }));
-
-  const formatCurrency = (amount) => {
-    return `$${(amount || 0).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, "$&,")}`;
-  };
-
-  const formatNumber = (num) => {
-    return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      pending: { bg: "#FEF3C7", text: "#D97706", darkBg: "#92400E", darkText: "#FCD34D" },
-      processing: { bg: "#DBEAFE", text: "#2563EB", darkBg: "#1E3A8A", darkText: "#93C5FD" },
-      shipped: { bg: "#E0E7FF", text: "#4F46E5", darkBg: "#3730A3", darkText: "#A5B4FC" },
-      delivered: { bg: "#D1FAE5", text: "#059669", darkBg: "#065F46", darkText: "#6EE7B7" },
-      cancelled: { bg: "#FEE2E2", text: "#DC2626", darkBg: "#7F1D1D", darkText: "#FCA5A5" },
-    };
-    return colors[status] || colors.pending;
-  };
-
-  const getChartData = () => {
-    if (!data?.revenueData) {
-      return {
-        labels: [],
-        datasets: [{ data: [] }]
-      };
+  const fetchDashboardData = useCallback(async () => {
+    if (!user?.id) {
+      console.warn("User not authenticated, skipping dashboard data fetch");
+      setLoading(false);
+      return;
     }
 
-    const safeMapData = (array, valueKey, labelKey) => {
-      if (!Array.isArray(array) || array.length === 0) {
-        return { labels: [], data: [] };
-      }
-      
-      const filtered = array.filter(item => 
-        item && 
-        typeof item[valueKey] === 'number' && 
-        !isNaN(item[valueKey]) &&
-        item[labelKey]
+    try {
+      setLoading(true);
+
+      const response = await dashboardAPI.getOverview(user.id, timeRange);
+      const data = response;
+
+      const normalizedStats = {
+        revenue: parseFloat(data?.stats?.totalRevenue || 0),
+        orders: parseInt(data?.stats?.totalOrders || 0),
+        products: parseInt(data?.stats?.totalProducts || 0),
+        customers: parseInt(data?.stats?.totalCustomers || 0),
+        lowStock: parseInt(data?.stats?.lowStock || 0),
+        revenueChange: data?.stats?.revenueTrend ?? null,
+        ordersChange: data?.stats?.ordersTrend ?? null,
+        productsChange: data?.stats?.productsTrend ?? null,
+        customersChange: data?.stats?.customersTrend ?? null,
+      };
+
+      const processedRevenueData = (data?.revenueData?.daily || []).map(
+        (item) => ({
+          date: item.date || "",
+          revenue: parseFloat(item.revenue || 0),
+        }),
       );
-      
-      return {
-        labels: filtered.map(item => item[labelKey]),
-        data: filtered.map(item => item[valueKey])
-      };
-    };
 
-    switch (selectedPeriod) {
-      case "day": {
-        const result = safeMapData(data.revenueData.daily, 'revenue', 'date');
-        return {
-          labels: result.labels,
-          datasets: [{ data: result.data }]
-        };
-      }
-      case "week": {
-        const result = safeMapData(data.revenueData.weekly, 'revenue', 'week');
-        return {
-          labels: result.labels,
-          datasets: [{ data: result.data }]
-        };
-      }
-      case "month": {
-        const result = safeMapData(data.revenueData.monthly, 'revenue', 'month');
-        return {
-          labels: result.labels,
-          datasets: [
-            {
-              data: result.data,
-              color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-              strokeWidth: 2,
-            },
-          ],
-        };
-      }
-      default:
-        return {
-          labels: [],
-          datasets: [{ data: [] }],
-        };
+      const processedTopProducts = (data?.topProducts || []).map((item) => ({
+        id: item.id,
+        name: item.name || "",
+        sales: parseFloat(item.sales || 0),
+        revenue: parseFloat(item.revenue || 0),
+        trend: item.trend || "+0%",
+      }));
+
+      const processedRecentOrders = (data?.recentOrders || []).map((item) => ({
+        ...item,
+        total: parseFloat(item.total || 0),
+      }));
+
+      setStats(normalizedStats);
+      setRevenueData(processedRevenueData);
+      setRecentOrders(processedRecentOrders);
+      setSalesDistribution(data?.salesDistribution || []);
+      setOrderStatus(data?.orderStatus || {});
+      setTopProducts(processedTopProducts);
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setInitialLoadDone(true);
     }
-  };
+  }, [user?.id, timeRange]);
 
-  const chartConfig = {
-    backgroundColor: isDarkMode ? "#1F2937" : "#ffffff",
-    backgroundGradientFrom: isDarkMode ? "#1F2937" : "#ffffff",
-    backgroundGradientTo: isDarkMode ? "#1F2937" : "#ffffff",
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-    labelColor: (opacity = 1) => isDarkMode ? `rgba(255, 255, 255, ${opacity})` : `rgba(107, 114, 128, ${opacity})`,
-    style: {
-      borderRadius: 16,
-    },
-    propsForDots: {
-      r: "6",
-      strokeWidth: "2",
-      stroke: "#6366F1",
-    },
-    propsForBackgroundLines: {
-      strokeDasharray: "",
-      stroke: isDarkMode ? "#374151" : "#E5E7EB",
-      strokeWidth: 1,
-    },
-    formatYLabel: (value) => {
-      const num = parseFloat(value);
-      if (num >= 1000) {
-        return `$${Math.round(num / 1000)}k`;
-      }
-      return `$${Math.round(num)}`;
-    },
-  };
+  useEffect(() => {
+    if (user?.id && !initialLoadDone) {
+      fetchDashboardData();
+    }
+  }, [user?.id, initialLoadDone, fetchDashboardData]);
 
-  const onRefresh = () => {
+  useEffect(() => {
+    if (initialLoadDone && user?.id) {
+      fetchDashboardData();
+    }
+  }, [timeRange, initialLoadDone, user?.id, fetchDashboardData]);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    refreshData();
-    setRefreshing(false);
+    await fetchDashboardData();
   };
 
   const handleNavigate = (screen, params = {}) => {
     navigation.navigate(screen, params);
-  };
-
-  const toggleViewMode = () => {
-    setViewMode(viewMode === "grid" ? "list" : "grid");
   };
 
   const handleNotificationPress = () => {
@@ -212,40 +164,179 @@ const DashboardScreen = () => {
     ]);
   };
 
-  // Navigation items for sidebar - Using centralized navigation items with safe values
+  // Export functions
+  const exportData = {
+    stats,
+    revenueData,
+    topProducts,
+    recentOrders,
+    company: company || user,
+    timeRange,
+    generatedAt: new Date().toISOString(),
+  };
+
+  const generateExportHTML = () => {
+    const formatCurrency = (amount) =>
+      `₹${(amount || 0).toLocaleString("en-IN")}`;
+    const currentDate = new Date().toLocaleString();
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Dashboard Report - ${currentDate}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+            .header { background: linear-gradient(135deg, #6366F1, #8B5CF6); padding: 30px; border-radius: 10px; color: white; margin-bottom: 30px; }
+            .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+            .stat-card { background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center; }
+            .stat-value { font-size: 24px; font-weight: bold; color: #6366F1; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background: #6366F1; color: white; }
+            .footer { margin-top: 30px; text-align: center; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Dashboard Report</h1>
+            <p>Generated on: ${currentDate}</p>
+            <p>Period: ${timeRange}</p>
+          </div>
+          
+          <div class="stats-grid">
+            <div class="stat-card"><h3>Total Revenue</h3><div class="stat-value">${formatCurrency(stats.revenue)}</div></div>
+            <div class="stat-card"><h3>Total Orders</h3><div class="stat-value">${stats.orders}</div></div>
+            <div class="stat-card"><h3>Products</h3><div class="stat-value">${stats.products}</div></div>
+            <div class="stat-card"><h3>Customers</h3><div class="stat-value">${stats.customers}</div></div>
+          </div>
+          
+          <h2>Top Products</h2>
+          <table><thead><tr><th>Product</th><th>Sales</th><th>Revenue</th></tr></thead><tbody>
+            ${topProducts.map((p) => `<tr><td>${p.name}</td><td>${p.sales}</td><td>${formatCurrency(p.revenue)}</td></tr>`).join("")}
+          </tbody></table>
+          
+          <h2>Recent Orders</h2>
+          <table><thead><tr><th>Order #</th><th>Customer</th><th>Amount</th><th>Status</th></tr></thead><tbody>
+            ${recentOrders.map((o) => `<tr><td>#${o.orderNumber}</td><td>${o.customer?.name}</td><td>${formatCurrency(o.total)}</td><td>${o.status}</td></tr>`).join("")}
+          </tbody></table>
+          
+          <div class="footer"><p>Confidential - For Internal Use Only</p></div>
+        </body>
+      </html>
+    `;
+  };
+
+  const handlePDFExport = async () => {
+    try {
+      setExporting(true);
+      const html = generateExportHTML();
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { mimeType: "application/pdf" });
+      setShowExportDropdown(false);
+    } catch (error) {
+      Alert.alert("Error", "Failed to export PDF");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExcelExport = async () => {
+    try {
+      setExporting(true);
+      const wsData = [
+        ["Dashboard Report", new Date().toLocaleString()],
+        [],
+        ["Metric", "Value"],
+        ["Total Revenue", stats.revenue],
+        ["Total Orders", stats.orders],
+        ["Products", stats.products],
+        ["Customers", stats.customers],
+        [],
+        ["Top Products", "", ""],
+        ["Product Name", "Sales", "Revenue"],
+        ...topProducts.map((p) => [p.name, p.sales, p.revenue]),
+        [],
+        ["Recent Orders", "", "", ""],
+        ["Order #", "Customer", "Amount", "Status"],
+        ...recentOrders.map((o) => [
+          o.orderNumber,
+          o.customer?.name,
+          o.total,
+          o.status,
+        ]),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Dashboard");
+      const wbout = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+      const filePath = `${FileSystem.documentDirectory}dashboard_${Date.now()}.xlsx`;
+      await FileSystem.writeAsStringAsync(filePath, wbout, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      await Sharing.shareAsync(filePath);
+      setShowExportDropdown(false);
+    } catch (error) {
+      Alert.alert("Error", "Failed to export Excel");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handlePrint = async () => {
+    try {
+      setIsPrinting(true);
+      const html = generateExportHTML();
+      await Print.printAsync({ html });
+    } catch (error) {
+      Alert.alert("Error", "Failed to print");
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const navigationItems = useMemo(() => {
-    // Create badges for this screen based on actual data with safe defaults
     const badges = {
-      products: stats.totalProducts?.toString() || "0",
-      customers: stats.totalCustomers?.toString() || "0",
-      orders: stats.totalOrders?.toString() || "0",
-      // You can add more badges as needed
+      products: stats.products?.toString() || "0",
+      customers: stats.customers?.toString() || "0",
+      orders: stats.orders?.toString() || "0",
     };
-    
-    // Get navigation items with badges
     return getNavigationItemsWithBadges(badges);
-  }, [stats.totalProducts, stats.totalCustomers, stats.totalOrders]);
+  }, [stats.products, stats.customers, stats.orders]);
 
-  // Show loading state if needed
-  if (loading) {
-    return (
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} items-center justify-center`}>
-        <Text className={isDarkMode ? 'text-white' : 'text-gray-900'}>Loading...</Text>
-      </View>
-    );
-  }
+  // Time range options
+  const timeRangeOptions = [
+    { id: "7d", label: "Last 7 Days", days: 7 },
+    { id: "30d", label: "Last 30 Days", days: 30 },
+    { id: "90d", label: "Last 3 Months", days: 90 },
+    { id: "12m", label: "Last 12 Months", days: 365 },
+  ];
 
-  // Show error state if needed
-  if (error) {
+  const getSelectedRangeLabel = () => {
+    const option = timeRangeOptions.find((opt) => opt.id === timeRange);
+    return option?.label || "Last 7 Days";
+  };
+
+  if (loading && !initialLoadDone) {
     return (
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} items-center justify-center`}>
-        <Text className="text-red-500">Error: {error}</Text>
+      <View
+        className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}
+      >
+        <ActivityIndicator size="large" color="#6366F1" />
+        <Text
+          className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+        >
+          Loading dashboard...
+        </Text>
       </View>
     );
   }
 
   return (
-    <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} pb-16`}>
+    <View
+      className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} pb-16`}
+    >
       <Header
         title="Dashboard"
         userName={user?.name || "User"}
@@ -256,6 +347,51 @@ const DashboardScreen = () => {
         onNotificationPress={handleNotificationPress}
         onSearchPress={handleSearchPress}
         onLogout={handleLogout}
+        rightComponent={
+          <View className="flex-row items-center">
+            {/* Export Dropdown */}
+            <View>
+              <TouchableOpacity
+                onPress={() => setShowExportDropdown(!showExportDropdown)}
+                className="px-3 py-2 bg-indigo-500 rounded-xl flex-row items-center"
+                disabled={exporting}
+              >
+                <Icon name="export" size={18} color="white" />
+                <Text className="text-white text-sm ml-1">Export</Text>
+              </TouchableOpacity>
+
+              {showExportDropdown && (
+                <View
+                  className={`absolute right-0 top-12 rounded-xl overflow-hidden shadow-lg z-50 ${isDarkMode ? "bg-gray-800" : "bg-white"}`}
+                  style={{ minWidth: 150 }}
+                >
+                  <TouchableOpacity
+                    onPress={handlePDFExport}
+                    className="flex-row items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700"
+                  >
+                    <Icon name="file-pdf-box" size={20} color="#ef4444" />
+                    <Text
+                      className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                    >
+                      PDF
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleExcelExport}
+                    className="flex-row items-center px-4 py-3"
+                  >
+                    <Icon name="microsoft-excel" size={20} color="#10b981" />
+                    <Text
+                      className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                    >
+                      Excel
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        }
       />
 
       <ScrollView
@@ -264,7 +400,7 @@ const DashboardScreen = () => {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={handleRefresh}
             colors={["#6366F1"]}
             tintColor="#6366F1"
           />
@@ -275,24 +411,22 @@ const DashboardScreen = () => {
           colors={["#6366F1", "#8B5CF6"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
+          style={{ borderRadius: 10 }}
           className="mx-4 mt-4 p-5 rounded-3xl"
-          style={{
-            shadowColor: "#6366F1",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 5,
-            borderRadius: 10
-          }}
         >
           <View className="flex-row justify-between items-center">
             <View>
               <Text className="text-white/80 text-sm">Welcome back!</Text>
               <Text className="text-white text-2xl font-bold mt-1">
-                {user?.name || "User"}
+                {company?.name || user?.name || "User"}
               </Text>
               <Text className="text-white/60 text-xs mt-2">
-                Here's what's happening with your store today.
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </Text>
             </View>
             <View className="w-16 h-16 bg-white/20 rounded-2xl items-center justify-center">
@@ -301,311 +435,151 @@ const DashboardScreen = () => {
           </View>
         </LinearGradient>
 
-        {/* Stats Cards - Horizontal Scroll */}
-        <View className="px-4 mt-6">
+        {/* Time Range Filter Section */}
+        <View
+          className={`mx-4 mt-6 p-4 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
+        >
+          <View className="flex-row items-center mb-3">
+            <Icon
+              name="calendar-range"
+              size={20}
+              color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+            />
+            <Text
+              className={`text-sm font-medium ml-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+            >
+              Filter by Time Period
+            </Text>
+          </View>
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row" style={{ gap }}>
-              <StatsCard
-                icon="💰"
-                title="Total Revenue"
-                value={formatCurrency(stats.totalRevenue)}
-                trend={stats.revenueTrend}
-                gradient={["#6366F1", "#8B5CF6"]}
-                style={{ width: cardWidth }}
-              />
-              <StatsCard
-                icon="📋"
-                title="Total Orders"
-                value={formatNumber(stats.totalOrders)}
-                trend={stats.ordersTrend}
-                gradient={["#F59E0B", "#D97706"]}
-                style={{ width: cardWidth }}
-              />
-              <StatsCard
-                icon="👥"
-                title="Customers"
-                value={formatNumber(stats.totalCustomers)}
-                trend={stats.customersTrend}
-                gradient={["#10B981", "#059669"]}
-                style={{ width: cardWidth }}
-              />
-              <StatsCard
-                icon="📦"
-                title="Products"
-                value={formatNumber(stats.totalProducts)}
-                trend={stats.productsTrend}
-                gradient={["#EF4444", "#DC2626"]}
-                style={{ width: cardWidth }}
-              />
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Quick Stats Row */}
-        <View className="flex-row justify-between px-4 mt-4">
-          <View className={`rounded-xl p-4 flex-1 mr-2 border ${
-            isDarkMode 
-              ? 'bg-gray-800 border-gray-700' 
-              : 'bg-white border-gray-100'
-          }`}>
-            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Avg. Order Value
-            </Text>
-            <Text className={`text-xl font-bold mt-1 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-              {formatCurrency(
-                stats.totalRevenue / (stats.totalOrders || 1),
-              )}
-            </Text>
-          </View>
-          <View className={`rounded-xl p-4 flex-1 ml-2 border ${
-            isDarkMode 
-              ? 'bg-gray-800 border-gray-700' 
-              : 'bg-white border-gray-100'
-          }`}>
-            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Conversion Rate
-            </Text>
-            <Text className="text-xl font-bold text-green-600 mt-1">24.8%</Text>
-          </View>
-        </View>
-
-        {/* Revenue Chart */}
-        <View className={`mx-4 mt-6 p-4 rounded-3xl border ${
-          isDarkMode 
-            ? 'bg-gray-800 border-gray-700' 
-            : 'bg-white border-gray-100'
-        }`}>
-          <View className="flex-row justify-between items-center mb-4">
-            <View>
-              <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                Revenue Overview
-              </Text>
-              <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Total: {formatCurrency(stats.totalRevenue)}
-              </Text>
-            </View>
-            <View className={`flex-row p-1 rounded-2xl ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              {["day", "week", "month"].map((period) => (
+            <View className="flex-row gap-2">
+              {timeRangeOptions.map((option) => (
                 <TouchableOpacity
-                  key={period}
-                  onPress={() => setSelectedPeriod(period)}
-                  className={`px-4 py-2 rounded-xl ${
-                    selectedPeriod === period 
-                      ? isDarkMode ? 'bg-gray-800' : 'bg-white shadow-sm'
-                      : ''
+                  key={option.id}
+                  onPress={() => setTimeRange(option.id)}
+                  className={`px-4 py-2 rounded-full ${
+                    timeRange === option.id
+                      ? "bg-indigo-500"
+                      : isDarkMode
+                        ? "bg-gray-700"
+                        : "bg-gray-100"
                   }`}
                 >
                   <Text
                     className={`text-sm font-medium ${
-                      selectedPeriod === period
-                        ? "text-indigo-600"
-                        : isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                      timeRange === option.id
+                        ? "text-white"
+                        : isDarkMode
+                          ? "text-gray-300"
+                          : "text-gray-700"
                     }`}
                   >
-                    {period.charAt(0).toUpperCase() + period.slice(1)}
+                    {option.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
+          </ScrollView>
 
-          <LineChart
-            data={getChartData()}
-            width={width - 48}
-            height={220}
-            chartConfig={chartConfig}
-            bezier
-            style={{
-              marginLeft: -16,
-              borderRadius: 16,
-            }}
-            withDots={true}
-            withShadow={false}
-            withInnerLines={true}
-            withOuterLines={true}
-            withVerticalLines={false}
-            withHorizontalLines={true}
-            withVerticalLabels={true}
-            withHorizontalLabels={true}
-            segments={5}
-          />
-        </View>
-
-        {/* Order Status */}
-        <View className={`mx-4 mt-6 p-5 rounded-3xl border ${
-          isDarkMode 
-            ? 'bg-gray-800 border-gray-700' 
-            : 'bg-white border-gray-100'
-        }`}>
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Order Status
-            </Text>
-            <TouchableOpacity onPress={() => handleNavigate("Orders")}>
-              <Text className="text-indigo-600 text-sm font-semibold">
-                View All →
+          <View
+            className={`mt-3 pt-3 border-t ${isDarkMode ? "border-gray-700" : "border-gray-100"}`}
+          >
+            <View className="flex-row justify-between items-center">
+              <Text
+                className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              >
+                Showing data for:{" "}
+                <Text className="font-semibold">{getSelectedRangeLabel()}</Text>
               </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View className="flex-row justify-around">
-            {Object.entries(data?.orderStatus || {}).map(
-              ([status, count]) => {
-                const colors = getStatusColor(status);
-                const bgColor = isDarkMode ? colors.darkBg : colors.bg;
-                const textColor = isDarkMode ? colors.darkText : colors.text;
-                
-                return (
-                  <TouchableOpacity
-                    key={status}
-                    onPress={() => handleNavigate("Orders", { status })}
-                    className="items-center"
-                  >
-                    <View
-                      className="w-14 h-14 rounded-2xl items-center justify-center mb-2"
-                      style={{ backgroundColor: bgColor }}
-                    >
-                      <Text
-                        className="text-xl font-bold"
-                        style={{ color: textColor }}
-                      >
-                        {count}
-                      </Text>
-                    </View>
-                    <Text className={`text-xs capitalize ${
-                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                      {status}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              },
-            )}
+              <TouchableOpacity
+                onPress={handleRefresh}
+                className="flex-row items-center"
+              >
+                <Icon name="refresh" size={16} color="#6366F1" />
+                <Text className="text-indigo-500 text-xs ml-1">Refresh</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+
+        {/* Stats Cards */}
+        <View className="px-4 mt-6">
+          <View className="flex-row flex-wrap justify-between">
+            <StatsCard
+              title="Total Revenue"
+              value={`₹${(stats.revenue || 0).toLocaleString("en-IN")}`}
+              icon="currency-inr"
+              trend={stats.revenueChange}
+              color="#10B981"
+              style={{ width: "48%", marginBottom: 12 }}
+            />
+            <StatsCard
+              title="Total Orders"
+              value={(stats.orders || 0).toLocaleString()}
+              icon="shopping-bag"
+              trend={stats.ordersChange}
+              color="#3B82F6"
+              style={{ width: "48%", marginBottom: 12 }}
+            />
+            <StatsCard
+              title="Products"
+              value={(stats.products || 0).toLocaleString()}
+              icon="package-variant"
+              trend={stats.productsChange}
+              color="#8B5CF6"
+              style={{ width: "48%" }}
+            />
+            <StatsCard
+              title="Customers"
+              value={(stats.customers || 0).toLocaleString()}
+              icon="account-group"
+              trend={stats.customersChange}
+              color="#F59E0B"
+              style={{ width: "48%" }}
+            />
+          </View>
+        </View>
+
+        {/* Low Stock Alert */}
+        {stats.lowStock > 0 && (
+          <View className="mx-4 mt-4 p-4 rounded-2xl bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+            <View className="flex-row items-center">
+              <Icon name="alert-circle" size={24} color="#D97706" />
+              <View className="flex-1 ml-3">
+                <Text className="font-semibold text-yellow-800 dark:text-yellow-400">
+                  Low Stock Alert!
+                </Text>
+                <Text className="text-sm text-yellow-700 dark:text-yellow-500">
+                  You have {stats.lowStock} products running low on stock.
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => handleNavigate("Products")}>
+                <Text className="text-yellow-700 dark:text-yellow-400 text-sm font-semibold">
+                  View →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Revenue Chart */}
+        <RevenueChart data={revenueData} period={timeRange} />
+
+        {/* Order Status Chart */}
+        <OrderStatusChart data={orderStatus} />
 
         {/* Top Products */}
-        <View className={`mx-4 mt-6 p-5 rounded-3xl border ${
-          isDarkMode 
-            ? 'bg-gray-800 border-gray-700' 
-            : 'bg-white border-gray-100'
-        }`}>
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Top Products
-            </Text>
-            <TouchableOpacity onPress={() => handleNavigate("Products")}>
-              <Text className="text-indigo-600 text-sm font-semibold">
-                View All →
-              </Text>
-            </TouchableOpacity>
-          </View>
+        <TopProductsChart
+          data={topProducts}
+          onViewAll={() => handleNavigate("Products")}
+        />
 
-          {topProducts.map((product, index) => (
-            <TouchableOpacity
-              key={product.id}
-              onPress={() =>
-                handleNavigate("ProductDetail", { productId: product.id })
-              }
-              className={`flex-row items-center py-3 ${
-                index !== topProducts.length - 1
-                  ? isDarkMode ? 'border-b border-gray-700' : 'border-b border-gray-100'
-                  : ''
-              }`}
-            >
-              <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 ${
-                isDarkMode ? 'bg-purple-900/30' : 'bg-indigo-100'
-              }`}>
-                <Text className={`font-bold ${isDarkMode ? 'text-purple-400' : 'text-indigo-600'}`}>
-                  #{index + 1}
-                </Text>
-              </View>
-              <View className="flex-1">
-                <Text className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                  {product.name}
-                </Text>
-                <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {product.sales} sales • {formatCurrency(product.revenue)}
-                </Text>
-              </View>
-              <View className="flex-row items-center bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
-                <Ionicons name="trending-up" size={12} color="#059669" />
-                <Text className="text-green-600 dark:text-green-400 text-xs font-semibold ml-1">
-                  {product.trend}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Recent Orders */}
-        <View className={`mx-4 mt-6 mb-8 p-5 rounded-3xl border ${
-          isDarkMode 
-            ? 'bg-gray-800 border-gray-700' 
-            : 'bg-white border-gray-100'
-        }`}>
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Recent Orders
-            </Text>
-            <TouchableOpacity onPress={() => handleNavigate("Orders")}>
-              <Text className="text-indigo-600 text-sm font-semibold">
-                View All →
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {recentOrders.map((order, index) => {
-            const colors = getStatusColor(order.status);
-            const bgColor = isDarkMode ? colors.darkBg : colors.bg;
-            const textColor = isDarkMode ? colors.darkText : colors.text;
-            
-            return (
-              <TouchableOpacity
-                key={order.id}
-                onPress={() =>
-                  handleNavigate("OrderDetail", { orderId: order.id })
-                }
-                className={`flex-row items-center py-3 ${
-                  index !== recentOrders.length - 1
-                    ? isDarkMode ? 'border-b border-gray-700' : 'border-b border-gray-100'
-                    : ''
-                }`}
-              >
-                <LinearGradient
-                  colors={["#6366F1", "#8B5CF6"]}
-                  className="w-12 h-12 min-w-12 min-h-12 rounded-2xl items-center justify-center mr-3"
-                  style={{ borderRadius: 40, overflow: 'hidden' }}
-                >
-                  <Text className="text-white font-bold">
-                    #{order.orderNumber.slice(-3)}
-                  </Text>
-                </LinearGradient>
-                <View className="flex-1">
-                  <Text className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                    {order.customer.name}
-                  </Text>
-                  <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {order.items.length}{" "}
-                    {order.items.length === 1 ? "item" : "items"} •{" "}
-                    {formatCurrency(order.total)}
-                  </Text>
-                </View>
-                <View
-                  className="px-3 py-1.5 rounded-full"
-                  style={{ backgroundColor: bgColor }}
-                >
-                  <Text
-                    className="text-xs font-semibold"
-                    style={{ color: textColor }}
-                  >
-                    {order.status}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Recent Orders Table */}
+        <RecentOrdersTable
+          orders={recentOrders}
+          onViewAll={() => handleNavigate("Orders")}
+        />
       </ScrollView>
     </View>
   );

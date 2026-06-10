@@ -1,40 +1,74 @@
+// components/brands/BrandForm.js
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert } from 'react-native';
 import { useThemeStore } from '../../store/themeStore';
-import { useBrandForm } from '../../hooks/useBrandForm';
+import { useState, useEffect } from 'react';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const BrandForm = ({ brandId }) => {
+const BrandForm = ({ initialData, mode = 'add', onSubmit, onCancel, isSubmitting: externalSubmitting }) => {
   const { isDarkMode } = useThemeStore();
-  const { 
-    formData, 
-    loading, 
-    error, 
-    validationErrors, 
-    handleChange, 
-    saveBrand 
-  } = useBrandForm(brandId);
+  const [loading, setLoading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    is_active: true,
+  });
 
-  const handleSubmit = async () => {
-    const result = await saveBrand(formData);
-    
-    if (result.success) {
-      // Show success message
-      Alert.alert(
-        'Success', 
-        brandId ? 'Brand updated successfully' : 'Brand created successfully',
-        [{ text: 'OK' }]
-      );
-      
-    } else {
-      // Show error message if needed
-      if (result.error && !validationErrors) {
-        Alert.alert('Error', result.error);
-      }
+  // Prefill form when editing
+  useEffect(() => {
+    if (initialData && mode === 'edit') {
+      console.log('Prefilling form with brand data:', initialData);
+      setFormData({
+        name: initialData.name || '',
+        description: initialData.description || '',
+        is_active: initialData.is_active === true || initialData.is_active === 1,
+      });
+    } else if (mode === 'add') {
+      // Reset form for add mode
+      setFormData({
+        name: '',
+        description: '',
+        is_active: true,
+      });
+    }
+  }, [initialData, mode]);
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear validation error for this field
+    if (validationErrors[field]) {
+      setValidationErrors(prev => ({ ...prev, [field]: null }));
     }
   };
 
+  const validateForm = () => {
+    const errors = {};
+    if (!formData.name || formData.name.trim() === '') {
+      errors.name = 'Brand name is required';
+    } else if (formData.name.length < 2) {
+      errors.name = 'Brand name must be at least 2 characters';
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+    
+    if (onSubmit) {
+      await onSubmit(formData);
+    }
+  };
+
+  const isSubmitting = externalSubmitting || loading;
+
   return (
-    <ScrollView className="flex-1 px-4" showsVerticalScrollIndicator={false}>
+    <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
       {/* Name Field */}
       <View className="mb-4">
         <Text className={`text-sm font-medium mb-2 ${
@@ -120,44 +154,52 @@ const BrandForm = ({ brandId }) => {
 
       {/* Validation Errors Display */}
       {Object.keys(validationErrors).length > 0 && (
-        <View className="mb-4 p-4 bg-red-100 rounded-xl">
-          <Text className="text-red-600 font-semibold mb-2">Please fix the following errors:</Text>
-          {Object.entries(validationErrors).map(([field, messages]) => (
-            <Text key={field} className="text-red-600 text-sm">
-              • {Array.isArray(messages) ? messages.join(', ') : messages}
+        <View className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 rounded-xl">
+          <Text className="text-red-600 dark:text-red-400 font-semibold mb-2">Please fix the following errors:</Text>
+          {Object.entries(validationErrors).map(([field, message]) => (
+            <Text key={field} className="text-red-600 dark:text-red-400 text-sm">
+              • {message}
             </Text>
           ))}
         </View>
       )}
 
-      {/* Error Display */}
-      {error && Object.keys(validationErrors).length === 0 && (
-        <View className="mb-4 p-4 bg-red-100 rounded-xl">
-          <Text className="text-red-600 text-center">{error}</Text>
-        </View>
-      )}
-
-      {/* Submit Button */}
-      <TouchableOpacity
-        onPress={handleSubmit}
-        disabled={loading}
-        className={`bg-blue-500 py-4 rounded-xl mb-6 flex-row items-center justify-center ${
-          loading ? 'opacity-50' : ''
-        }`}
-      >
-        {loading ? (
-          <>
-            <ActivityIndicator size="small" color="#ffffff" />
-            <Text className="text-white text-center font-semibold text-base ml-2">
-              Saving...
-            </Text>
-          </>
-        ) : (
-          <Text className="text-white text-center font-semibold text-base">
-            {brandId ? 'Update Brand' : 'Create Brand'}
+      {/* Buttons */}
+      <View className="flex-row gap-3 mb-6">
+        <TouchableOpacity
+          onPress={onCancel}
+          className={`flex-1 py-4 rounded-xl border ${
+            isDarkMode ? 'border-gray-700' : 'border-gray-300'
+          }`}
+        >
+          <Text className={`text-center font-semibold ${
+            isDarkMode ? 'text-gray-300' : 'text-gray-700'
+          }`}>
+            Cancel
           </Text>
-        )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+          className={`flex-1 bg-blue-500 py-4 rounded-xl flex-row items-center justify-center ${
+            isSubmitting ? 'opacity-50' : ''
+          }`}
+        >
+          {isSubmitting ? (
+            <>
+              <ActivityIndicator size="small" color="#ffffff" />
+              <Text className="text-white text-center font-semibold text-base ml-2">
+                Saving...
+              </Text>
+            </>
+          ) : (
+            <Text className="text-white text-center font-semibold text-base">
+              {mode === 'edit' ? 'Update Brand' : 'Create Brand'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 };

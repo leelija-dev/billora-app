@@ -16,7 +16,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -56,6 +56,7 @@ const ReportsScreen = () => {
   const [dateRangeText, setDateRangeText] = useState("Last 30 Days");
   const [selectedFilter, setSelectedFilter] = useState("30days");
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [printingInvoice, setPrintingInvoice] = useState(false);
 
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -193,7 +194,6 @@ const ReportsScreen = () => {
 
     let filtered = [...reports];
 
-    // Apply search filter
     if (searchQuery && searchQuery.trim()) {
       const searchLower = searchQuery.toLowerCase().trim();
       filtered = filtered.filter((report) => {
@@ -332,6 +332,281 @@ const ReportsScreen = () => {
   }, [filteredReports]);
 
   const stats = calculateStats();
+
+  // Generate Invoice Print HTML
+  const generateInvoiceHTML = (report) => {
+    const formatCurrency = (amount) => {
+      return `₹${parseFloat(amount || 0).toFixed(2)}`;
+    };
+
+    const currentDate = new Date().toLocaleString();
+    const statusColor =
+      report.status === "completed"
+        ? "#10b981"
+        : report.status === "pending"
+          ? "#f59e0b"
+          : "#ef4444";
+    const statusBg =
+      report.status === "completed"
+        ? "#d1fae5"
+        : report.status === "pending"
+          ? "#fed7aa"
+          : "#fee2e2";
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Invoice #${report.invoice_number || report.id}</title>
+          <style>
+            @page {
+              size: A4;
+              margin: 2cm;
+            }
+            body {
+              font-family: 'Helvetica', 'Arial', sans-serif;
+              line-height: 1.6;
+              color: #333;
+              background: #fff;
+              padding: 20px;
+            }
+            .invoice-container {
+              max-width: 210mm;
+              margin: 0 auto;
+              background: white;
+              padding: 30px;
+              border-radius: 15px;
+              box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              padding-bottom: 20px;
+              border-bottom: 3px solid #3b82f6;
+            }
+            .header h1 {
+              color: #1e293b;
+              font-size: 28px;
+              margin-bottom: 10px;
+              font-weight: 700;
+            }
+            .header .subtitle {
+              color: #64748b;
+              font-size: 14px;
+            }
+            .company-info {
+              text-align: center;
+              margin-bottom: 30px;
+              color: #475569;
+            }
+            .invoice-title {
+              text-align: center;
+              margin-bottom: 30px;
+            }
+            .invoice-title h2 {
+              color: #3b82f6;
+              font-size: 24px;
+              margin: 0;
+            }
+            .info-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 20px;
+              margin-bottom: 30px;
+            }
+            .info-card {
+              background: #f8fafc;
+              padding: 15px;
+              border-radius: 10px;
+              border-left: 4px solid #3b82f6;
+            }
+            .info-card h3 {
+              color: #64748b;
+              font-size: 12px;
+              margin-bottom: 8px;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .info-card .value {
+              color: #0f172a;
+              font-size: 18px;
+              font-weight: 600;
+            }
+            .status-badge {
+              display: inline-block;
+              padding: 4px 12px;
+              border-radius: 20px;
+              font-size: 12px;
+              font-weight: 600;
+              background: ${statusBg};
+              color: ${statusColor};
+            }
+            .items-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 20px 0;
+            }
+            .items-table th {
+              background: #3b82f6;
+              color: white;
+              padding: 12px;
+              text-align: left;
+              font-weight: 600;
+              font-size: 14px;
+            }
+            .items-table td {
+              padding: 10px 12px;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .items-table tr:nth-child(even) {
+              background: #f8fafc;
+            }
+            .total-row {
+              background: #f1f5f9;
+              font-weight: 700;
+            }
+            .total-row td {
+              padding: 12px;
+            }
+            .footer {
+              margin-top: 40px;
+              text-align: center;
+              padding-top: 20px;
+              border-top: 2px dashed #cbd5e1;
+              color: #94a3b8;
+              font-size: 11px;
+            }
+            @media print {
+              body {
+                padding: 0;
+                background: white;
+              }
+              .invoice-container {
+                box-shadow: none;
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-container">
+            <div class="header">
+              <h1>INVOICE</h1>
+              <div class="subtitle">Tax Invoice / Bill of Supply</div>
+            </div>
+            
+            <div class="company-info">
+              <strong>${user?.store_name || "Your Store Name"}</strong><br>
+              ${user?.store_address || "123 Business Street, City, State 12345"}<br>
+              Phone: ${user?.store_phone || "(555) 123-4567"} | Email: ${user?.email || "info@company.com"}<br>
+              GST: ${user?.gst_number || "GSTIN123456"}
+            </div>
+
+            <div class="invoice-title">
+              <h2>Invoice #${report.invoice_number || report.id}</h2>
+              <div class="status-badge" style="margin-top: 10px;">${(report.status || "COMPLETED").toUpperCase()}</div>
+            </div>
+
+            <div class="info-grid">
+              <div class="info-card">
+                <h3>Customer Details</h3>
+                <div class="value">${report.customer_name || "Deleted Customer"}</div>
+                <div style="font-size: 12px; margin-top: 5px;">Customer ID: ${report.customer_id || "N/A"}</div>
+              </div>
+              <div class="info-card">
+                <h3>Invoice Details</h3>
+                <div class="value">Date: ${report.created_at ? new Date(report.created_at).toLocaleDateString() : "N/A"}</div>
+                <div style="font-size: 12px; margin-top: 5px;">Store: ${report.store_name || "Deleted Store"}</div>
+              </div>
+            </div>
+
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Item Description</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  report.invoice_items && report.invoice_items.length > 0
+                    ? report.invoice_items
+                        .map(
+                          (item, idx) => `
+                  <tr>
+                    <td>${idx + 1}</td>
+                    <td>${item.product_name || item.name || `Item ${idx + 1}`}</td>
+                    <td>${item.quantity || 1}</td>
+                    <td>${formatCurrency(item.price || item.unit_price || 0)}</td>
+                    <td>${formatCurrency(item.total || (item.quantity || 1) * (item.price || 0))}</td>
+                  </tr>
+                `,
+                        )
+                        .join("")
+                    : `
+                  <tr>
+                    <td>1</td>
+                    <td>Product / Service</td>
+                    <td>${report.total_items || 1}</td>
+                    <td>${formatCurrency(report.total_amount / (report.total_items || 1))}</td>
+                    <td>${formatCurrency(report.total_amount)}</td>
+                  </tr>
+                `
+                }
+                <tr class="total-row">
+                  <td colspan="4" style="text-align: right;"><strong>Subtotal:</strong></td>
+                  <td>${formatCurrency(report.total_amount)}</td>
+                </tr>
+                <tr class="total-row">
+                  <td colspan="4" style="text-align: right;"><strong>Paid Amount:</strong></td>
+                  <td>${formatCurrency(report.paid_amount)}</td>
+                </tr>
+                <tr class="total-row">
+                  <td colspan="4" style="text-align: right;"><strong>Due Amount:</strong></td>
+                  <td>${formatCurrency(parseFloat(report.total_amount || 0) - parseFloat(report.paid_amount || 0))}</td>
+                </tr>
+                <tr class="total-row">
+                  <td colspan="4" style="text-align: right;"><strong>Total Items:</strong></td>
+                  <td>${report.total_items || 0}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            ${report.notes ? `<div style="margin: 20px 0; padding: 15px; background: #fef3c7; border-radius: 8px;"><strong>Notes:</strong><br>${report.notes}</div>` : ""}
+
+            <div class="footer">
+              <p>Thank you for your business!</p>
+              <p>This is a system-generated invoice. For any queries, please contact support.</p>
+              <p>Generated on: ${currentDate}</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  // Print single invoice
+  const handlePrintInvoice = async (report) => {
+    try {
+      setPrintingInvoice(true);
+      const html = generateInvoiceHTML(report);
+
+      await Print.printAsync({
+        html,
+        orientation: Print.Orientation.portrait,
+      });
+    } catch (error) {
+      console.error("Print invoice error:", error);
+      Alert.alert("Error", "Failed to print invoice. Please try again.");
+    } finally {
+      setPrintingInvoice(false);
+    }
+  };
 
   // Prepare export data
   const prepareExportData = useCallback(() => {
@@ -498,8 +773,8 @@ const ReportsScreen = () => {
     }
   };
 
-  // Print handler
-  const handlePrint = () => {
+  // Print all reports handler
+  const handlePrintAll = () => {
     if (filteredReports.length === 0) {
       Alert.alert("No Data", "There are no reports to print.");
       return;
@@ -586,6 +861,13 @@ const ReportsScreen = () => {
     setViewMode(viewMode === "table" ? "cards" : "table");
   };
 
+  const handleViewDetails = (report) => {
+    navigation.navigate("ReportDetail", {
+      reportId: report.id,
+      reportType: report.type,
+    });
+  };
+
   useFocusEffect(
     useCallback(() => {
       if (initialLoadComplete) {
@@ -663,18 +945,12 @@ const ReportsScreen = () => {
         filteredReports.map((report, index) => {
           const statusColor = getStatusColor(report.status);
           return (
-            <TouchableOpacity
+            <View
               key={report.id || index}
-              onPress={() =>
-                navigation.navigate("ReportDetail", {
-                  reportId: report.id,
-                  reportType: report.type,
-                })
-              }
               className={`mb-4 p-4 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
             >
               <View className="flex-row justify-between items-start mb-3">
-                <View>
+                <View className="flex-1">
                   <Text
                     className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
                   >
@@ -686,16 +962,29 @@ const ReportsScreen = () => {
                     {report.customer_name || "Deleted Customer"}
                   </Text>
                 </View>
-                <View
-                  className="px-2 py-1 rounded-full"
-                  style={{ backgroundColor: statusColor.bg }}
-                >
-                  <Text
-                    className="text-xs font-semibold"
-                    style={{ color: statusColor.text }}
+                <View className="flex-row">
+                  <TouchableOpacity
+                    onPress={() => handlePrintInvoice(report)}
+                    className={`w-8 h-8 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+                    disabled={printingInvoice}
                   >
-                    {(report.status || "Completed").toUpperCase()}
-                  </Text>
+                    <Icon
+                      name="printer"
+                      size={18}
+                      color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+                    />
+                  </TouchableOpacity>
+                  <View
+                    className="px-2 py-1 rounded-full"
+                    style={{ backgroundColor: statusColor.bg }}
+                  >
+                    <Text
+                      className="text-xs font-semibold"
+                      style={{ color: statusColor.text }}
+                    >
+                      {(report.status || "Completed").toUpperCase()}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
@@ -763,10 +1052,17 @@ const ReportsScreen = () => {
               </View>
 
               <View className="flex-row mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                <Icon name="eye" size={16} color="#3b82f6" />
-                <Text className="text-blue-500 text-sm ml-1">View Details</Text>
+                <TouchableOpacity
+                  onPress={() => handleViewDetails(report)}
+                  className="flex-row items-center"
+                >
+                  <Icon name="eye" size={16} color="#3b82f6" />
+                  <Text className="text-blue-500 text-sm ml-1">
+                    View Details
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           );
         })
       )}
@@ -813,7 +1109,7 @@ const ReportsScreen = () => {
     </ScrollView>
   );
 
-  // Table View Component
+  // Table View Component with View Icon
   const TableView = () => (
     <ScrollView
       horizontal
@@ -826,13 +1122,13 @@ const ReportsScreen = () => {
           className={`flex-row py-3 px-2 rounded-t-xl ${isDarkMode ? "bg-gray-800" : "bg-blue-500"}`}
         >
           <Text
-            style={{ width: 100 }}
+            style={{ width: 90 }}
             className="px-2 text-white font-semibold text-sm"
           >
             Invoice #
           </Text>
           <Text
-            style={{ width: 110 }}
+            style={{ width: 100 }}
             className="px-2 text-white font-semibold text-sm"
           >
             Date
@@ -868,16 +1164,28 @@ const ReportsScreen = () => {
             Due
           </Text>
           <Text
-            style={{ width: 70 }}
+            style={{ width: 60 }}
             className="px-2 text-white font-semibold text-sm text-center"
           >
             Items
           </Text>
           <Text
-            style={{ width: 100 }}
+            style={{ width: 90 }}
             className="px-2 text-white font-semibold text-sm"
           >
             Status
+          </Text>
+          <Text
+            style={{ width: 70 }}
+            className="px-2 text-white font-semibold text-sm text-center"
+          >
+            Print
+          </Text>
+          <Text
+            style={{ width: 70 }}
+            className="px-2 text-white font-semibold text-sm text-center"
+          >
+            View
           </Text>
         </View>
 
@@ -915,22 +1223,16 @@ const ReportsScreen = () => {
               {filteredReports.map((report, index) => {
                 const statusColor = getStatusColor(report.status);
                 return (
-                  <TouchableOpacity
+                  <View
                     key={report.id || index}
-                    onPress={() =>
-                      navigation.navigate("ReportDetail", {
-                        reportId: report.id,
-                        reportType: report.type,
-                      })
-                    }
                     className={`flex-row border-b ${isDarkMode ? "border-gray-700" : "border-gray-100"} py-3`}
                   >
-                    <View style={{ width: 100 }} className="px-2">
+                    <View style={{ width: 90 }} className="px-2">
                       <Text className="font-mono font-medium text-blue-600 dark:text-blue-400 text-sm">
                         #{report.invoice_number || report.id}
                       </Text>
                     </View>
-                    <View style={{ width: 110 }} className="px-2">
+                    <View style={{ width: 100 }} className="px-2">
                       <Text
                         className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
                       >
@@ -975,14 +1277,14 @@ const ReportsScreen = () => {
                         )}
                       </Text>
                     </View>
-                    <View style={{ width: 70 }} className="px-2">
+                    <View style={{ width: 60 }} className="px-2">
                       <Text
                         className={`text-sm text-center ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
                       >
                         {report.total_items || 0}
                       </Text>
                     </View>
-                    <View style={{ width: 100 }} className="px-2">
+                    <View style={{ width: 90 }} className="px-2">
                       <View
                         className="px-2 py-1 rounded-full self-start"
                         style={{ backgroundColor: statusColor.bg }}
@@ -995,7 +1297,28 @@ const ReportsScreen = () => {
                         </Text>
                       </View>
                     </View>
-                  </TouchableOpacity>
+                    <View style={{ width: 70 }} className="px-2">
+                      <TouchableOpacity
+                        onPress={() => handlePrintInvoice(report)}
+                        className={`p-1.5 rounded-full items-center justify-center ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+                        disabled={printingInvoice}
+                      >
+                        <Icon
+                          name="printer"
+                          size={16}
+                          color={isDarkMode ? "#9CA3AF" : "#4b5563"}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ width: 70 }} className="px-2">
+                      <TouchableOpacity
+                        onPress={() => handleViewDetails(report)}
+                        className={`p-1.5 rounded-full items-center justify-center ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+                      >
+                        <Icon name="eye" size={16} color="#3b82f6" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 );
               })}
             </View>
@@ -1092,7 +1415,9 @@ const ReportsScreen = () => {
   }
 
   return (
-    <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+    <View
+      className={`flex-1 pb-24 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
+    >
       <StatusBar
         barStyle={isDarkMode ? "light-content" : "dark-content"}
         backgroundColor={isDarkMode ? "#111827" : "#ffffff"}
@@ -1128,7 +1453,7 @@ const ReportsScreen = () => {
               isDarkMode={isDarkMode}
             />
             <TouchableOpacity
-              onPress={handlePrint}
+              onPress={handlePrintAll}
               className={`w-10 h-10 rounded-full items-center justify-center ml-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}
             >
               <Icon
@@ -1305,7 +1630,7 @@ const ReportsScreen = () => {
         summary={summaryStats}
       />
 
-      {/* Print Preview Modal */}
+      {/* Print Preview Modal for All Reports */}
       <Modal
         visible={showPrintPreview}
         animationType="slide"
