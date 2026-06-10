@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { authAPI } from '../api';
-import { authStorage } from '../utils/storage';
 import { useAuthStore } from '../store/authStore';
+import { authStorage } from '../utils/storage';
 
 export const useAuth = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -77,10 +77,10 @@ export const useAuth = () => {
         state: userData.state,
         country: userData.country,
         pincode: userData.pincode,
-        companyName: userData.companyName,
-        gstNumber: userData.gstNumber,
-        address: userData.address,
-        created_by: userData.created_by,
+        company_name: userData.companyName || null,
+        gst_number: userData.gstNumber || null,
+        address: userData.address || null,
+        created_by: userData.created_by || null,
       });
       
       // Backend response structure: { data: { user_data }, message: "User Created Successfully", status: true }
@@ -163,6 +163,24 @@ export const useAuth = () => {
     }
   };
 
+  const updatePassword = async (currentPassword, newPassword) => {
+    try {
+      setIsLoading(true);
+      const userId = user?.id;
+      if (!userId) {
+        throw new Error('User not found');
+      }
+      
+      const response = await authAPI.updatePassword(userId, currentPassword, newPassword);
+      return response;
+    } catch (error) {
+      console.error('Update password error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const refreshToken = async () => {
     try {
       const refreshTokenValue = await authStorage.getRefreshToken();
@@ -196,6 +214,7 @@ export const useAuth = () => {
     forgotPassword,
     resetPassword,
     updateProfile,
+    updatePassword,
     refreshToken,
   };
 };

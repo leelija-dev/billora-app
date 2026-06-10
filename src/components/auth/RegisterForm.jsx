@@ -1,6 +1,6 @@
 // src/components/auth/RegisterForm.jsx
 import { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../hooks/useTheme';
 import Button from '../common/Button';
@@ -188,8 +188,8 @@ const RegisterForm = ({ onSubmit, loading, error, onLoginPress }) => {
         email,
         phone,
         password,
-        company_name: companyName,
-        gst_number: gstNumber,
+        companyName,
+        gstNumber,
         address,
         city,
         state,

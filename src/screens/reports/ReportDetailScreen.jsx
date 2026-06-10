@@ -17,12 +17,11 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Print from 'expo-print';
 import { useThemeStore } from "../../store/themeStore";
-import { useReports } from "../../hooks/useReports";
+import { reportsAPI } from "../../api"; 
 import { formatDate } from "../../utils/dateFormatter";
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as XLSX from 'xlsx';
-import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
 import { WebView } from 'react-native-webview';
 
@@ -31,11 +30,9 @@ const ReportDetailScreen = () => {
   const route = useRoute();
   const { reportId, reportType } = route.params || {};
   const { isDarkMode } = useThemeStore();
-  const { reports, loading: reportsLoading, fetchReports, summary } = useReports();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
-  const [hasFetched, setHasFetched] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [printModalVisible, setPrintModalVisible] = useState(false);
   const [printPreviewVisible, setPrintPreviewVisible] = useState(false);
@@ -44,89 +41,65 @@ const ReportDetailScreen = () => {
   const reportViewRef = useRef();
 
   useEffect(() => {
-    if (!hasFetched) {
-      loadReportData();
-      setHasFetched(true);
-    }
-  }, [reportId, summary, reportType]);
+    loadReportData();
+  }, [reportId, reportType]);
 
   const loadReportData = async () => {
     setLoading(true);
     try {
       console.log('Loading report data for reportId:', reportId, 'reportType:', reportType);
-      console.log('Available reports:', reports);
       
-      if (reports && reports.length > 0) {
-        const foundReport = reports.find(r => r.id == reportId);
-        console.log('Found report:', foundReport);
-        if (foundReport) {
-          setReport(foundReport);
-          setLoading(false);
-          return;
-        }
-      }
-
-      console.log('No reports available, fetching reports data with wider date range...');
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
+      // Try to get single report by ID first
+      let reportData = null;
       
-      const { reportsAPI } = await import('../../api/reports');
-      const response = await reportsAPI.getReports({
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        type: reportType
-      });
-      
-      console.log('Direct API Response:', response);
-      
-      let reportsData = [];
-      if (response?.data && response?.salesItem_details) {
-        const apiData = response.data;
-        const salesItems = response.salesItem_details;
+      try {
+        const response = await reportsAPI.getSingleReport(reportId);
+        console.log('Single report API response:', response);
         
-        if (Array.isArray(salesItems) && salesItems.length > 0) {
-          reportsData = salesItems.map((item, index) => ({
-            id: item.id || index + 1,
-            title: `Sales Report - ${new Date(item.created_at).toLocaleDateString()}`,
-            type: 'sales',
-            amount: parseFloat(item.total_amount) || 0,
-            count: parseInt(item.total_items) || 1,
-            date: item.created_at,
-            description: `Sales report for order #${item.id}`,
-            status: item.status || 'completed',
-            invoice_items: item.invoice_items || [],
-            customer_id: item.customer_id,
-            store_id: item.store_id,
-            paid_amount: parseFloat(item.paid_amount) || 0,
-            user_id: item.user_id,
-            details: [
-              { label: 'Order ID', value: `#${item.id}` },
-              { label: 'Customer', value: `Customer ${item.customer_id}` },
-              { label: 'Store', value: `Store ${item.store_id}` },
-              { label: 'Paid Amount', value: `$${parseFloat(item.paid_amount || 0).toFixed(2)}` },
-              { label: 'Total Items', value: item.total_items || '1' }
-            ]
-          }));
+        if (response && response.data) {
+          reportData = response.data;
+        } else if (response && response.report) {
+          reportData = response.report;
+        } else if (response) {
+          reportData = response;
         }
+      } catch (singleReportError) {
+        console.log('Single report fetch failed, trying with date range:', singleReportError);
+        
+        // If single report fetch fails, try fetching with date range
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+        
+        const response = await reportsAPI.getReports(
+          startDate.toISOString().split('T')[0],
+          endDate.toISOString().split('T')[0],
+          1
+        );
+        
+        console.log('Reports API Response:', response);
+        
+        let reportsData = [];
+        if (response && response.data) {
+          reportsData = response.data.reports || response.data || [];
+        } else if (response && response.reports) {
+          reportsData = response.reports;
+        } else if (Array.isArray(response)) {
+          reportsData = response;
+        } else {
+          reportsData = response || [];
+        }
+        
+        reportData = reportsData.find(r => r.id == reportId || r.invoice_number == reportId);
       }
       
-      console.log('Directly processed reports:', reportsData);
-      
-      if (reportsData && reportsData.length > 0) {
-        const foundReport = reportsData.find(r => r.id == reportId);
-        console.log('Found report from direct API:', foundReport);
-        console.log('Looking for reportId:', reportId, 'type:', typeof reportId);
-        console.log('Available report IDs:', reportsData.map(r => ({ id: r.id, type: typeof r.id })));
-        if (foundReport) {
-          setReport(foundReport);
-          setLoading(false);
-          return;
-        }
+      if (reportData) {
+        const formattedReport = formatReportData(reportData);
+        setReport(formattedReport);
+      } else {
+        console.log('Report not found, creating summary report');
+        createSummaryReport();
       }
-
-      console.log('Report not found after direct API call, creating summary report');
-      createSummaryReport();
     } catch (error) {
       console.error('Error loading report:', error);
       createSummaryReport();
@@ -135,32 +108,66 @@ const ReportDetailScreen = () => {
     }
   };
 
+  const formatReportData = (data) => {
+    // Format the report data based on the API response structure
+    return {
+      id: data.id || data.invoice_number || 'N/A',
+      title: data.title || `${data.type || 'Report'} - ${formatDate(data.date || data.created_at, 'MMM DD, YYYY')}`,
+      type: data.type || reportType || 'general',
+      amount: parseFloat(data.amount || data.total_amount || data.total || 0),
+      count: parseInt(data.count || data.total_items || data.items_count || 1),
+      date: data.date || data.created_at || new Date(),
+      status: data.status || 'completed',
+      description: data.description || `${data.type || 'Report'} details for period`,
+      invoice_items: data.invoice_items || data.items || [],
+      customer_id: data.customer_id,
+      store_id: data.store_id,
+      paid_amount: parseFloat(data.paid_amount || 0),
+      user_id: data.user_id,
+      invoice_number: data.invoice_number,
+      customer_name: data.customer_name,
+      store_name: data.store_name,
+      details: [
+        { label: 'Report ID', value: `#${data.id || data.invoice_number}` },
+        { label: 'Type', value: data.type || reportType || 'General' },
+        { label: 'Date', value: formatDate(data.date || data.created_at, 'MMMM DD, YYYY') },
+        { label: 'Time', value: formatDate(data.date || data.created_at, 'HH:mm') },
+        { label: 'Total Amount', value: formatCurrency(data.amount || data.total_amount || data.total || 0) },
+        { label: 'Items Count', value: (data.count || data.total_items || data.items_count || 1).toString() },
+        { label: 'Status', value: data.status || 'Completed' },
+      ].filter(detail => detail.value !== undefined && detail.value !== null),
+      data: data.items || data.invoice_items || data.data || [
+        { name: 'Item 1', quantity: 1, amount: data.amount || 0 },
+      ]
+    };
+  };
+
   const createSummaryReport = () => {
     const summaryReport = {
       id: reportId || 'summary',
       type: reportType || 'summary',
       title: `${reportType ? reportType.charAt(0).toUpperCase() + reportType.slice(1) : 'Summary'} Report`,
       date: new Date(),
-      amount: summary?.totalSales || 0,
-      count: summary?.totalOrders || 0,
+      amount: 0,
+      count: 0,
       status: 'completed',
       description: `Overall ${reportType || 'summary'} report for the selected period`,
-      totalSales: summary?.totalSales || 0,
-      totalOrders: summary?.totalOrders || 0,
-      totalDue: summary?.totalDue || 0,
-      customerDues: summary?.customerDues || [],
-      topProducts: summary?.topProducts || [],
-      lowStockItems: summary?.lowStockItems || 0,
+      totalSales: 0,
+      totalOrders: 0,
+      totalDue: 0,
+      customerDues: [],
+      topProducts: [],
+      lowStockItems: 0,
       details: [
-        { label: 'Total Sales', value: formatCurrency(summary?.totalSales || 0) },
-        { label: 'Total Orders', value: (summary?.totalOrders || 0).toString() },
-        { label: 'Total Due', value: formatCurrency(summary?.totalDue || 0) },
-        { label: 'Low Stock Items', value: (summary?.lowStockItems || 0).toString() },
+        { label: 'Total Sales', value: formatCurrency(0) },
+        { label: 'Total Orders', value: '0' },
+        { label: 'Total Due', value: formatCurrency(0) },
+        { label: 'Low Stock Items', value: '0' },
       ],
       data: [
-        { name: 'Product A', quantity: 10, amount: 500 },
-        { name: 'Product B', quantity: 8, amount: 400 },
-        { name: 'Product C', quantity: 5, amount: 250 },
+        { name: 'Sample Product A', quantity: 10, amount: 500 },
+        { name: 'Sample Product B', quantity: 8, amount: 400 },
+        { name: 'Sample Product C', quantity: 5, amount: 250 },
       ]
     };
     setReport(summaryReport);
@@ -373,16 +380,6 @@ const ReportDetailScreen = () => {
               background: #fed7aa;
               color: #c2410c;
             }
-            .print-button {
-              background: #3b82f6;
-              color: white;
-              border: none;
-              padding: 12px 30px;
-              border-radius: 8px;
-              font-size: 16px;
-              cursor: pointer;
-              margin: 20px 0;
-            }
             @media print {
               .no-print {
                 display: none;
@@ -458,7 +455,7 @@ const ReportDetailScreen = () => {
                     <span class="status-badge ${report?.status === 'completed' ? 'status-completed' : 'status-pending'}">
                       ${report?.status || 'Completed'}
                     </span>
-                  </td>
+                   </td>
                 </tr>
               </table>
             </div>
@@ -484,15 +481,15 @@ const ReportDetailScreen = () => {
                   <tbody>
                     ${report?.data.map(item => `
                       <tr>
-                        <td>${item.name}</td>
-                        <td>${item.quantity}</td>
-                        <td>${formatCurrency(item.amount)}</td>
+                        <td>${item.name || item.product_name || 'Item'}</td>
+                        <td>${item.quantity || item.qty || 1}</td>
+                        <td>${formatCurrency(item.amount || item.price || item.total || 0)}</td>
                       </tr>
                     `).join('')}
                     <tr class="total-row">
                       <td><strong>Total</strong></td>
-                      <td><strong>${report?.data.reduce((sum, item) => sum + (item.quantity || 0), 0)}</strong></td>
-                      <td><strong>${formatCurrency(report?.data.reduce((sum, item) => sum + (item.amount || 0), 0))}</strong></td>
+                      <td><strong>${report?.data.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0)}</strong></td>
+                      <td><strong>${formatCurrency(report?.data.reduce((sum, item) => sum + (item.amount || item.price || item.total || 0), 0))}</strong></td>
                     </tr>
                   </tbody>
                 </table>
@@ -558,10 +555,8 @@ const ReportDetailScreen = () => {
         await Sharing.shareAsync(newUri, {
           mimeType: 'application/pdf',
           dialogTitle: 'Export PDF',
-          UTI: 'com.adobe.pdf',
         });
       } else {
-        // Request permissions to save to media library
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           const asset = await MediaLibrary.createAssetAsync(newUri);
@@ -581,15 +576,12 @@ const ReportDetailScreen = () => {
   const handleExportExcel = async () => {
     setExportDropdownVisible(false);
     try {
-      // Prepare data for Excel
       const excelData = [];
       
-      // Header
       excelData.push(['Report Export', report?.title || 'Report']);
       excelData.push(['Generated On', new Date().toLocaleString()]);
       excelData.push([]);
       
-      // Report Info
       excelData.push(['REPORT INFORMATION']);
       excelData.push(['Report ID', report?.id]);
       excelData.push(['Type', report?.type]);
@@ -597,14 +589,12 @@ const ReportDetailScreen = () => {
       excelData.push(['Status', report?.status || 'Completed']);
       excelData.push([]);
       
-      // Key Metrics
       excelData.push(['KEY METRICS']);
       excelData.push(['Total Amount', formatCurrency(report?.amount)]);
       excelData.push(['Total Items', report?.count || 0]);
       excelData.push(['Average Value', formatCurrency(report?.count ? report?.amount / report?.count : 0)]);
       excelData.push([]);
       
-      // Details
       if (report?.details && report?.details.length > 0) {
         excelData.push(['DETAILS']);
         report?.details.forEach(detail => {
@@ -613,27 +603,23 @@ const ReportDetailScreen = () => {
         excelData.push([]);
       }
       
-      // Data Table
       if (report?.data && report?.data.length > 0) {
         excelData.push(['DATA TABLE']);
         excelData.push(['Item', 'Quantity', 'Amount']);
         report?.data.forEach(item => {
-          excelData.push([item.name, item.quantity, formatCurrency(item.amount)]);
+          excelData.push([item.name || item.product_name || 'Item', item.quantity || item.qty || 1, formatCurrency(item.amount || item.price || item.total || 0)]);
         });
         excelData.push([]);
         
-        // Totals
-        const totalQty = report?.data.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        const totalAmt = report?.data.reduce((sum, item) => sum + (item.amount || 0), 0);
+        const totalQty = report?.data.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0);
+        const totalAmt = report?.data.reduce((sum, item) => sum + (item.amount || item.price || item.total || 0), 0);
         excelData.push(['TOTAL', totalQty, formatCurrency(totalAmt)]);
       }
       
-      // Create worksheet
       const ws = XLSX.utils.aoa_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Report");
       
-      // Generate file
       const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       const fileName = `Report_${report?.id || 'summary'}_${new Date().getTime()}.xlsx`;
       const fileUri = FileSystem.documentDirectory + fileName;
@@ -646,10 +632,8 @@ const ReportDetailScreen = () => {
         await Sharing.shareAsync(fileUri, {
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           dialogTitle: 'Export Excel',
-          UTI: 'com.microsoft.excel.xlsx',
         });
       } else {
-        // Request permissions to save to media library
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           const asset = await MediaLibrary.createAssetAsync(fileUri);
@@ -665,7 +649,7 @@ const ReportDetailScreen = () => {
     }
   };
 
-  // Export as DOC (using HTML format)
+  // Export as DOC
   const handleExportDoc = async () => {
     setExportDropdownVisible(false);
     try {
@@ -681,10 +665,8 @@ const ReportDetailScreen = () => {
         await Sharing.shareAsync(fileUri, {
           mimeType: 'application/msword',
           dialogTitle: 'Export Document',
-          UTI: 'com.microsoft.word.doc',
         });
       } else {
-        // Request permissions to save to media library
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           const asset = await MediaLibrary.createAssetAsync(fileUri);
@@ -700,7 +682,6 @@ const ReportDetailScreen = () => {
     }
   };
 
-  // Toggle export dropdown
   const toggleExportDropdown = () => {
     setExportDropdownVisible(!exportDropdownVisible);
   };
@@ -770,7 +751,6 @@ const ReportDetailScreen = () => {
     <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
 
-      {/* Header with Gradient */}
       <LinearGradient
         colors={isDarkMode ? ["#1f2937", "#111827"] : ["#ffffff", "#f3f4f6"]}
         className="pt-12 pb-6 px-4"
@@ -795,7 +775,6 @@ const ReportDetailScreen = () => {
               <Icon name="printer" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
             </TouchableOpacity>
             
-            {/* Export Button with Dropdown */}
             <View className="relative">
               <TouchableOpacity
                 onPress={toggleExportDropdown}
@@ -806,10 +785,8 @@ const ReportDetailScreen = () => {
                 <Icon name="export" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
               </TouchableOpacity>
               
-              {/* Export Dropdown Menu */}
               {exportDropdownVisible && (
                 <>
-                  {/* Backdrop to close dropdown when tapping outside */}
                   <TouchableOpacity
                     style={{
                       position: 'absolute',
@@ -823,7 +800,6 @@ const ReportDetailScreen = () => {
                     activeOpacity={1}
                   />
                   
-                  {/* Dropdown Menu */}
                   <View className={`absolute right-0 top-12 rounded-xl overflow-hidden shadow-lg z-50 ${
                     isDarkMode ? 'bg-gray-800' : 'bg-white'
                   }`} style={{ minWidth: 150 }}>
@@ -898,7 +874,6 @@ const ReportDetailScreen = () => {
         </View>
       </LinearGradient>
 
-      {/* Tab Bar */}
       <View className="px-4 py-2">
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {tabs.map((tab) => (
@@ -937,7 +912,6 @@ const ReportDetailScreen = () => {
       >
         {activeTab === "overview" && (
           <View className="pt-4 pb-24">
-            {/* Report Information */}
             <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
               <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                 Report Information
@@ -985,7 +959,6 @@ const ReportDetailScreen = () => {
               </View>
             </View>
 
-            {/* Report Details */}
             {report.details && report.details.length > 0 && (
               <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
                 <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
@@ -994,7 +967,7 @@ const ReportDetailScreen = () => {
                 {report.details.map((detail, index) => (
                   <View key={index} className="flex-row justify-between py-2 border-b border-gray-200">
                     <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {detail.label || `Detail ${index + 1}`}:
+                      {detail.label}:
                     </Text>
                     <Text className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                       {detail.value}
@@ -1004,7 +977,6 @@ const ReportDetailScreen = () => {
               </View>
             )}
 
-            {/* Description */}
             {report.description && (
               <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
                 <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
@@ -1015,102 +987,11 @@ const ReportDetailScreen = () => {
                 </Text>
               </View>
             )}
-
-            {/* Key Metrics */}
-            <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-              <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                Key Metrics
-              </Text>
-              <View className="flex-row flex-wrap justify-between">
-                <View className="w-[48%] mb-3">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Total Amount
-                  </Text>
-                  <Text className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(report.amount)}
-                  </Text>
-                </View>
-                <View className="w-[48%] mb-3">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Total Items
-                  </Text>
-                  <Text className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    {report.count || 0}
-                  </Text>
-                </View>
-                <View className="w-[48%]">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Average Value
-                  </Text>
-                  <Text className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    {formatCurrency(report.count ? report.amount / report.count : 0)}
-                  </Text>
-                </View>
-                <View className="w-[48%]">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Status
-                  </Text>
-                  <View className="flex-row items-center mt-1">
-                    <View className={`w-2 h-2 rounded-full ${
-                      report.status === 'completed' ? 'bg-green-500' : 'bg-orange-500'
-                    } mr-2`} />
-                    <Text className={`text-base font-medium capitalize ${
-                      report.status === 'completed' ? 'text-green-500' : 'text-orange-500'
-                    }`}>
-                      {report.status || 'Completed'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Summary Cards */}
-            <View className={`p-5 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-              <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                Summary
-              </Text>
-              <View className="flex-row justify-between">
-                <View className="items-center flex-1">
-                  <View className="w-12 h-12 rounded-full bg-green-100 items-center justify-center mb-2">
-                    <Icon name="trending-up" size={24} color="#10b981" />
-                  </View>
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Growth
-                  </Text>
-                  <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    +12.5%
-                  </Text>
-                </View>
-                <View className="items-center flex-1">
-                  <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center mb-2">
-                    <Icon name="calendar-clock" size={24} color="#3b82f6" />
-                  </View>
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Period
-                  </Text>
-                  <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    Daily
-                  </Text>
-                </View>
-                <View className="items-center flex-1">
-                  <View className="w-12 h-12 rounded-full bg-purple-100 items-center justify-center mb-2">
-                    <Icon name="star" size={24} color="#8b5cf6" />
-                  </View>
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Rating
-                  </Text>
-                  <Text className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    4.8/5
-                  </Text>
-                </View>
-              </View>
-            </View>
           </View>
         )}
 
         {activeTab === "details" && (
           <View className="pt-4 pb-24">
-            {/* Detailed Information */}
             <View className={`p-5 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
               <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                 Report Details
@@ -1155,30 +1036,40 @@ const ReportDetailScreen = () => {
                   isDarkMode={isDarkMode}
                   status 
                 />
-                <DetailRow 
-                  label="Created By" 
-                  value={report.createdBy || 'System'} 
-                  isDarkMode={isDarkMode} 
-                />
               </View>
             </View>
 
-            {/* Additional Details */}
-            {report.details && report.details.length > 0 && (
+            {report.invoice_number && (
               <View className={`p-5 rounded-2xl mt-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
                 <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                  Additional Information
+                  Invoice Information
                 </Text>
-                {report.details.map((detail, index) => (
-                  <View key={index} className="flex-row justify-between py-2 border-b border-gray-200">
-                    <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
-                      {detail.label}:
-                    </Text>
-                    <Text className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                      {detail.value}
-                    </Text>
-                  </View>
-                ))}
+                <DetailRow 
+                  label="Invoice Number" 
+                  value={report.invoice_number} 
+                  isDarkMode={isDarkMode} 
+                />
+                {report.customer_name && (
+                  <DetailRow 
+                    label="Customer" 
+                    value={report.customer_name} 
+                    isDarkMode={isDarkMode} 
+                  />
+                )}
+                {report.store_name && (
+                  <DetailRow 
+                    label="Store" 
+                    value={report.store_name} 
+                    isDarkMode={isDarkMode} 
+                  />
+                )}
+                {report.paid_amount && (
+                  <DetailRow 
+                    label="Paid Amount" 
+                    value={formatCurrency(report.paid_amount)} 
+                    isDarkMode={isDarkMode} 
+                  />
+                )}
               </View>
             )}
           </View>
@@ -1186,7 +1077,6 @@ const ReportDetailScreen = () => {
 
         {activeTab === "charts" && (
           <View className="pt-4 pb-24">
-            {/* Chart Placeholders */}
             <View className={`p-5 rounded-2xl mb-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
               <Text className={`text-lg font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                 Performance Chart
@@ -1215,7 +1105,6 @@ const ReportDetailScreen = () => {
 
         {activeTab === "data" && (
           <View className="pt-4 pb-24">
-            {/* Data Table */}
             <View className={`p-5 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
               <View className="flex-row justify-between items-center mb-4">
                 <Text className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
@@ -1230,7 +1119,6 @@ const ReportDetailScreen = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Table Header */}
               <View className={`flex-row p-3 rounded-lg mb-2 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <Text className={`flex-1 text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   Item
@@ -1243,17 +1131,16 @@ const ReportDetailScreen = () => {
                 </Text>
               </View>
 
-              {/* Table Rows */}
               {report.data?.map((item, index) => (
                 <View key={index} className="flex-row p-3 border-b border-gray-200">
                   <Text className={`flex-1 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {item.name || `Item ${index + 1}`}
+                    {item.name || item.product_name || `Item ${index + 1}`}
                   </Text>
                   <Text className={`w-20 text-sm text-right ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {item.quantity || 0}
+                    {item.quantity || item.qty || 0}
                   </Text>
                   <Text className={`w-24 text-sm text-right font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    {formatCurrency(item.amount || 0)}
+                    {formatCurrency(item.amount || item.price || item.total || 0)}
                   </Text>
                 </View>
               ))}
@@ -1267,17 +1154,16 @@ const ReportDetailScreen = () => {
                 </View>
               )}
 
-              {/* Table Footer */}
               {report.data && report.data.length > 0 && (
                 <View className={`flex-row p-3 mt-2 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                   <Text className={`flex-1 text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                     Total
                   </Text>
                   <Text className={`w-20 text-sm font-semibold text-right ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    {report.data.reduce((sum, item) => sum + (item.quantity || 0), 0)}
+                    {report.data.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0)}
                   </Text>
                   <Text className={`w-24 text-sm font-semibold text-right text-blue-600`}>
-                    {formatCurrency(report.data.reduce((sum, item) => sum + (item.amount || 0), 0))}
+                    {formatCurrency(report.data.reduce((sum, item) => sum + (item.amount || item.price || item.total || 0), 0))}
                   </Text>
                 </View>
               )}
@@ -1408,7 +1294,6 @@ const ReportDetailScreen = () => {
   );
 };
 
-// Helper Component for Detail Rows
 const DetailRow = ({ label, value, isDarkMode, capitalize, highlight, status }) => {
   const getStatusColor = (val) => {
     const statusVal = val?.toLowerCase() || '';
@@ -1440,7 +1325,6 @@ const DetailRow = ({ label, value, isDarkMode, capitalize, highlight, status }) 
   );
 };
 
-// Helper component to render HTML for print preview
 const PrintHTMLView = ({ html }) => {
   return (
     <WebView

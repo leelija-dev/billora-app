@@ -1,23 +1,23 @@
 // screens/profile/ProfileScreen.js
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { 
-  ScrollView, 
-  Text, 
-  View, 
-  TouchableOpacity,
-  Dimensions 
+import {
+    Dimensions,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Button from '../../components/common/Button';
 import Header from '../../components/common/Header';
 import Input from '../../components/common/Input';
 import Loading from '../../components/common/Loading';
 import { useAuth } from '../../hooks/useAuth';
-import { useUIStore } from '../../store/uiStore';
 import { useThemeStore } from '../../store/themeStore';
+import { useUIStore } from '../../store/uiStore';
 
 const { width } = Dimensions.get('window');
 
@@ -37,9 +37,13 @@ const ProfileScreen = () => {
       name: user?.name || '',
       email: user?.email || '',
       phone: user?.phone || '',
-      company: user?.company || '',
-      bio: user?.bio || '',
-      location: user?.location || '',
+      company_name: user?.company_name || '',
+      gst_number: user?.gst_number || '',
+      address: user?.address || '',
+      city: user?.city || '',
+      state: user?.state || '',
+      country: user?.country || '',
+      pincode: user?.pincode || '',
     },
   });
 
@@ -58,9 +62,13 @@ const ProfileScreen = () => {
       name: user?.name || '',
       email: user?.email || '',
       phone: user?.phone || '',
-      company: user?.company || '',
-      bio: user?.bio || '',
-      location: user?.location || '',
+      company_name: user?.company_name || '',
+      gst_number: user?.gst_number || '',
+      address: user?.address || '',
+      city: user?.city || '',
+      state: user?.state || '',
+      country: user?.country || '',
+      pincode: user?.pincode || '',
     });
     setEditing(true);
   };
@@ -71,9 +79,13 @@ const ProfileScreen = () => {
       name: user?.name || '',
       email: user?.email || '',
       phone: user?.phone || '',
-      company: user?.company || '',
-      bio: user?.bio || '',
-      location: user?.location || '',
+      company_name: user?.company_name || '',
+      gst_number: user?.gst_number || '',
+      address: user?.address || '',
+      city: user?.city || '',
+      state: user?.state || '',
+      country: user?.country || '',
+      pincode: user?.pincode || '',
     });
   };
 
@@ -159,23 +171,23 @@ const ProfileScreen = () => {
               </Text>
               
               <View className="flex-row mt-2">
-                {user?.location && (
+                {user?.city && user?.state && (
                   <View className="flex-row items-center mr-4">
                     <Icon name="map-marker" size={14} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
                     <Text className={`text-xs ml-1 ${
                       isDarkMode ? 'text-gray-400' : 'text-gray-500'
                     }`}>
-                      {user.location}
+                      {user.city}, {user.state}
                     </Text>
                   </View>
                 )}
-                {user?.company && (
+                {user?.company_name && (
                   <View className="flex-row items-center">
                     <Icon name="office-building" size={14} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
                     <Text className={`text-xs ml-1 ${
                       isDarkMode ? 'text-gray-400' : 'text-gray-500'
                     }`}>
-                      {user.company}
+                      {user.company_name}
                     </Text>
                   </View>
                 )}
@@ -219,31 +231,6 @@ const ProfileScreen = () => {
             </View>
           </View>
         </View>
-
-        {/* Bio Section (if available) */}
-        {user?.bio && !editing && (
-          <View className={`mt-4 p-5 rounded-3xl border ${
-            isDarkMode 
-              ? 'bg-gray-800 border-gray-700' 
-              : 'bg-white border-gray-100'
-          }`}>
-            <View className="flex-row items-center mb-3">
-              <View className={`w-8 h-8 rounded-lg items-center justify-center ${
-                isDarkMode ? 'bg-purple-900/30' : 'bg-purple-100'
-              }`}>
-                <Icon name="account-details" size={18} color="#667eea" />
-              </View>
-              <Text className={`text-base font-semibold ml-2 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>About</Text>
-            </View>
-            <Text className={`leading-5 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            }`}>
-              {user.bio}
-            </Text>
-          </View>
-        )}
 
         {/* Main Content Card */}
         <View className={`mt-4 p-5 rounded-3xl border ${
@@ -332,15 +319,15 @@ const ProfileScreen = () => {
 
               <Controller
                 control={control}
-                name="company"
+                name="company_name"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="Company"
+                    label="Company Name"
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
-                    placeholder="Enter your company"
-                    error={errors.company?.message}
+                    placeholder="Enter your company name"
+                    error={errors.company_name?.message}
                     leftIcon="office-building"
                     isDarkMode={isDarkMode}
                   />
@@ -349,20 +336,117 @@ const ProfileScreen = () => {
 
               <Controller
                 control={control}
-                name="location"
+                name="gst_number"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
-                    label="Location"
+                    label="GST Number"
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
-                    placeholder="Enter your location"
-                    error={errors.location?.message}
-                    leftIcon="map-marker"
+                    placeholder="Enter GST number"
+                    error={errors.gst_number?.message}
+                    leftIcon="receipt-outline"
                     isDarkMode={isDarkMode}
                   />
                 )}
               />
+
+              <Controller
+                control={control}
+                name="address"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <Input
+                    label="Address"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    placeholder="Enter your address"
+                    error={errors.address?.message}
+                    leftIcon="map-marker-outline"
+                    isDarkMode={isDarkMode}
+                  />
+                )}
+              />
+
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Controller
+                    control={control}
+                    name="city"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <Input
+                        label="City"
+                        value={value}
+                        onChangeText={onChange}
+                        onBlur={onBlur}
+                        placeholder="Enter city"
+                        error={errors.city?.message}
+                        leftIcon="home-city-outline"
+                        isDarkMode={isDarkMode}
+                      />
+                    )}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Controller
+                    control={control}
+                    name="state"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <Input
+                        label="State"
+                        value={value}
+                        onChangeText={onChange}
+                        onBlur={onBlur}
+                        placeholder="Enter state"
+                        error={errors.state?.message}
+                        leftIcon="map-outline"
+                        isDarkMode={isDarkMode}
+                      />
+                    )}
+                  />
+                </View>
+              </View>
+
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Controller
+                    control={control}
+                    name="country"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <Input
+                        label="Country"
+                        value={value}
+                        onChangeText={onChange}
+                        onBlur={onBlur}
+                        placeholder="Enter country"
+                        error={errors.country?.message}
+                        leftIcon="map-marker-outline"
+                        isDarkMode={isDarkMode}
+                      />
+                    )}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Controller
+                    control={control}
+                    name="pincode"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <Input
+                        label="Pincode"
+                        value={value}
+                        onChangeText={onChange}
+                        onBlur={onBlur}
+                        placeholder="Enter pincode"
+                        keyboardType="numeric"
+                        maxLength={6}
+                        error={errors.pincode?.message}
+                        leftIcon="mailbox-outline"
+                        isDarkMode={isDarkMode}
+                      />
+                    )}
+                  />
+                </View>
+              </View>
 
               <Controller
                 control={control}
@@ -451,25 +535,95 @@ const ProfileScreen = () => {
                   <Icon name="office-building" size={18} color="#667eea" />
                   <Text className={`text-sm ml-3 ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Company</Text>
+                  }`}>Company Name</Text>
                 </View>
                 <Text className={`text-sm font-medium ${
                   isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{user?.company || 'N/A'}</Text>
+                }`}>{user?.company_name || 'N/A'}</Text>
               </View>
 
               <View className={`flex-row justify-between items-center py-4 border-b ${
                 isDarkMode ? 'border-gray-700' : 'border-gray-100'
               }`}>
                 <View className="flex-row items-center">
-                  <Icon name="map-marker" size={18} color="#667eea" />
+                  <Icon name="receipt-outline" size={18} color="#667eea" />
                   <Text className={`text-sm ml-3 ${
                     isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>Location</Text>
+                  }`}>GST Number</Text>
                 </View>
                 <Text className={`text-sm font-medium ${
                   isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>{user?.location || 'N/A'}</Text>
+                }`}>{user?.gst_number || 'N/A'}</Text>
+              </View>
+
+              <View className={`flex-row justify-between items-center py-4 border-b ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-100'
+              }`}>
+                <View className="flex-row items-center">
+                  <Icon name="map-marker-outline" size={18} color="#667eea" />
+                  <Text className={`text-sm ml-3 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Address</Text>
+                </View>
+                <Text className={`text-sm font-medium ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{user?.address || 'N/A'}</Text>
+              </View>
+
+              <View className={`flex-row justify-between items-center py-4 border-b ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-100'
+              }`}>
+                <View className="flex-row items-center">
+                  <Icon name="home-city-outline" size={18} color="#667eea" />
+                  <Text className={`text-sm ml-3 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>City</Text>
+                </View>
+                <Text className={`text-sm font-medium ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{user?.city || 'N/A'}</Text>
+              </View>
+
+              <View className={`flex-row justify-between items-center py-4 border-b ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-100'
+              }`}>
+                <View className="flex-row items-center">
+                  <Icon name="map-outline" size={18} color="#667eea" />
+                  <Text className={`text-sm ml-3 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>State</Text>
+                </View>
+                <Text className={`text-sm font-medium ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{user?.state || 'N/A'}</Text>
+              </View>
+
+              <View className={`flex-row justify-between items-center py-4 border-b ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-100'
+              }`}>
+                <View className="flex-row items-center">
+                  <Icon name="map-marker-outline" size={18} color="#667eea" />
+                  <Text className={`text-sm ml-3 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Country</Text>
+                </View>
+                <Text className={`text-sm font-medium ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{user?.country || 'N/A'}</Text>
+              </View>
+
+              <View className={`flex-row justify-between items-center py-4 border-b ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-100'
+              }`}>
+                <View className="flex-row items-center">
+                  <Icon name="mailbox-outline" size={18} color="#667eea" />
+                  <Text className={`text-sm ml-3 ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>Pincode</Text>
+                </View>
+                <Text className={`text-sm font-medium ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>{user?.pincode || 'N/A'}</Text>
               </View>
 
               <View className={`flex-row justify-between items-center py-4 border-b ${

@@ -6,7 +6,7 @@ export const authAPI = {
   register: async (userData) => {
     try {
       console.log('Register API call:', {
-        endpoint: '/users/store',
+        endpoint: '/users/register',
         data: {
           name: userData.name,
           email: userData.email,
@@ -16,13 +16,13 @@ export const authAPI = {
           state: userData.state,
           country: userData.country,
           pincode: userData.pincode,
-          companyName: userData.companyName || null,
+          company_name: userData.companyName || null,
           gst_number: userData.gstNumber || null,
           address: userData.address || null,
-          created_by: userData.created_by,
+          created_by: userData.created_by || null,
         }
       });
-      return await apiClient.post('/users/store', {
+      return await apiClient.post('/users/register', {
         name: userData.name,
         email: userData.email,
         phone: userData.phone,
@@ -34,7 +34,7 @@ export const authAPI = {
         state: userData.state,
         country: userData.country,
         pincode: userData.pincode,
-        created_by: userData.createdBy || null,
+        created_by: userData.created_by || null,
       });
     } catch (error) {
       throw error.response?.data || error.message;
@@ -67,7 +67,7 @@ export const authAPI = {
   // Get current user profile
   getProfile: async (userId) => {
     try {
-      return await apiClient.get(`/users/${userId}`);
+      return await apiClient.get(`/users/edit/${userId}`);
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -76,7 +76,19 @@ export const authAPI = {
   // Update user profile
   updateProfile: async (userId, userData) => {
     try {
-      return await apiClient.put(`/users/${userId}`, userData);
+      return await apiClient.put(`/users/update/${userId}`, userData);
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Update password
+  updatePassword: async (userId, currentPassword, newPassword) => {
+    try {
+      return await apiClient.put(`/users/update-password/${userId}`, {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
     } catch (error) {
       throw error.response?.data || error.message;
     }
