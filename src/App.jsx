@@ -28,6 +28,8 @@ import StocksStackNavigator from "./components/navigation/stacks/StocksStack";
 import StoresStackNavigator from "./components/navigation/stacks/StoresStack";
 import UnitsStackNavigator from "./components/navigation/stacks/UnitsStack";
 
+import MainNavigator from "./components/navigation/MainNavigator";
+
 // Create Stack and Drawer instances
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -349,7 +351,7 @@ const AppContent = () => {
   return (
     <NavigationContainer>
       <StatusBar style="auto" />
-      {isAuthenticated ? <DrawerNavigator /> : <AuthStackNavigator />}
+      {isAuthenticated ? <MainNavigator /> : <AuthStackNavigator />}
     </NavigationContainer>
   );
 };

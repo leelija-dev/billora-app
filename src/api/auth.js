@@ -1,68 +1,44 @@
 // api/auth.js
-import apiClient from "./client";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiClient from './client';
 
 export const authAPI = {
-  // Login user
   login: async (email, password) => {
     try {
-      console.log('🔐 Login attempt for:', email);
-      const response = await apiClient.post("/users/login", {
-        email,
-        password,
-      });
-      console.log('✅ Login response:', response.data);
-      
-      // Store token if present
-      if (response.data?.token) {
-        await AsyncStorage.setItem('auth_token', response.data.token);
-      }
-      
+      const response = await apiClient.post("/users/login", { email, password });
       return response;
     } catch (error) {
-      console.error('Login API error:', error);
-      throw error;
+      throw error.response?.data || error.message;
     }
   },
 
-  // Logout user
   logout: async (userId) => {
     try {
-      const response = await apiClient.post("/users/logout", { user_id: userId });
-      await AsyncStorage.removeItem('auth_token');
-      return response;
+      return await apiClient.post("/users/logout", { user_id: userId });
     } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
+      throw error.response?.data || error.message;
     }
   },
 
-  // Get current user profile
   getProfile: async (userId) => {
     try {
-      const response = await apiClient.get(`/users/edit/${userId}`);
-      return response;
+      return await apiClient.get(`/users/edit/${userId}`);
     } catch (error) {
-      console.error('Get profile error:', error);
-      throw error;
+      throw error.response?.data || error.message;
     }
   },
 
-  // Get user permissions
+  // Get user permissions from plan (matches desktop API)
   getUserPermissions: async (userId, planId) => {
     try {
-      console.log('📋 Fetching permissions for plan:', planId);
       const response = await apiClient.get(`/plans/${planId}`);
-      console.log('✅ Permissions response:', response.data);
       return response;
     } catch (error) {
       console.error("Failed to fetch permissions:", error);
-      // Return default permissions to prevent app from breaking
       return {
         data: {
           status: true,
           permissionNames: [],
-          customer_sidebar_permission: ['dashboard', 'products', 'stocks', 'bills', 'reports', 'brands', 'categories'],
+          customer_sidebar_permission: [],
         },
       };
     }

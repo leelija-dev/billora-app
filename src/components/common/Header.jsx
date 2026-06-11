@@ -1,3 +1,4 @@
+// components/common/Header.js
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState } from "react";
@@ -12,13 +13,12 @@ import {
   TouchableWithoutFeedback,
   View,
   Easing,
-  useColorScheme,
-  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuthStore } from "../../store/authStore";
+import { usePermissionStore, MENU_ITEMS } from "../../store/permissionStore";
 
 const { width } = Dimensions.get("window");
 const DRAWER_WIDTH = width * 0.8;
@@ -29,15 +29,12 @@ const Header = ({
   rightComponent,
   showBackButton = false,
   onBackPress,
-  backgroundColor,
-  textColor,
   style = "",
   titleStyle = "",
   showSidebar = true,
   userAvatar,
   userName = "Guest User",
   userEmail = "guest@example.com",
-  navigationItems = [], // Now receiving from props (from navigationItems.js)
   onNavigate,
   activeScreen = "Dashboard",
   notificationCount = 3,
@@ -49,19 +46,28 @@ const Header = ({
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [notificationVisible, setNotificationVisible] = useState(false);
   
-  // Use theme store
-  const { isDarkMode, toggleDarkMode } = useThemeStore();
-  const systemColorScheme = useColorScheme();
+  const { isDarkMode, toggleTheme } = useThemeStore();
+  const { user, logout } = useAuthStore();
+  const { getFilteredMenuItems, sidebarPermissions } = usePermissionStore();
   
-  // Use auth hook for logout
-  const { logout: authLogout } = useAuth();
-  
-  // Animation values
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const notificationAnim = useRef(new Animated.Value(0)).current;
 
-  // Handle sidebar animations
+  // Get filtered menu items based on user permissions (like desktop)
+  const menuItems = getFilteredMenuItems();
+  
+  // Sort menu items by order
+  const sortedMenuItems = [...menuItems].sort((a, b) => a.order - b.order);
+
+  // Debug logs
+  useEffect(() => {
+    if (sidebarPermissions) {
+      console.log('📋 Sidebar Permissions:', sidebarPermissions.map(p => p.slug));
+      console.log('📱 Filtered Menu Items:', sortedMenuItems.map(m => m.name));
+    }
+  }, [sidebarPermissions]);
+
   useEffect(() => {
     if (sidebarVisible) {
       Animated.parallel([
@@ -96,7 +102,6 @@ const Header = ({
     }
   }, [sidebarVisible]);
 
-  // Handle notification animations
   useEffect(() => {
     if (notificationVisible) {
       Animated.spring(notificationAnim, {
@@ -119,26 +124,7 @@ const Header = ({
   };
 
   const closeSidebar = () => {
-    if (sidebarVisible) {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: 250,
-          useNativeDriver: true,
-          easing: Easing.in(Easing.cubic),
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-          easing: Easing.in(Easing.cubic),
-        }),
-      ]).start(() => {
-        setSidebarVisible(false);
-      });
-    } else {
-      setSidebarVisible(false);
-    }
+    setSidebarVisible(false);
   };
 
   const toggleNotifications = () => {
@@ -149,86 +135,41 @@ const Header = ({
   };
 
   const handleNavigation = (item) => {
-    console.log('Navigation clicked:', item);
-    
-    // Close sidebar immediately
+    console.log('📱 Navigation clicked:', item);
     setSidebarVisible(false);
     
     if (onNavigate) {
-      console.log('Using custom navigation handler');
       onNavigate(item);
     } else {
-      // Default navigation with improved logic
       try {
-        if (item.parent) {
-          // If it's a stack navigator, navigate to the stack with the screen
-          console.log('Navigating to parent stack:', item.parent, 'screen:', item.screen);
-          
-          // Navigate to the stack and specify the screen
-          navigation.navigate(item.parent, {
-            screen: item.screen,
-          });
-        } else if (item.screen) {
-          // Direct screen navigation
-          console.log('Navigating to direct screen:', item.screen);
+        // Navigate to the screen
+        if (item.screen) {
           navigation.navigate(item.screen);
+        } else if (item.stack) {
+          navigation.navigate(item.stack);
         } else {
-          // Fallback - try to navigate by title
-          console.log('Navigating by title:', item.title);
-          navigation.navigate(item.title);
+          navigation.navigate(item.name);
         }
       } catch (error) {
         console.error('Navigation error:', error);
       }
     }
-    
-    // Start closing animation after navigation
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: -DRAWER_WIDTH,
-        duration: 200,
-        useNativeDriver: true,
-        easing: Easing.in(Easing.cubic),
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-        easing: Easing.in(Easing.cubic),
-      }),
-    ]).start();
   };
 
   const handleLogout = async () => {
-    try {
-      // Close sidebar first
-      setSidebarVisible(false);
-      
-      // Call the real logout function from useAuth hook
-      await authLogout();
-      
-      // Call the onLogout prop if provided (for additional cleanup)
-      if (onLogout) {
-        onLogout();
-      }
-      
-      // Navigate to login screen
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Even if API call fails, clear local state
-      setSidebarVisible(false);
-      if (onLogout) {
-        onLogout();
-      }
+    setSidebarVisible(false);
+    await logout();
+    if (onLogout) {
+      onLogout();
     }
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Login' }],
+    });
   };
 
   const handleThemeToggle = () => {
-    toggleDarkMode();
+    toggleTheme();
   };
 
   const renderLeftComponent = () => {
@@ -293,7 +234,7 @@ const Header = ({
             color={isDarkMode ? "#FFFFFF" : "#1f2937"}
           />
           {notificationCount > 0 && (
-            <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-[20px] h-[20px] justify-center items-center border-2 border-white dark:border-gray-900 shadow-sm shadow-red-500/50">
+            <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-[20px] h-[20px] justify-center items-center border-2 border-white dark:border-gray-900">
               <Text className="text-white text-[10px] font-bold">
                 {notificationCount > 9 ? "9+" : notificationCount}
               </Text>
@@ -363,88 +304,50 @@ const Header = ({
               <Animated.View
                 style={{
                   opacity: notificationAnim,
-                  transform: [
-                    {
-                      translateY: notificationAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-20, 0],
-                      }),
-                    },
-                  ],
+                  transform: [{ translateY: notificationAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-20, 0],
+                  }) }],
                 }}
-                className={`absolute top-16 right-4 w-[80%] max-w-[350px] bg-white dark:bg-gray-800 rounded-2xl shadow-lg`}
+                className={`absolute top-16 right-4 w-[80%] max-w-[350px] bg-white dark:bg-gray-800 rounded-2xl shadow-lg z-50`}
               >
-                {/* Header */}
-                <View className="rounded-t-2xl overflow-hidden">
-                  <LinearGradient
-                    colors={["#667eea", "#764ba2"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    className="flex-row justify-between items-center p-4 w-full h-auto"
-                  >
-                    <Text className="text-white font-bold text-lg">
-                      Notifications
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setNotificationVisible(false)}
-                    >
-                      <Icon name="close" size={22} color="white" />
-                    </TouchableOpacity>
-                  </LinearGradient>
-                </View>
-
-                {/* Notifications List */}
-                <ScrollView
-                  className="max-h-96"
-                  showsVerticalScrollIndicator={false}
+                <LinearGradient
+                  colors={["#667eea", "#764ba2"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  className="flex-row justify-between items-center p-4 rounded-t-2xl"
                 >
+                  <Text className="text-white font-bold text-lg">Notifications</Text>
+                  <TouchableOpacity onPress={() => setNotificationVisible(false)}>
+                    <Icon name="close" size={22} color="white" />
+                  </TouchableOpacity>
+                </LinearGradient>
+
+                <ScrollView className="max-h-96" showsVerticalScrollIndicator={false}>
                   {notifications.map((notif) => (
                     <TouchableOpacity
                       key={notif.id}
                       className={`flex-row p-4 border-b border-gray-200 dark:border-gray-700 ${
-                        !notif.read ? 'bg-blue-50/50 dark:bg-purple-900/20' : 'bg-white dark:bg-gray-800'
+                        !notif.read ? 'bg-blue-50/50 dark:bg-purple-900/20' : ''
                       }`}
-                      onPress={() => {
-                        console.log("Notification pressed:", notif.id);
-                        setNotificationVisible(false);
-                      }}
+                      onPress={() => setNotificationVisible(false)}
                     >
-                      <View
-                        className="w-10 h-10 rounded-xl items-center justify-center mr-3"
-                        style={{ backgroundColor: `${notif.color}20` }}
-                      >
+                      <View className="w-10 h-10 rounded-xl items-center justify-center mr-3" style={{ backgroundColor: `${notif.color}20` }}>
                         <Icon name={notif.icon} size={20} color={notif.color} />
                       </View>
                       <View className="flex-1">
                         <View className="flex-row justify-between items-center">
-                          <Text className="font-semibold text-gray-900 dark:text-white">
-                            {notif.title}
-                          </Text>
-                          <Text className="text-xs text-gray-400 dark:text-gray-500">
-                            {notif.time}
-                          </Text>
+                          <Text className="font-semibold text-gray-900 dark:text-white">{notif.title}</Text>
+                          <Text className="text-xs text-gray-400 dark:text-gray-500">{notif.time}</Text>
                         </View>
-                        <Text className="text-sm mt-1 text-gray-600 dark:text-gray-300">
-                          {notif.message}
-                        </Text>
+                        <Text className="text-sm mt-1 text-gray-600 dark:text-gray-300">{notif.message}</Text>
                       </View>
-                      {!notif.read && (
-                        <View className="w-2 h-2 rounded-full bg-blue-500 ml-2 self-center" />
-                      )}
+                      {!notif.read && <View className="w-2 h-2 rounded-full bg-blue-500 ml-2 self-center" />}
                     </TouchableOpacity>
                   ))}
 
-                  {/* View All Button */}
-                  <TouchableOpacity
-                    className="p-4 bg-gray-50 dark:bg-gray-900 rounded-b-2xl"
-                    onPress={() => {
-                      console.log("View all notifications");
-                      setNotificationVisible(false);
-                    }}
-                  >
-                    <Text className="text-center text-indigo-600 dark:text-indigo-400 font-semibold">
-                      View All Notifications
-                    </Text>
+                  <TouchableOpacity className="p-4 bg-gray-50 dark:bg-gray-900 rounded-b-2xl" onPress={() => setNotificationVisible(false)}>
+                    <Text className="text-center text-indigo-600 dark:text-indigo-400 font-semibold">View All Notifications</Text>
                   </TouchableOpacity>
                 </ScrollView>
               </Animated.View>
@@ -470,7 +373,7 @@ const Header = ({
             style={{ 
               opacity: fadeAnim,
               flex: 1,
-              backgroundColor: isDarkMode ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
+              backgroundColor: 'rgba(0,0,0,0.5)',
             }}
           >
             <TouchableWithoutFeedback>
@@ -479,15 +382,14 @@ const Header = ({
                   transform: [{ translateX: slideAnim }],
                   width: DRAWER_WIDTH,
                   height: '100%',
-                  backgroundColor: isDarkMode ? '#1F2937' : 'white',
+                  backgroundColor: isDarkMode ? '#1F2937' : '#FFFFFF',
                   shadowColor: '#000',
                   shadowOffset: { width: 2, height: 0 },
-                  shadowOpacity: isDarkMode ? 0.5 : 0.25,
+                  shadowOpacity: 0.25,
                   shadowRadius: 5,
                   elevation: 5,
                 }}
               >
-                {/* Main container */}
                 <View className="flex-1">
                   {/* User Profile Section */}
                   <LinearGradient
@@ -498,90 +400,73 @@ const Header = ({
                   >
                     <View className="flex-row items-center">
                       {userAvatar ? (
-                        <Image
-                          source={{ uri: userAvatar }}
-                          className="w-14 h-14 rounded-full border-2 border-white"
-                        />
+                        <Image source={{ uri: userAvatar }} className="w-14 h-14 rounded-full border-2 border-white" />
                       ) : (
                         <View className="w-14 h-14 rounded-full bg-white/30 justify-center items-center border-2 border-white">
                           <Text className="text-2xl font-bold text-white">
-                            {userName.charAt(0).toUpperCase()}
+                            {(user?.name || userName).charAt(0).toUpperCase()}
                           </Text>
                         </View>
                       )}
                       <View className="ml-4 flex-1">
                         <Text className="text-lg font-bold text-white" numberOfLines={1}>
-                          {userName}
+                          {user?.name || userName}
                         </Text>
                         <Text className="text-sm text-white/80 mt-1" numberOfLines={1}>
-                          {userEmail}
+                          {user?.email || userEmail}
                         </Text>
                       </View>
                     </View>
                   </LinearGradient>
 
-                  {/* Navigation Items - Now using props */}
-                  {navigationItems.length > 0 ? (
+                  {/* Navigation Items - Filtered by permissions */}
+                  {sortedMenuItems.length > 0 && (
                     <ScrollView 
                       className="flex-1" 
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={{ paddingVertical: 8 }}
                     >
-                      {navigationItems.map((item) => {
-                        const isActive = 
-                          activeScreen === item.title || 
-                          activeScreen === item.screen ||
-                          activeScreen === item.parent ||
-                          (item.parent && activeScreen.includes(item.title)) ||
-                          (item.title === "Dashboard" && activeScreen === "Dashboard") ||
-                          (item.title === "Settings" && activeScreen === "Settings") ||
-                          (item.title === "Profile" && activeScreen === "Profile");
-
+                      {sortedMenuItems.map((item) => {
+                        const isActive = activeScreen === item.screen || activeScreen === item.name;
+                        
                         return (
                           <TouchableOpacity
                             key={item.id}
                             onPress={() => handleNavigation(item)}
                             className={`mx-3 my-1 px-4 py-3.5 rounded-xl ${
-                              isActive 
-                                ? isDarkMode ? 'bg-purple-900/30' : 'bg-purple-50'
-                                : ''
+                              isActive ? (isDarkMode ? 'bg-purple-900/30' : 'bg-purple-50') : ''
                             }`}
+                            activeOpacity={0.7}
                           >
                             <View className="flex-row items-center justify-between">
                               <View className="flex-row items-center flex-1">
                                 <View className={`w-8 h-8 rounded-lg items-center justify-center ${
                                   isActive 
-                                    ? isDarkMode ? 'bg-purple-800' : 'bg-purple-100'
-                                    : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                                    ? (isDarkMode ? 'bg-purple-800' : 'bg-purple-100')
+                                    : (isDarkMode ? 'bg-gray-700' : 'bg-gray-100')
                                 }`}>
                                   <Icon
-                                    name={isActive ? item.iconActive || item.icon : item.icon}
+                                    name={isActive ? (item.iconActive || item.icon) : item.icon}
                                     size={20}
                                     color={isActive ? "#667eea" : (isDarkMode ? "#9CA3AF" : "#666")}
                                   />
                                 </View>
-                                <Text
+                                <Text 
                                   className={`text-base ml-3 flex-1 ${
                                     isActive
-                                      ? isDarkMode ? 'text-purple-400' : 'text-purple-600'
-                                      : isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                                      ? (isDarkMode ? 'text-purple-400' : 'text-purple-600')
+                                      : (isDarkMode ? 'text-gray-300' : 'text-gray-600')
                                   }`}
                                   numberOfLines={1}
                                 >
-                                  {item.title}
+                                  {item.name}
                                 </Text>
                               </View>
                               {item.badge && (
-                                <View
-                                  className={`px-2 py-1 rounded-full ml-2 ${
-                                    item.badge === "Low Stock" || item.badge?.includes("Low")
-                                      ? "bg-orange-500"
-                                      : "bg-purple-600"
-                                  }`}
-                                >
-                                  <Text className="text-white text-[10px] font-bold">
-                                    {item.badge}
-                                  </Text>
+                                <View className={`px-2 py-1 rounded-full ml-2 ${
+                                  item.badge === "Low Stock" ? "bg-orange-500" : "bg-purple-600"
+                                }`}>
+                                  <Text className="text-white text-[10px] font-bold">{item.badge}</Text>
                                 </View>
                               )}
                             </View>
@@ -589,21 +474,14 @@ const Header = ({
                         );
                       })}
                     </ScrollView>
-                  ) : (
-                    // Fallback if no navigation items provided
-                    <View className="flex-1 items-center justify-center">
-                      <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
-                        No navigation items
-                      </Text>
-                    </View>
                   )}
 
-                  {/* Footer */}
+                  {/* Footer Section */}
                   <View className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} pt-4 pb-8 px-5`}>
                     {/* Dark Mode Toggle */}
                     <TouchableOpacity 
-                      className="flex-row items-center py-3 justify-between"
-                      onPress={handleThemeToggle}
+                      className="flex-row items-center py-3 justify-between" 
+                      onPress={handleThemeToggle} 
                       activeOpacity={0.7}
                     >
                       <View className="flex-row items-center">
@@ -618,8 +496,6 @@ const Header = ({
                           Dark Mode
                         </Text>
                       </View>
-                      
-                      {/* Fixed Toggle Switch */}
                       <View 
                         style={{
                           width: 48,
@@ -635,14 +511,7 @@ const Header = ({
                             height: 20,
                             borderRadius: 10,
                             backgroundColor: 'white',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 0, height: 1 },
-                            shadowOpacity: 0.2,
-                            shadowRadius: 1,
-                            elevation: 2,
-                            transform: [{
-                              translateX: isDarkMode ? 24 : 0,
-                            }],
+                            transform: [{ translateX: isDarkMode ? 24 : 0 }],
                           }}
                         />
                       </View>
@@ -661,7 +530,7 @@ const Header = ({
                       </Text>
                     </TouchableOpacity>
 
-                    {/* Logout */}
+                    {/* Logout Button */}
                     <TouchableOpacity
                       className="flex-row items-center py-3"
                       onPress={handleLogout}
@@ -670,7 +539,9 @@ const Header = ({
                       <View className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/20 items-center justify-center">
                         <Icon name="logout" size={20} color="#ff4444" />
                       </View>
-                      <Text className="text-base ml-3 text-red-500 dark:text-red-400">Logout</Text>
+                      <Text className="text-base ml-3 text-red-500 dark:text-red-400">
+                        Logout
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -684,21 +555,14 @@ const Header = ({
 
   return (
     <>
-      <SafeAreaView
-        className={`
-          border-b 
-          ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-white bg-white'} 
-          shadow-[0px_7px_20px_black] dark:shadow-none 
-          ${style}
-        `}
+      <SafeAreaView 
+        className={`border-b ${isDarkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-100 bg-white'} shadow-sm ${style}`} 
         edges={["top", "left", "right"]}
       >
         <View className="flex-row items-center justify-between px-4 py-3 min-h-[60px]">
           {renderLeftComponent()}
-          <Text
-            className={`flex-1 text-center mx-2 font-semibold text-lg ${
-              isDarkMode ? 'text-white' : 'text-gray-800'
-            } ${titleStyle}`}
+          <Text 
+            className={`flex-1 text-center mx-2 font-semibold text-lg ${isDarkMode ? 'text-white' : 'text-gray-800'} ${titleStyle}`} 
             numberOfLines={1}
           >
             {title}

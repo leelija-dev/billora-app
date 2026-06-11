@@ -25,9 +25,9 @@ import RecentOrdersTable from "../../components/dashboard/RecentOrdersTable";
 import RevenueChart from "../../components/dashboard/RevenueChart";
 import StatsCard from "../../components/dashboard/StatsCard";
 import TopProductsChart from "../../components/dashboard/TopProductsChart";
-import { getNavigationItemsWithBadges } from "../../constants/navigationItems";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore } from "../../store/themeStore";
+import { usePermissionStore, MENU_ITEMS } from "../../store/permissionStore";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -35,6 +35,7 @@ const DashboardScreen = () => {
   const { width } = useWindowDimensions();
   const { isDarkMode } = useThemeStore();
   const { user, company } = useAuthStore();
+  const { getFilteredMenuItems } = usePermissionStore();
   const navigation = useNavigation();
 
   const [timeRange, setTimeRange] = useState("7d");
@@ -63,6 +64,20 @@ const DashboardScreen = () => {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const exportDropdownRef = useRef(null);
+
+  // Get filtered menu items from permission store (like desktop)
+  const menuItems = useMemo(() => {
+    const filtered = getFilteredMenuItems();
+    // Convert to format expected by Header
+    return filtered.map(item => ({
+      id: item.id,
+      title: item.name,
+      screen: item.screen,
+      icon: item.icon,
+      iconActive: item.iconActive,
+      badge: item.badge || null,
+    }));
+  }, [getFilteredMenuItems]);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user?.id) {
@@ -153,13 +168,16 @@ const DashboardScreen = () => {
     Alert.alert("Search", "Search functionality will be implemented here");
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Logout",
         style: "destructive",
-        onPress: () => console.log("Logged out"),
+        onPress: async () => {
+          // The actual logout is handled by the Header component
+          console.log("Logged out");
+        },
       },
     ]);
   };
@@ -202,7 +220,7 @@ const DashboardScreen = () => {
           <div class="header">
             <h1>Dashboard Report</h1>
             <p>Generated on: ${currentDate}</p>
-            <p>Period: ${timeRange}</p>
+            <p>Period: ${timeRange === "7d" ? "Last 7 Days" : timeRange === "30d" ? "Last 30 Days" : timeRange === "90d" ? "Last 3 Months" : "Last 12 Months"}</p>
           </div>
           
           <div class="stats-grid">
@@ -296,21 +314,12 @@ const DashboardScreen = () => {
     }
   };
 
-  const navigationItems = useMemo(() => {
-    const badges = {
-      products: stats.products?.toString() || "0",
-      customers: stats.customers?.toString() || "0",
-      orders: stats.orders?.toString() || "0",
-    };
-    return getNavigationItemsWithBadges(badges);
-  }, [stats.products, stats.customers, stats.orders]);
-
   // Time range options
   const timeRangeOptions = [
-    { id: "7d", label: "Last 7 Days", days: 7 },
-    { id: "30d", label: "Last 30 Days", days: 30 },
-    { id: "90d", label: "Last 3 Months", days: 90 },
-    { id: "12m", label: "Last 12 Months", days: 365 },
+    { id: "7d", label: "Last 7 Days" },
+    { id: "30d", label: "Last 30 Days" },
+    { id: "90d", label: "Last 3 Months" },
+    { id: "12m", label: "Last 12 Months" },
   ];
 
   const getSelectedRangeLabel = () => {
@@ -320,29 +329,21 @@ const DashboardScreen = () => {
 
   if (loading && !initialLoadDone) {
     return (
-      <View
-        className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}
-      >
+      <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}>
         <ActivityIndicator size="large" color="#6366F1" />
-        <Text
-          className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
-        >
-          Loading dashboard...
-        </Text>
+        <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>Loading dashboard...</Text>
       </View>
     );
   }
 
   return (
-    <View
-      className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} pb-16`}
-    >
+    <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} pb-16`}>
       <Header
         title="Dashboard"
         userName={user?.name || "User"}
         userEmail={user?.email || "guest@example.com"}
         activeScreen="Dashboard"
-        navigationItems={navigationItems}
+        navigationItems={menuItems}
         notificationCount={notificationCount}
         onNotificationPress={handleNotificationPress}
         onSearchPress={handleSearchPress}
@@ -361,31 +362,14 @@ const DashboardScreen = () => {
               </TouchableOpacity>
 
               {showExportDropdown && (
-                <View
-                  className={`absolute right-0 top-12 rounded-xl overflow-hidden shadow-lg z-50 ${isDarkMode ? "bg-gray-800" : "bg-white"}`}
-                  style={{ minWidth: 150 }}
-                >
-                  <TouchableOpacity
-                    onPress={handlePDFExport}
-                    className="flex-row items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700"
-                  >
+                <View className={`absolute right-0 top-12 rounded-xl overflow-hidden shadow-lg z-50 ${isDarkMode ? "bg-gray-800" : "bg-white"}`} style={{ minWidth: 150 }}>
+                  <TouchableOpacity onPress={handlePDFExport} className="flex-row items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                     <Icon name="file-pdf-box" size={20} color="#ef4444" />
-                    <Text
-                      className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                    >
-                      PDF
-                    </Text>
+                    <Text className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}>PDF</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleExcelExport}
-                    className="flex-row items-center px-4 py-3"
-                  >
+                  <TouchableOpacity onPress={handleExcelExport} className="flex-row items-center px-4 py-3">
                     <Icon name="microsoft-excel" size={20} color="#10b981" />
-                    <Text
-                      className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                    >
-                      Excel
-                    </Text>
+                    <Text className={`ml-3 font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}>Excel</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -411,7 +395,6 @@ const DashboardScreen = () => {
           colors={["#6366F1", "#8B5CF6"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={{ borderRadius: 10 }}
           className="mx-4 mt-4 p-5 rounded-3xl"
         >
           <View className="flex-row justify-between items-center">
@@ -436,18 +419,10 @@ const DashboardScreen = () => {
         </LinearGradient>
 
         {/* Time Range Filter Section */}
-        <View
-          className={`mx-4 mt-6 p-4 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
-        >
+        <View className={`mx-4 mt-6 p-4 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}>
           <View className="flex-row items-center mb-3">
-            <Icon
-              name="calendar-range"
-              size={20}
-              color={isDarkMode ? "#9CA3AF" : "#6B7280"}
-            />
-            <Text
-              className={`text-sm font-medium ml-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
-            >
+            <Icon name="calendar-range" size={20} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
+            <Text className={`text-sm font-medium ml-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
               Filter by Time Period
             </Text>
           </View>
@@ -461,20 +436,12 @@ const DashboardScreen = () => {
                   className={`px-4 py-2 rounded-full ${
                     timeRange === option.id
                       ? "bg-indigo-500"
-                      : isDarkMode
-                        ? "bg-gray-700"
-                        : "bg-gray-100"
+                      : isDarkMode ? "bg-gray-700" : "bg-gray-100"
                   }`}
                 >
-                  <Text
-                    className={`text-sm font-medium ${
-                      timeRange === option.id
-                        ? "text-white"
-                        : isDarkMode
-                          ? "text-gray-300"
-                          : "text-gray-700"
-                    }`}
-                  >
+                  <Text className={`text-sm font-medium ${
+                    timeRange === option.id ? "text-white" : isDarkMode ? "text-gray-300" : "text-gray-700"
+                  }`}>
                     {option.label}
                   </Text>
                 </TouchableOpacity>
@@ -482,20 +449,12 @@ const DashboardScreen = () => {
             </View>
           </ScrollView>
 
-          <View
-            className={`mt-3 pt-3 border-t ${isDarkMode ? "border-gray-700" : "border-gray-100"}`}
-          >
+          <View className={`mt-3 pt-3 border-t ${isDarkMode ? "border-gray-700" : "border-gray-100"}`}>
             <View className="flex-row justify-between items-center">
-              <Text
-                className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-              >
-                Showing data for:{" "}
-                <Text className="font-semibold">{getSelectedRangeLabel()}</Text>
+              <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Showing data for: <Text className="font-semibold">{getSelectedRangeLabel()}</Text>
               </Text>
-              <TouchableOpacity
-                onPress={handleRefresh}
-                className="flex-row items-center"
-              >
+              <TouchableOpacity onPress={handleRefresh} className="flex-row items-center">
                 <Icon name="refresh" size={16} color="#6366F1" />
                 <Text className="text-indigo-500 text-xs ml-1">Refresh</Text>
               </TouchableOpacity>
@@ -547,17 +506,13 @@ const DashboardScreen = () => {
             <View className="flex-row items-center">
               <Icon name="alert-circle" size={24} color="#D97706" />
               <View className="flex-1 ml-3">
-                <Text className="font-semibold text-yellow-800 dark:text-yellow-400">
-                  Low Stock Alert!
-                </Text>
+                <Text className="font-semibold text-yellow-800 dark:text-yellow-400">Low Stock Alert!</Text>
                 <Text className="text-sm text-yellow-700 dark:text-yellow-500">
                   You have {stats.lowStock} products running low on stock.
                 </Text>
               </View>
               <TouchableOpacity onPress={() => handleNavigate("Products")}>
-                <Text className="text-yellow-700 dark:text-yellow-400 text-sm font-semibold">
-                  View →
-                </Text>
+                <Text className="text-yellow-700 dark:text-yellow-400 text-sm font-semibold">View →</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -570,16 +525,10 @@ const DashboardScreen = () => {
         <OrderStatusChart data={orderStatus} />
 
         {/* Top Products */}
-        <TopProductsChart
-          data={topProducts}
-          onViewAll={() => handleNavigate("Products")}
-        />
+        <TopProductsChart data={topProducts} onViewAll={() => handleNavigate("Products")} />
 
         {/* Recent Orders Table */}
-        <RecentOrdersTable
-          orders={recentOrders}
-          onViewAll={() => handleNavigate("Orders")}
-        />
+        <RecentOrdersTable orders={recentOrders} onViewAll={() => handleNavigate("Orders")} />
       </ScrollView>
     </View>
   );

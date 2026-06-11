@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { authAPI } from '../api/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePermissionStore } from './permissionStore';
 
 export const useAuthStore = create(
   persist(
@@ -13,48 +14,20 @@ export const useAuthStore = create(
       isLoading: false,
       hasHydrated: false,
       token: null,
-      permissions: [],
-      sidebarPermissions: [],
 
       setHasHydrated: (state) => set({ hasHydrated: state }),
 
       clearLocalAuthState: () => {
         console.log('🧹 Clearing local auth state');
+        // Clear permission store as well
+        usePermissionStore.getState().clearPermissions();
         set({
           user: null,
           company: null,
           isAuthenticated: false,
           isLoading: false,
           token: null,
-          permissions: [],
-          sidebarPermissions: [],
         });
-      },
-
-      fetchUserPermissions: async (userId, planId) => {
-        console.log('📋 Fetching user permissions for user:', userId, 'plan:', planId);
-        try {
-          const response = await authAPI.getUserPermissions(userId, planId);
-          const data = response.data;
-          
-          if (data.status) {
-            const permissions = data.permissionNames || [];
-            const sidebarPermissions = data.customer_sidebar_permission || [];
-            console.log('✅ Permissions fetched:', { permissions, sidebarPermissions });
-            
-            // Store permissions in state
-            set({ 
-              permissions: permissions,
-              sidebarPermissions: sidebarPermissions 
-            });
-            
-            return { permissions, sidebarPermissions };
-          }
-          return { permissions: [], sidebarPermissions: [] };
-        } catch (error) {
-          console.error('Failed to fetch permissions:', error);
-          return { permissions: [], sidebarPermissions: [] };
-        }
       },
 
       login: async (email, password) => {
@@ -63,8 +36,6 @@ export const useAuthStore = create(
           console.log('🔐 Login attempt for:', email);
           const response = await authAPI.login(email, password);
           
-          console.log('📦 Login response:', response.data);
-          
           if (!response.data || !response.data.status) {
             throw new Error(response.data?.message || 'Login failed');
           }
@@ -72,32 +43,29 @@ export const useAuthStore = create(
           const data = response.data;
           const user = data.user;
           
-          // Check if user has active plan
           if (user.is_active !== 1) {
             throw new Error('Your account is inactive. Please contact support.');
           }
 
           // Store token
-          const token = data.token;
-          if (token) {
-            await AsyncStorage.setItem('auth_token', token);
+          if (data.token) {
+            await AsyncStorage.setItem('auth_token', data.token);
           }
 
-          // Set auth state
           set({
             user: user,
             isAuthenticated: true,
             isLoading: false,
-            token: token || null,
+            token: data.token || null,
           });
 
-          console.log('✅ Login successful for:', user.email);
-          
           // Fetch permissions after successful login
           if (user.plan_id) {
-            await get().fetchUserPermissions(user.id, user.plan_id);
+            const permissionStore = usePermissionStore.getState();
+            await permissionStore.fetchUserPermissions(user.id, user.plan_id);
           }
-          
+
+          console.log('✅ Login successful for:', user.email);
           return { success: true, user };
         } catch (error) {
           console.error('❌ Login error:', error);
@@ -106,8 +74,6 @@ export const useAuthStore = create(
             isAuthenticated: false,
             isLoading: false,
             token: null,
-            permissions: [],
-            sidebarPermissions: [],
           });
           return { 
             success: false, 
@@ -138,31 +104,11 @@ export const useAuthStore = create(
         set({ user: { ...get().user, ...userData } });
       },
 
+      // Check if user has active plan
       hasActivePlan: () => {
         const { user, isAuthenticated } = get();
         return isAuthenticated && user && user.plan_id && user.is_active === 1;
       },
-      
-      // Permission helper methods
-      hasPermission: (permissionName) => {
-        const { permissions } = get();
-        return permissions.includes(permissionName);
-      },
-      
-      canAccessSidebar: (menuName) => {
-  const { sidebarPermissions } = get();
-  console.log('🔍 Checking access for:', menuName, 'Permissions:', sidebarPermissions);
-  
-  // If no permissions loaded yet, allow access
-  if (!sidebarPermissions || sidebarPermissions.length === 0) {
-    console.log('⚠️ No permissions loaded, allowing access to:', menuName);
-    return true;
-  }
-  
-  const hasAccess = sidebarPermissions.includes(menuName);
-  console.log(`📋 ${menuName}: ${hasAccess ? '✅ Access granted' : '❌ Access denied'}`);
-  return hasAccess;
-},
     }),
     {
       name: 'auth-storage',
@@ -171,8 +117,6 @@ export const useAuthStore = create(
         user: state.user,
         company: state.company,
         token: state.token,
-        permissions: state.permissions,
-        sidebarPermissions: state.sidebarPermissions,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

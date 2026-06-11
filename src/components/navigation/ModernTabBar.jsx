@@ -55,24 +55,21 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
     <View className="absolute bottom-0 left-0 right-0">
       <View className="mx-4 mb-2 rounded-3xl overflow-hidden">
         <BlurView
-          intensity={50}
+          intensity={80}
           tint={isDarkMode ? "dark" : "light"}
           className="overflow-hidden"
           style={{
             backgroundColor: isDarkMode
-              ? "rgba(31, 41, 55, 0.8)"
-              : "rgba(255, 255, 255, 0.8)",
+              ? "rgba(17, 24, 39, 0.95)"
+              : "rgba(255, 255, 255, 0.95)",
             borderRadius: 30,
           }}
         >
           <View
             className="flex-row items-center"
             style={{
-              backgroundColor: isDarkMode
-                ? "rgba(31, 41, 55, 0.7)"
-                : "rgba(255, 255, 255, 0.7)",
               position: "relative",
-              height: 50,
+              height: 55,
             }}
           >
             {/* Animated Sliding Background */}
@@ -81,10 +78,10 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
                 position: "absolute",
                 left: animation,
                 width: sliderWidth,
-                height: 50,
+                height: 45,
                 backgroundColor: isDarkMode ? "#4f46e5" : "#6366F1",
-                borderRadius: 30,
-                marginVertical: 6,
+                borderRadius: 25,
+                marginVertical: 5,
               }}
             />
 
@@ -108,7 +105,7 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
                     name={isFocused ? tab.iconActive : tab.icon}
                     size={22}
                     color={
-                      isFocused ? "white" : isDarkMode ? "#9CA3AF" : "#6B7280"
+                      isFocused ? "white" : (isDarkMode ? "#9CA3AF" : "#6B7280")
                     }
                   />
                   {isFocused && (
@@ -126,9 +123,10 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
         </BlurView>
       </View>
 
+      {/* Extra bottom padding for safe area */}
       <View
         style={{
-          height: 20,
+          height: 10,
           backgroundColor: isDarkMode ? "#111827" : "#F8FAFC",
           width: "100%",
         }}

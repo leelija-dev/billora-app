@@ -26,6 +26,43 @@ const Sidebar = (props) => {
     ]);
   };
 
+  // Custom drawer item renderer to fix dark mode colors
+  const renderDrawerItem = ({ item, index }) => {
+    const isFocused = props.state.index === index;
+    
+    return (
+      <TouchableOpacity
+        key={item.key}
+        onPress={() => {
+          props.navigation.navigate(item.name);
+          props.navigation.closeDrawer();
+        }}
+        className={`flex-row items-center px-4 py-3 mx-2 my-1 rounded-xl ${
+          isFocused 
+            ? "bg-indigo-100 dark:bg-indigo-900/30" 
+            : "active:bg-gray-100 dark:active:bg-gray-800"
+        }`}
+      >
+        <Icon 
+          name={item.options?.drawerIcon?.({ color: isFocused ? "#6366F1" : (isDarkMode ? "#9CA3AF" : "#6B7280"), size: 22 }).props.name} 
+          size={22} 
+          color={isFocused ? "#6366F1" : (isDarkMode ? "#9CA3AF" : "#6B7280")} 
+        />
+        <Text 
+          className={`ml-3 text-base font-medium ${
+            isFocused 
+              ? "text-indigo-600 dark:text-indigo-400" 
+              : isDarkMode 
+                ? "text-gray-200" 
+                : "text-gray-700"
+          }`}
+        >
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   // Check if state and routes exist
   if (!props.state || !props.state.routes) {
     return (
@@ -57,16 +94,49 @@ const Sidebar = (props) => {
             {user?.name || "User"}
           </Text>
           <Text
-            className={`text-sm mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+            className={`text-sm mt-1 ${isDarkMode ? "text-gray-300" : "text-gray-500"}`}
           >
             {user?.email || "user@example.com"}
           </Text>
         </View>
       </View>
 
-      {/* Drawer Items */}
+      {/* Custom Drawer Items for better dark mode support */}
       <DrawerContentScrollView {...props}>
-        <DrawerItemList {...props} />
+        {props.state.routes.map((route, index) => {
+          const isFocused = props.state.index === index;
+          return (
+            <TouchableOpacity
+              key={route.key}
+              onPress={() => {
+                props.navigation.navigate(route.name);
+                props.navigation.closeDrawer();
+              }}
+              className={`flex-row items-center px-4 py-3 mx-2 my-1 rounded-xl ${
+                isFocused 
+                  ? "bg-indigo-100 dark:bg-indigo-900/30" 
+                  : ""
+              }`}
+            >
+              <Icon 
+                name={ALL_ICONS[route.name] || "circle"} 
+                size={22} 
+                color={isFocused ? "#6366F1" : (isDarkMode ? "#9CA3AF" : "#6B7280")} 
+              />
+              <Text 
+                className={`ml-3 text-base font-medium ${
+                  isFocused 
+                    ? "text-indigo-600 dark:text-indigo-400" 
+                    : isDarkMode 
+                      ? "text-gray-200" 
+                      : "text-gray-700"
+                }`}
+              >
+                {route.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </DrawerContentScrollView>
 
       {/* Footer */}
@@ -82,13 +152,28 @@ const Sidebar = (props) => {
         </TouchableOpacity>
 
         <Text
-          className={`text-center text-xs mt-4 ${isDarkMode ? "text-gray-600" : "text-gray-400"}`}
+          className={`text-center text-xs mt-4 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
         >
           Version 1.0.0
         </Text>
       </View>
     </View>
   );
+};
+
+// Icon mapping for drawer items
+const ALL_ICONS = {
+  'Dashboard': 'view-dashboard',
+  'Products': 'package-variant',
+  'Stocks': 'warehouse',
+  'Bills': 'file-document',
+  'Reports': 'chart-bar',
+  'Customers': 'account-group',
+  'Categories': 'shape',
+  'Brands': 'trademark',
+  'Units': 'ruler',
+  'Stores': 'store',
+  'Settings': 'cog',
 };
 
 export default Sidebar;
