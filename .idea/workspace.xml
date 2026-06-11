@@ -6,18 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="f4f602c7-85e4-45b1-adc0-a611405c7b28" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/brands.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/brands.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/dashboard.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/dashboard.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/brands/BrandForm.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/brands/BrandForm.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/brands/BrandList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/brands/BrandList.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/dashboard/RevenueChart.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/dashboard/RevenueChart.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/dashboard/StatsCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/dashboard/StatsCard.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/reports/ReportPrintPreview.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/reports/ReportPrintPreview.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/categories.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/categories.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/categories/CategoryCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/categories/CategoryCard.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/categories/CategoryForm.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/categories/CategoryForm.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/categories/CategoryList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/categories/CategoryList.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/brands/AddBrandScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/brands/AddBrandScreen.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/brands/BrandsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/brands/BrandsScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/dashboard/DashboardScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/dashboard/DashboardScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/reports/ReportDetailScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/reports/ReportDetailScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/reports/ReportsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/reports/ReportsScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/categories/AddCategoryScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/categories/AddCategoryScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/categories/CategoriesScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/categories/CategoriesScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/categoryStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/categoryStore.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
