@@ -1,127 +1,70 @@
-import apiClient from './client';
-
+// api/auth.js
+import apiClient from "./client";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const authAPI = {
-  // Register new user
-  register: async (userData) => {
-    try {
-      console.log('Register API call:', {
-        endpoint: '/users/register',
-        data: {
-          name: userData.name,
-          email: userData.email,
-          phone: userData.phone,
-          password: userData.password,
-          city: userData.city,
-          state: userData.state,
-          country: userData.country,
-          pincode: userData.pincode,
-          company_name: userData.companyName || null,
-          gst_number: userData.gstNumber || null,
-          address: userData.address || null,
-          created_by: userData.created_by || null,
-        }
-      });
-      return await apiClient.post('/users/register', {
-        name: userData.name,
-        email: userData.email,
-        phone: userData.phone,
-        password: userData.password,
-        company_name: userData.companyName || null,
-        gst_number: userData.gstNumber || null,
-        address: userData.address || null,
-        city: userData.city,
-        state: userData.state,
-        country: userData.country,
-        pincode: userData.pincode,
-        created_by: userData.created_by || null,
-      });
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
   // Login user
   login: async (email, password) => {
     try {
-      return await apiClient.post('/users/login', {
+      console.log('🔐 Login attempt for:', email);
+      const response = await apiClient.post("/users/login", {
         email,
         password,
       });
+      console.log('✅ Login response:', response.data);
+      
+      // Store token if present
+      if (response.data?.token) {
+        await AsyncStorage.setItem('auth_token', response.data.token);
+      }
+      
+      return response;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('Login API error:', error);
+      throw error;
     }
   },
 
   // Logout user
   logout: async (userId) => {
     try {
-      return await apiClient.post('/users/logout', {
-        user_id: userId,
-      });
+      const response = await apiClient.post("/users/logout", { user_id: userId });
+      await AsyncStorage.removeItem('auth_token');
+      return response;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('Logout error:', error);
+      throw error;
     }
   },
 
   // Get current user profile
   getProfile: async (userId) => {
     try {
-      return await apiClient.get(`/users/edit/${userId}`);
+      const response = await apiClient.get(`/users/edit/${userId}`);
+      return response;
     } catch (error) {
-      throw error.response?.data || error.message;
+      console.error('Get profile error:', error);
+      throw error;
     }
   },
 
-  // Update user profile
-  updateProfile: async (userId, userData) => {
+  // Get user permissions
+  getUserPermissions: async (userId, planId) => {
     try {
-      return await apiClient.put(`/users/update/${userId}`, userData);
+      console.log('📋 Fetching permissions for plan:', planId);
+      const response = await apiClient.get(`/plans/${planId}`);
+      console.log('✅ Permissions response:', response.data);
+      return response;
     } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  // Update password
-  updatePassword: async (userId, currentPassword, newPassword) => {
-    try {
-      return await apiClient.put(`/users/update-password/${userId}`, {
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  // Legacy methods for backward compatibility
-  refreshToken: async () => {
-    try {
-      const response = await apiClient.post('/auth/refresh');
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  forgotPassword: async (email) => {
-    try {
-      const response = await apiClient.post('/auth/forgot-password', { email });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  resetPassword: async (token, newPassword) => {
-    try {
-      const response = await apiClient.post('/auth/reset-password', {
-        token,
-        password: newPassword,
-      });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
+      console.error("Failed to fetch permissions:", error);
+      // Return default permissions to prevent app from breaking
+      return {
+        data: {
+          status: true,
+          permissionNames: [],
+          customer_sidebar_permission: ['dashboard', 'products', 'stocks', 'bills', 'reports', 'brands', 'categories'],
+        },
+      };
     }
   },
 };

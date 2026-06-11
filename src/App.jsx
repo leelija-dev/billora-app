@@ -1,20 +1,38 @@
+// App.jsx
+import { createDrawerNavigator } from "@react-navigation/drawer";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Text, View, Platform } from "react-native";
+import { Animated, Easing, Image, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import Sidebar from "./components/navigation/SideBar.jsx";
 import { ThemeProvider, useTheme } from "./components/ThemeProvider";
-import { useAuthStore } from "./store/authStore";
-import LoginScreen from "./screens/auth/LoginScreen";
-import RegisterScreen from "./screens/auth/RegisterScreen";
-import ForgotPasswordScreen from "./screens/auth/ForgotPasswordScreen";
-import MainNavigator from "./components/navigation/MainNavigator";
 import "./global.css";
+import { useAuthStore } from "./store/authStore";
 
+// Import screens
+import LoginScreen from "./screens/auth/LoginScreen";
+import DashboardScreen from "./screens/dashboard/DashboardScreen";
+
+// Import Stack Navigators
+import BillsStackNavigator from "./components/navigation/stacks/BillsStack";
+import BrandsStackNavigator from "./components/navigation/stacks/BrandsStack";
+import CategoriesStackNavigator from "./components/navigation/stacks/CategoriesStack";
+import CustomersStackNavigator from "./components/navigation/stacks/CustomersStack";
+import ProductsStackNavigator from "./components/navigation/stacks/ProductsStack";
+import ReportsStackNavigator from "./components/navigation/stacks/ReportsStack";
+import SettingsStackNavigator from "./components/navigation/stacks/SettingsStack";
+import StocksStackNavigator from "./components/navigation/stacks/StocksStack";
+import StoresStackNavigator from "./components/navigation/stacks/StoresStack";
+import UnitsStackNavigator from "./components/navigation/stacks/UnitsStack";
+
+// Create Stack and Drawer instances
 const Stack = createNativeStackNavigator();
+const Drawer = createDrawerNavigator();
 
+// Custom Splash Screen
 const SplashScreen = ({ progress }) => {
   const spinValue = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -50,103 +68,111 @@ const SplashScreen = ({ progress }) => {
   });
 
   return (
-    <LinearGradient
-      colors={["#667eea", "#764ba2", "#6b8cff"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{ flex: 1 }}
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 24,
+        backgroundColor: "#667eea",
+      }}
     >
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
-        <Animated.View
+      <Animated.View
+        style={{
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+          alignItems: "center",
+        }}
+      >
+        <View
           style={{
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-            alignItems: "center",
-          }}
-        >
-          <View style={{
             width: 128,
             height: 128,
             borderRadius: 24,
-            backgroundColor: 'rgba(255,255,255,0.2)',
+            backgroundColor: "rgba(255,255,255,0.2)",
             marginBottom: 32,
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#000',
+            justifyContent: "center",
+            alignItems: "center",
+            shadowColor: "#000",
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.3,
             shadowRadius: 8,
             elevation: 8,
-          }}>
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Image
-                source={"./assets/icon.png"}
-                style={{ width: 80, height: 80 }}
-                resizeMode="contain"
-              />
-            </Animated.View>
-          </View>
+          }}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Image
+              source={"./assets/icon.png"}
+              style={{ width: 80, height: 80 }}
+              resizeMode="contain"
+            />
+          </Animated.View>
+        </View>
 
-          <Text style={{
+        <Text
+          style={{
             fontSize: 36,
-            fontWeight: 'bold',
-            color: 'white',
+            fontWeight: "bold",
+            color: "white",
             marginBottom: 8,
             letterSpacing: 1,
-          }}>
-            Your App Name
-          </Text>
+          }}
+        >
+          The Fast Bill
+        </Text>
 
-          <Text style={{
+        <Text
+          style={{
             fontSize: 18,
-            color: 'rgba(255,255,255,0.8)',
+            color: "rgba(255,255,255,0.8)",
             marginBottom: 48,
-            textAlign: 'center',
-          }}>
-            Manage your business with ease
-          </Text>
+            textAlign: "center",
+          }}
+        >
+          Manage your business with ease
+        </Text>
 
-          <View style={{
+        <View
+          style={{
             width: 256,
             height: 8,
-            backgroundColor: 'rgba(255,255,255,0.2)',
+            backgroundColor: "rgba(255,255,255,0.2)",
             borderRadius: 4,
-            overflow: 'hidden',
-          }}>
-            <Animated.View
-              style={{
-                width: progress.interpolate({
-                  inputRange: [0, 100],
-                  outputRange: ["0%", "100%"],
-                }),
-                height: '100%',
-                backgroundColor: 'white',
-                borderRadius: 4,
-              }}
-            />
-          </View>
+            overflow: "hidden",
+          }}
+        >
+          <Animated.View
+            style={{
+              width: progress.interpolate({
+                inputRange: [0, 100],
+                outputRange: ["0%", "100%"],
+              }),
+              height: "100%",
+              backgroundColor: "white",
+              borderRadius: 4,
+            }}
+          />
+        </View>
 
-          <Text style={{
-            color: 'rgba(255,255,255,0.6)',
-            marginTop: 16,
-          }}>
-            Setting things up...
-          </Text>
-        </Animated.View>
-      </View>
+        <Text style={{ color: "rgba(255,255,255,0.6)", marginTop: 16 }}>
+          Setting things up...
+        </Text>
+      </Animated.View>
 
-      <Text style={{
-        position: 'absolute',
-        bottom: 32,
-        left: 0,
-        right: 0,
-        textAlign: 'center',
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 14,
-      }}>
+      <Text
+        style={{
+          position: "absolute",
+          bottom: 32,
+          left: 0,
+          right: 0,
+          textAlign: "center",
+          color: "rgba(255,255,255,0.4)",
+          fontSize: 14,
+        }}
+      >
         Version 1.0.0
       </Text>
-    </LinearGradient>
+    </View>
   );
 };
 
@@ -170,100 +196,165 @@ const AppLoadingScreen = () => {
   );
 };
 
-const ThemedStatusBar = () => {
-  const theme = useTheme();
-  const barStyle = theme.isDark ? "light" : "dark";
+// All screens definition (without permission filtering)
+const ALL_SCREENS = [
+  {
+    name: "Dashboard",
+    component: DashboardScreen,
+    icon: "view-dashboard",
+    permission: "dashboard",
+  },
+  {
+    name: "Products",
+    component: ProductsStackNavigator,
+    icon: "package-variant",
+    permission: "products",
+  },
+  {
+    name: "Stocks",
+    component: StocksStackNavigator,
+    icon: "warehouse",
+    permission: "inventory",
+  },
+  {
+    name: "Bills",
+    component: BillsStackNavigator,
+    icon: "file-document",
+    permission: "orders",
+  },
+  {
+    name: "Reports",
+    component: ReportsStackNavigator,
+    icon: "chart-bar",
+    permission: "reports",
+  },
+  {
+    name: "Customers",
+    component: CustomersStackNavigator,
+    icon: "account-group",
+    permission: "customers",
+  },
+  {
+    name: "Categories",
+    component: CategoriesStackNavigator,
+    icon: "shape",
+    permission: "categories",
+  },
+  {
+    name: "Brands",
+    component: BrandsStackNavigator,
+    icon: "trademark",
+    permission: "brands",
+  },
+  {
+    name: "Units",
+    component: UnitsStackNavigator,
+    icon: "ruler",
+    permission: "units",
+  },
+  {
+    name: "Stores",
+    component: StoresStackNavigator,
+    icon: "store",
+    permission: "stores",
+  },
+  {
+    name: "Settings",
+    component: SettingsStackNavigator,
+    icon: "cog",
+    permission: "settings",
+  },
+];
+
+// Main Drawer Navigator
+const DrawerNavigator = () => {
+  const { canAccessSidebar, sidebarPermissions, permissions } = useAuthStore();
+
+  console.log("🔍 Sidebar Permissions:", sidebarPermissions);
+  console.log("🔍 All Permissions:", permissions);
+
+  // Filter screens based on permissions
+  let visibleScreens = [];
+
+  // If permissions are loaded, filter based on them
+  if (sidebarPermissions && sidebarPermissions.length > 0) {
+    visibleScreens = ALL_SCREENS.filter((screen) => {
+      return canAccessSidebar(screen.permission);
+    });
+  }
+
+  // Fallback: If no permissions or empty, show all screens
+  if (visibleScreens.length === 0) {
+    console.log("⚠️ No permissions found, showing all screens");
+    visibleScreens = ALL_SCREENS;
+  }
+
+  console.log("📱 Visible screens count:", visibleScreens.length);
 
   return (
-    <StatusBar
-      style={barStyle}
-      backgroundColor={theme.colors.background}
-      translucent={false}
-    />
+    <Drawer.Navigator
+      drawerContent={(props) => <Sidebar {...props} />}
+      screenOptions={{
+        headerShown: true,
+        drawerType: "front",
+        drawerStyle: { width: 280 },
+        headerStyle: { backgroundColor: "#6366F1" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+      }}
+    >
+      {visibleScreens.map((screen) => (
+        <Drawer.Screen
+          key={screen.name}
+          name={screen.name}
+          component={screen.component}
+          options={{
+            title: screen.name,
+            drawerIcon: ({ color, size }) => (
+              <Icon name={screen.icon} size={size} color={color} />
+            ),
+          }}
+        />
+      ))}
+    </Drawer.Navigator>
   );
 };
 
-const AuthStack = () => {
-  const theme = useTheme();
-  
+// Auth Stack Navigator
+const AuthStackNavigator = () => {
+  const { colors } = useTheme();
+
   return (
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.background },
+        contentStyle: { backgroundColor: colors.background },
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </Stack.Navigator>
   );
 };
 
+// Main App Content
 const AppContent = () => {
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-  const [appReady, setAppReady] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const theme = useTheme();
+  const { isAuthenticated, hasHydrated, isLoading } = useAuthStore();
+  const { colors } = useTheme();
 
-  useEffect(() => {
-    initializeApp();
-  }, []);
-
-  useEffect(() => {
-    if (appReady && !authLoading) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [appReady, authLoading]);
-
-  const initializeApp = async () => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setAppReady(true);
-    } catch (error) {
-      console.error("App initialization error:", error);
-    }
-  };
-
-  if (!appReady || authLoading) {
+  // Show loading screen while checking authentication
+  if (!hasHydrated || isLoading) {
     return <AppLoadingScreen />;
   }
 
   return (
-    <NavigationContainer
-      theme={{
-        colors: {
-          background: theme?.colors?.background || (theme?.isDark ? '#111827' : '#F8FAFC')
-        },
-        fonts: {
-          regular: {
-            fontFamily: Platform.select({
-              ios: 'Arial',
-              android: 'Roboto',
-              default: 'Arial'
-            })
-          }
-        }
-      }}
-    >
-      <ThemedStatusBar />
-      <Animated.View 
-        style={{ 
-          flex: 1, 
-          opacity: fadeAnim,
-          backgroundColor: theme?.colors?.background || (theme?.isDark ? '#111827' : '#F8FAFC')
-        }}
-      >
-        {isAuthenticated ? <MainNavigator /> : <AuthStack />}
-      </Animated.View>
+    <NavigationContainer>
+      <StatusBar style="auto" />
+      {isAuthenticated ? <DrawerNavigator /> : <AuthStackNavigator />}
     </NavigationContainer>
   );
 };
 
+// Main App Component
 export default function App() {
   return (
     <ThemeProvider>

@@ -1,3 +1,4 @@
+// components/ThemeProvider.js
 import React, { createContext, useContext, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { useThemeStore } from '../store/themeStore';
@@ -7,13 +8,56 @@ const ThemeContext = createContext();
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+    // Return default theme instead of throwing error
+    console.warn('useTheme used outside of ThemeProvider, using default theme');
+    return {
+      isDark: false,
+      colors: {
+        background: '#FFFFFF',
+        surface: '#F9FAFB',
+        card: '#FFFFFF',
+        primary: '#667eea',
+        secondary: '#764ba2',
+        text: '#1F2937',
+        textSecondary: '#4B5563',
+        textTertiary: '#9CA3AF',
+        border: '#E5E7EB',
+        borderLight: '#F3F4F6',
+        error: '#EF4444',
+        success: '#10B981',
+        warning: '#F59E0B',
+        info: '#3B82F6',
+      },
+      spacing: {
+        xs: 4,
+        sm: 8,
+        md: 16,
+        lg: 24,
+        xl: 32,
+        xxl: 48,
+      },
+      borderRadius: {
+        sm: 4,
+        md: 8,
+        lg: 12,
+        xl: 16,
+        full: 9999,
+      },
+      typography: {
+        h1: { fontSize: 32, fontWeight: '700', lineHeight: 40 },
+        h2: { fontSize: 24, fontWeight: '600', lineHeight: 32 },
+        h3: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
+        body1: { fontSize: 16, fontWeight: '400', lineHeight: 24 },
+        body2: { fontSize: 14, fontWeight: '400', lineHeight: 20 },
+        caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
+      },
+    };
   }
   return context;
 };
 
 export const ThemeProvider = ({ children }) => {
-  const { isDarkMode, systemTheme, setDarkMode } = useThemeStore();
+  const { isDarkMode, systemTheme, setDarkMode, setSystemTheme } = useThemeStore();
   const systemColorScheme = useColorScheme();
 
   useEffect(() => {
@@ -56,36 +100,22 @@ export const ThemeProvider = ({ children }) => {
       full: 9999,
     },
     typography: {
-      h1: {
-        fontSize: 32,
-        fontWeight: '700',
-        lineHeight: 40,
-      },
-      h2: {
-        fontSize: 24,
-        fontWeight: '600',
-        lineHeight: 32,
-      },
-      h3: {
-        fontSize: 20,
-        fontWeight: '600',
-        lineHeight: 28,
-      },
-      body1: {
-        fontSize: 16,
-        fontWeight: '400',
-        lineHeight: 24,
-      },
-      body2: {
-        fontSize: 14,
-        fontWeight: '400',
-        lineHeight: 20,
-      },
-      caption: {
-        fontSize: 12,
-        fontWeight: '400',
-        lineHeight: 16,
-      },
+      h1: { fontSize: 32, fontWeight: '700', lineHeight: 40 },
+      h2: { fontSize: 24, fontWeight: '600', lineHeight: 32 },
+      h3: { fontSize: 20, fontWeight: '600', lineHeight: 28 },
+      body1: { fontSize: 16, fontWeight: '400', lineHeight: 24 },
+      body2: { fontSize: 14, fontWeight: '400', lineHeight: 20 },
+      caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
+    },
+    toggleTheme: () => {
+      const { toggleDarkMode } = useThemeStore.getState();
+      toggleDarkMode();
+    },
+    setSystemTheme: (enabled) => {
+      setSystemTheme(enabled);
+      if (enabled) {
+        setDarkMode(systemColorScheme === 'dark');
+      }
     },
   };
 

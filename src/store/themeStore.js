@@ -1,3 +1,4 @@
+// store/themeStore.js
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,7 +7,7 @@ export const useThemeStore = create(
   persist(
     (set, get) => ({
       isDarkMode: false,
-      systemTheme: false,
+      systemTheme: true, // Default to system theme
       
       toggleDarkMode: () => set((state) => ({ 
         isDarkMode: !state.isDarkMode,
@@ -22,7 +23,7 @@ export const useThemeStore = create(
       
       resetTheme: () => set({ 
         isDarkMode: false, 
-        systemTheme: false 
+        systemTheme: true 
       }),
     }),
     {

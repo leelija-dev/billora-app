@@ -6,15 +6,19 @@
   <component name="ChangeListManager">
     <list default="true" id="f4f602c7-85e4-45b1-adc0-a611405c7b28" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/categories.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/categories.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/categories/CategoryCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/categories/CategoryCard.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/categories/CategoryForm.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/categories/CategoryForm.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/categories/CategoryList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/categories/CategoryList.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/brands/AddBrandScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/brands/AddBrandScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/brands/BrandsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/brands/BrandsScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/categories/AddCategoryScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/categories/AddCategoryScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/categories/CategoriesScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/categories/CategoriesScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/categoryStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/categoryStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/App.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/auth.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/auth.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/client.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/client.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/ThemeProvider.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/ThemeProvider.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/auth/LoginForm.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/auth/LoginForm.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/auth/LoginScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/auth/LoginScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/profile/ProfileScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/profile/ProfileScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/settings/SettingsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/settings/SettingsScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/authStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/authStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/themeStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/themeStore.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
