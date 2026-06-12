@@ -3,7 +3,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useThemeStore } from "../../../store/themeStore";
 import StackHeader from "../StackHeader";
 import BrandsScreen from "../../../screens/brands/BrandsScreen";
-import AddBrandScreen from "../../../screens/brands/AddBrandScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -22,13 +21,6 @@ const BrandsStackNavigator = () => {
         component={BrandsScreen} 
         options={({ navigation }) => ({
           header: () => <StackHeader title="Brands" navigation={navigation} showBack={false} />,
-        })}
-      />
-      <Stack.Screen 
-        name="AddBrand" 
-        component={AddBrandScreen} 
-        options={({ navigation }) => ({
-          header: () => <StackHeader title="Add Brand" navigation={navigation} />,
         })}
       />
     </Stack.Navigator>

@@ -1,13 +1,18 @@
-import { apiClient } from './client';
+// api/units.js
+import apiClient from './client';
 
 export const unitsAPI = {
-  // Get all units
-  getAll: async (params = {}) => {
+  // Get all units with pagination
+  getAll: async (page = 1, perPage = 15, filters = {}) => {
     try {
+      const params = { page, per_page: perPage };
+      if (filters.search) params.search = filters.search;
+      console.log('📦 Units API getAll called with params:', params);
       const response = await apiClient.get('/units', { params });
-      console.log('API Response:', response.data);
-      return response.data;
+      console.log('📦 Units API getAll response:', response.data);
+      return response;
     } catch (error) {
+      console.error('❌ Units API getAll error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -15,82 +20,51 @@ export const unitsAPI = {
   // Get single unit
   getById: async (id) => {
     try {
-      const api = apiClient;
-      const response = await api.get(`/units/${id}`);
-      return response.data;
+      const response = await apiClient.get(`/units/${id}`);
+      return response;
     } catch (error) {
       throw error.response?.data || error.message;
     }
   },
 
-  // Create new unit
+  // Create unit
   create: async (unitData) => {
     try {
-      const api = apiClient;
-      
-      // Map frontend field names to API expected field names
-      const payload = {
-        user_id: unitData.userId || unitData.user_id,
-        code: unitData.code,
-        name: unitData.name,
-        created_by: unitData.createdBy || unitData.userId || unitData.user_id,
-      };
-      
-      console.log('Create Unit API payload:', payload);
-      const response = await api.post('/units/store', payload);
-      return response.data;
+      console.log('📝 Units API create called with:', unitData);
+      const response = await apiClient.post('/units/store', unitData);
+      console.log('✅ Units API create response:', response.data);
+      return response;
     } catch (error) {
-      console.error('Create Unit API error:', error.response?.data || error.message);
-      throw error;
+      console.error('❌ Units API create error:', error);
+      throw error.response?.data || error.message;
     }
   },
 
   // Update unit
   update: async (id, unitData) => {
     try {
-      const api = apiClient;
-      
-      // Map frontend field names to API expected field names
-      const payload = {
-        code: unitData.code,
-        name: unitData.name,
-      };
-      
-      // Add user_id if provided (required for update)
-      if (unitData.user_id) {
-        payload.user_id = unitData.user_id;
-      }
-      
-      console.log('Update Unit API payload:', payload);
-      const response = await api.put(`/units/${id}`, payload);
-      return response.data;
+      console.log('✏️ Units API update called with:', id, unitData);
+      const response = await apiClient.put(`/units/${id}`, unitData);
+      console.log('✅ Units API update response:', response.data);
+      return response;
     } catch (error) {
-      console.error('Update Unit API error:', error.response?.data || error.message);
-      throw error;
+      console.error('❌ Units API update error:', error);
+      throw error.response?.data || error.message;
     }
   },
 
   // Delete unit
   delete: async (id) => {
     try {
-      const api = apiClient;
-      const response = await api.delete(`/units/${id}`);
-      return response.data;
+      console.log('🗑️ Units API delete called with:', id);
+      const response = await apiClient.delete(`/units/${id}`);
+      console.log('✅ Units API delete response:', response.data);
+      return response;
     } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  // Search units (using the index endpoint with search parameter)
-  search: async (query, filters = {}) => {
-    try {
-      const api = apiClient;
-      const response = await api.get('/units', {
-        params: { search: query, ...filters }
-      });
-      return response.data;
-    } catch (error) {
+      console.error('❌ Units API delete error:', error);
       throw error.response?.data || error.message;
     }
   },
 };
+
+export default unitsAPI;

@@ -1,11 +1,29 @@
 // components/navigation/ModernTabBar.js
 import { BlurView } from "expo-blur";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, Text, TouchableOpacity, View } from "react-native";
+import { Animated, Dimensions, TouchableOpacity, View } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
 
 const { width } = Dimensions.get("window");
+
+// Define the 4 fixed tabs to display
+const FIXED_TABS = [
+  {
+    name: "Products",
+    label: "Products",
+    icon: "package-variant",
+    iconActive: "package-variant",
+  },
+  {
+    name: "Invoices",
+    label: "Invoices",
+    icon: "file-document",
+    iconActive: "file-document",
+  },
+  { name: "Orders", label: "Orders", icon: "shopping", iconActive: "shopping" },
+  { name: "Settings", label: "Settings", icon: "cog", iconActive: "cog" },
+];
 
 const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
   const { isDarkMode } = useThemeStore();
@@ -13,9 +31,23 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
   const [sliderWidth, setSliderWidth] = useState(0);
   const animation = useRef(new Animated.Value(0)).current;
 
+  // Use fixed tabs instead of the passed tabs
+  const visibleTabs = FIXED_TABS;
+
+  // Find the original route index for the fixed tab
+  const getRouteIndexForTab = (tabName) => {
+    return state.routes.findIndex((route) => route.name === tabName);
+  };
+
   useEffect(() => {
-    if (tabPositions[state.index]) {
-      const { x, width } = tabPositions[state.index];
+    // Find which fixed tab corresponds to the current route
+    const currentRouteName = state.routes[state.index]?.name;
+    const currentTabIndex = visibleTabs.findIndex(
+      (tab) => tab.name === currentRouteName,
+    );
+
+    if (currentTabIndex !== -1 && tabPositions[currentTabIndex]) {
+      const { x, width } = tabPositions[currentTabIndex];
       Animated.spring(animation, {
         toValue: x,
         useNativeDriver: false,
@@ -24,17 +56,25 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
       }).start();
       setSliderWidth(width);
     }
-  }, [state.index, tabPositions]);
+  }, [state.index, tabPositions, state.routes]);
 
   const handleTabPress = (index) => {
-    const event = navigation.emit({
-      type: "tabPress",
-      target: state.routes[index].key,
-      canPreventDefault: true,
-    });
+    const tab = visibleTabs[index];
+    if (!tab) return;
 
-    if (state.index !== index && !event.defaultPrevented) {
-      navigation.navigate(tabs[index].name);
+    // Check if the tab's screen exists in the navigator
+    const routeExists = state.routes.some((route) => route.name === tab.name);
+
+    if (routeExists) {
+      const event = navigation.emit({
+        type: "tabPress",
+        target: state.routes.find((r) => r.name === tab.name)?.key,
+        canPreventDefault: true,
+      });
+
+      if (!event.defaultPrevented) {
+        navigation.navigate(tab.name);
+      }
     }
   };
 
@@ -47,9 +87,15 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
     }
   };
 
-  if (!tabs || tabs.length === 0) {
+  if (!visibleTabs || visibleTabs.length === 0) {
     return null;
   }
+
+  // Get current active index based on route name
+  const currentRouteName = state.routes[state.index]?.name;
+  const activeIndex = visibleTabs.findIndex(
+    (tab) => tab.name === currentRouteName,
+  );
 
   return (
     <View className="absolute bottom-0 left-0 right-0">
@@ -69,7 +115,7 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
             className="flex-row items-center"
             style={{
               position: "relative",
-              height: 55,
+              height: 45,
             }}
           >
             {/* Animated Sliding Background */}
@@ -85,8 +131,9 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
               }}
             />
 
-            {tabs.map((tab, index) => {
-              const isFocused = state.index === index;
+            {visibleTabs.map((tab, index) => {
+              const isFocused = activeIndex === index;
+
               return (
                 <TouchableOpacity
                   key={tab.name}
@@ -105,17 +152,9 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
                     name={isFocused ? tab.iconActive : tab.icon}
                     size={22}
                     color={
-                      isFocused ? "white" : (isDarkMode ? "#9CA3AF" : "#6B7280")
+                      isFocused ? "white" : isDarkMode ? "#9CA3AF" : "#6B7280"
                     }
                   />
-                  {isFocused && (
-                    <Text
-                      className="ml-2 font-medium"
-                      style={{ color: "white", fontSize: 14 }}
-                    >
-                      {tab.label}
-                    </Text>
-                  )}
                 </TouchableOpacity>
               );
             })}

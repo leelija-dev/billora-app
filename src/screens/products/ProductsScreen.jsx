@@ -1,7 +1,11 @@
 // screens/products/ProductsScreen.js
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Modal,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -10,197 +14,191 @@ import {
   View,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useThemeStore } from "../../store/themeStore";
-import { useAuthStore } from "../../store/authStore";
-import { useProducts } from "../../hooks/useProducts";
-import { useCategories } from "../../hooks/useCategories";
 import Header from "../../components/common/Header";
 import ProductFilters from "../../components/products/ProductFilters";
 import ProductList from "../../components/products/ProductList";
-import { getNavigationItemsWithBadges } from "../../constants/navigationItems"; // Import the helper
+import { SuccessModal, ConfirmationModal } from "../../components/common/CustomModal";
+import { useAuthStore } from "../../store/authStore";
+import useProductStore from "../../store/productStore";
+import useCategoryStore from "../../store/categoryStore";
+import { useThemeStore } from "../../store/themeStore";
+import { usePermissionStore } from "../../store/permissionStore";
 
 const ProductsScreen = () => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
   const { user } = useAuthStore();
-  const { products = [], loading, error, refreshProducts, searchProducts, getProductsByCategory } = useProducts() || {};
-  const { categories = [] } = useCategories() || {};
+  const { getFilteredMenuItems } = usePermissionStore();
+
+  // Get product store state and actions
+  const {
+    products = [],
+    totalProducts,
+    loading,
+    filters,
+    fetchProducts,
+    deleteProduct,
+    setFilters,
+    setPage,
+    currentPage,
+    lastPage,
+  } = useProductStore();
+
+  // Get categories for filter
+  const { categories = [], fetchCategories } = useCategoryStore();
+
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState("grid");
+  const [sortBy, setSortBy] = useState("name");
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Modal states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  // Build categories list with "All Products" option
-  const allCategories = [
-    {
-      id: "all",
-      name: "All Products",
-      icon: "package-variant",
-      count: products?.length || 0,
-      color: "#3b82f6",
-    },
-    ...categories.map(cat => ({
-      id: cat.id,
-      name: cat.name,
-      icon: "tag",
-      count: products?.filter(p => p.category_id === cat.id)?.length || 0,
-      color: "#8b5cf6",
-    }))
-  ];
+  const searchTimeoutRef = useRef(null);
+  const isMounted = useRef(true);
 
-  // Safe product count with fallback
-  const productCount = products?.length || 0;
+  // Get filtered menu items from permission store
+  const menuItems = useMemo(() => {
+    const filtered = getFilteredMenuItems();
+    return filtered.map(item => ({
+      id: item.id,
+      title: item.name,
+      screen: item.screen,
+      icon: item.icon,
+      iconActive: item.iconActive,
+      badge: item.badge || null,
+    }));
+  }, [getFilteredMenuItems]);
 
-  // Calculate real stats
-  const stats = {
-    total: productCount,
-    lowStock: products?.filter(p => (p.stock || 0) <= (p.reorder_level || 10) && (p.stock || 0) > 0)?.length || 0,
-    outOfStock: products?.filter(p => (p.stock || 0) === 0)?.length || 0,
+  // Get current user ID
+  const getUserId = useCallback(() => {
+    if (user && user.id) return user.id.toString();
+    return "1";
+  }, [user]);
+
+  // Initial data load
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          fetchProducts(),
+          fetchCategories(),
+        ]);
+      } catch (error) {
+        console.error("Failed to load initial data:", error);
+      } finally {
+        if (isMounted.current) setInitialLoading(false);
+      }
+    };
+    loadInitialData();
+
+    return () => {
+      isMounted.current = false;
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
+
+  // Handle search with debounce
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      setFilters({ search: searchQuery });
+    }, 500);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [searchQuery, setFilters]);
+
+  // Refresh on focus
+  useFocusEffect(
+  useCallback(() => {
+    // Force refresh when screen comes into focus
+    fetchProducts(currentPage, true);
+    return () => {};
+  }, [])
+);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchProducts();
+    setRefreshing(false);
   };
 
   const handleAddProduct = () => {
-    navigation.navigate("AddProduct");
+    navigation.navigate("AddProduct", {});
   };
 
-  const handleFilterPress = () => {
-    setShowFilters(true);
+  const handleEditProduct = (product) => {
+    navigation.navigate("AddProduct", { productId: product.id, product });
   };
 
-  const handleFiltersClose = () => {
+  const handleDeleteProduct = (product) => {
+    setProductToDelete(product);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteProduct(productToDelete.id);
+      setShowDeleteConfirm(false);
+      setProductToDelete(null);
+      await fetchProducts();
+      setSuccessMessage("Product deleted successfully");
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 2000);
+    } catch (error) {
+      console.error("Delete error:", error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleApplyFilters = (newFilters) => {
+    setFilters(newFilters);
+    setSortBy(newFilters.sortBy || "name");
     setShowFilters(false);
   };
 
-  const handleCategorySelect = (categoryId) => {
-    setSelectedCategory(categoryId);
-    if (categoryId === "all") {
-      refreshProducts?.();
-    } else {
-      getProductsByCategory?.(categoryId);
-    }
+  const handleResetFilters = () => {
+    setFilters({ search: "", category_id: null, brand_id: null, status: "all", sortBy: "name", sortOrder: "asc" });
+    setSearchQuery("");
+    setSortBy("name");
   };
 
   const handleSearch = (query) => {
     setSearchQuery(query);
-    if (query.trim()) {
-      searchProducts?.(query);
-    } else {
-      refreshProducts?.();
-    }
   };
 
   const toggleViewMode = () => {
     setViewMode(viewMode === "grid" ? "list" : "grid");
   };
 
-  // Use refs to track state without causing re-renders
-  const lastRefreshTime = useRef(Date.now());
-  const isRefreshing = useRef(false);
-  const focusCount = useRef(0);
-  const isMounted = useRef(true);
+  // Calculate stats
+  const safeProducts = Array.isArray(products) ? products : [];
+  const productCount = totalProducts || safeProducts.length;
+  const lowStockCount = safeProducts.filter(p => (p.current_stock || 0) <= (p.minimum_stock_quantity || 10) && (p.current_stock || 0) > 0).length;
+  const outOfStockCount = safeProducts.filter(p => (p.current_stock || 0) === 0).length;
 
-  // Stable refresh callback
-  const stableRefresh = useCallback(async () => {
-    if (isRefreshing.current || !isMounted.current) return;
-    
-    isRefreshing.current = true;
-    
-    try {
-      await refreshProducts();
-      lastRefreshTime.current = Date.now();
-    } finally {
-      if (isMounted.current) {
-        isRefreshing.current = false;
-      }
-    }
-  }, [refreshProducts]);
-
-  // Focus effect - refresh when screen comes into focus, but not too frequently
-  useFocusEffect(
-    useCallback(() => {
-      focusCount.current += 1;
-      console.log('Products screen focused - focus count:', focusCount.current);
-      
-      // Don't refresh if we're already refreshing
-      if (isRefreshing.current) {
-        console.log('Already refreshing, skipping...');
-        return;
-      }
-      
-      const now = Date.now();
-      const timeSinceLastRefresh = now - lastRefreshTime.current;
-      
-      // Only refresh if it's been more than 5 seconds
-      if (timeSinceLastRefresh > 5000) {
-        console.log('Refreshing products on focus...');
-        stableRefresh();
-      } else {
-        console.log('Skipping refresh - last refresh was', Math.round(timeSinceLastRefresh / 1000), 'seconds ago');
-      }
-
-      return () => {
-        console.log('Products screen unfocused');
-      };
-    }, [stableRefresh])
-  );
-
-  // Navigation listener - with proper cleanup
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      const routes = navigation.getState()?.routes;
-      const previousRoute = routes?.[routes.length - 2]?.name;
-      
-      // Refresh when coming back from add/edit/detail screens
-      if (previousRoute === 'AddProduct' || previousRoute === 'ProductDetail') {
-        console.log(`Returning from ${previousRoute} - refreshing products`);
-        stableRefresh();
-      }
-    });
-
-    return unsubscribe;
-  }, [navigation, stableRefresh]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    isMounted.current = true;
-    
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  // Navigation items for sidebar - Using centralized navigation items
-  const navigationItems = useMemo(() => {
-    // Create badges for this screen
-    const badges = {
-      products: productCount.toString(),
-      inventory: stats.lowStock > 0 ? stats.lowStock.toString() : null,
-      // You can add other dynamic badges here if needed
-    };
-    
-    // Get navigation items with badges
-    return getNavigationItemsWithBadges(badges);
-  }, [productCount, stats.lowStock]);
-
-  // Show loading state
-  if (loading) {
+  if (initialLoading) {
     return (
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} items-center justify-center`}>
-        <Text className={isDarkMode ? 'text-white' : 'text-gray-900'}>Loading products...</Text>
-      </View>
-    );
-  }
-
-  // Show error state
-  if (error) {
-    return (
-      <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} items-center justify-center`}>
-        <Text className="text-red-500">Error: {error}</Text>
+      <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>Loading products...</Text>
       </View>
     );
   }
 
   return (
-    <View className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} pb-16`}>
+    <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} pb-16`}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
 
       <Header
@@ -208,25 +206,16 @@ const ProductsScreen = () => {
         userName={user?.name || "User"}
         userEmail={user?.email || "guest@example.com"}
         activeScreen="Products"
-        navigationItems={navigationItems}
+        navigationItems={menuItems}
         rightComponent={
           <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={toggleViewMode}
-              className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-              }`}
-            >
-              <Icon
-                name={viewMode === "grid" ? "view-grid" : "view-list"}
-                size={22}
-                color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-              />
+            <TouchableOpacity onPress={toggleViewMode} className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+              <Icon name={viewMode === "grid" ? "view-grid" : "view-list"} size={22} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleAddProduct}
-              className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/30"
-            >
+            <TouchableOpacity onPress={handleRefresh} className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+              <Icon name="refresh" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleAddProduct} className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/30">
               <Icon name="plus" size={24} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -235,139 +224,173 @@ const ProductsScreen = () => {
 
       {/* Search Bar */}
       <View className="px-4 pt-4 pb-2">
-        <View className={`flex-row items-center rounded-2xl px-4 h-14 shadow-sm ${
-          isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}>
+        <View className={`flex-row items-center rounded-2xl px-4 h-14 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
           <Icon name="magnify" size={22} color="#9ca3af" />
           <TextInput
-            className={`flex-1 ml-3 text-base ${
-              isDarkMode ? 'text-white' : 'text-gray-800'
-            }`}
-            placeholder="Search products, SKU, category..."
+            className={`flex-1 ml-3 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
+            placeholder="Search products by name, SKU..."
             placeholderTextColor="#9ca3af"
             value={searchQuery}
             onChangeText={handleSearch}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <TouchableOpacity onPress={() => handleSearch("")}>
               <Icon name="close-circle" size={20} color="#9ca3af" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            onPress={handleFilterPress}
-            className={`ml-2 p-2 border-l ${
-              isDarkMode ? 'border-gray-700' : 'border-gray-200'
-            }`}
-          >
+          <TouchableOpacity onPress={() => setShowFilters(true)} className={`ml-2 p-2 border-l ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}>
             <Icon name="tune" size={22} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            {(filters.status !== "all" || filters.category_id) && (
+              <View className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Categories Scroll */}
-        <View className="py-2">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            className="px-4"
-          >
-            {allCategories.map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                onPress={() => handleCategorySelect(category.id)}
-                className={`flex-row items-center mr-3 px-4 py-2.5 rounded-full border ${
-                  selectedCategory === category.id
-                    ? "bg-blue-500 border-blue-500"
-                    : isDarkMode 
-                      ? 'bg-gray-800 border-gray-700' 
-                      : 'bg-white border-white'
-                } shadow-sm`}
-              >
-                <Icon
-                  name={category.icon}
-                  size={18}
-                  color={
-                    selectedCategory === category.id 
-                      ? "#ffffff" 
-                      : isDarkMode ? '#9CA3AF' : category.color
-                  }
-                />
-                <Text
-                  className={`ml-2 font-medium ${
-                    selectedCategory === category.id
-                      ? "text-white"
-                      : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
+      >
+        {/* Stats Cards */}
+        <View className="flex-row flex-wrap px-4 py-3">
+          <LinearGradient colors={["#3b82f6", "#2563eb"]} className="rounded-xl p-4 flex-1 mr-2" start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Text className="text-white/80 text-xs">Total Products</Text>
+            <Text className="text-white text-2xl font-bold">{productCount}</Text>
+            <View className="flex-row items-center mt-1">
+              <Icon name="package-variant" size={16} color="#86efac" />
+              <Text className="text-white/80 text-xs ml-1">All products</Text>
+            </View>
+          </LinearGradient>
+
+          <View className={`rounded-xl p-4 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
+            <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Low Stock</Text>
+            <Text className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}>{lowStockCount}</Text>
+            <View className="flex-row items-center mt-1">
+              <Icon name="alert" size={16} color="#F59E0B" />
+              <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} ml-1`}>Needs attention</Text>
+            </View>
+          </View>
+        </View>
+
+        <View className="flex-row px-4 mb-4">
+          <View className={`rounded-xl p-3 flex-1 mr-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
+            <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Out of Stock</Text>
+            <Text className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}>{outOfStockCount}</Text>
+            <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Currently unavailable</Text>
+          </View>
+
+          <View className={`rounded-xl p-3 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
+            <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Categories</Text>
+            <Text className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}>{categories?.length || 0}</Text>
+            <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Product categories</Text>
+          </View>
+        </View>
+
+        {/* Filter Chips */}
+        {(filters.status !== "all" || filters.category_id || filters.brand_id) && (
+          <View className="px-4 mb-3 flex-row flex-wrap">
+            {filters.status !== "all" && (
+              <View className={`flex-row items-center mr-2 mb-2 px-3 py-1.5 rounded-full ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Status: {filters.status}</Text>
+                <TouchableOpacity onPress={() => setFilters({ ...filters, status: "all" })} className="ml-2">
+                  <Icon name="close" size={16} color={isDarkMode ? "#9CA3AF" : "#6b7280"} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {filters.category_id && (
+              <View className={`flex-row items-center mr-2 mb-2 px-3 py-1.5 rounded-full ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Category ID: {filters.category_id}</Text>
+                <TouchableOpacity onPress={() => setFilters({ ...filters, category_id: null })} className="ml-2">
+                  <Icon name="close" size={16} color={isDarkMode ? "#9CA3AF" : "#6b7280"} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Sort Options */}
+        <View className="flex-row px-4 mb-4">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View className="flex-row">
+              {["name", "price", "stock", "date"].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  onPress={() => setSortBy(option)}
+                  className={`flex-row items-center mr-2 px-4 py-2 rounded-full border ${sortBy === option ? "bg-blue-500 border-blue-500" : isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}
                 >
-                  {category.name}
-                </Text>
-                <View
-                  className={`ml-2 px-2 py-0.5 rounded-full ${
-                    selectedCategory === category.id
-                      ? "bg-white/20"
-                      : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                  }`}
-                >
-                  <Text
-                    className={`text-xs ${
-                      selectedCategory === category.id
-                        ? "text-white"
-                        : isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                    }`}
-                  >
-                    {category.count}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <Icon name={option === "name" ? "sort-alphabetical-ascending" : option === "price" ? "currency-usd" : option === "stock" ? "package-variant" : "calendar"} size={16} color={sortBy === option ? "#ffffff" : isDarkMode ? "#9CA3AF" : "#4b5563"} />
+                  <Text className={`ml-2 text-sm capitalize ${sortBy === option ? "text-white" : isDarkMode ? "text-gray-300" : "text-gray-700"}`}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </ScrollView>
         </View>
 
-        {/* Stats Cards */}
-        <View className="flex-row justify-between px-4 py-3">
-          <View className={`rounded-xl p-3 flex-1 mr-2 shadow-sm ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Total Products
-            </Text>
-            <Text className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-              {productCount}
-            </Text>
-          </View>
-          <View className={`rounded-xl p-3 flex-1 mx-2 shadow-sm ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Low Stock
-            </Text>
-            <Text className="text-2xl font-bold text-orange-500">{stats.lowStock}</Text>
-          </View>
-          <View className={`rounded-xl p-3 flex-1 ml-2 shadow-sm ${
-            isDarkMode ? 'bg-gray-800' : 'bg-white'
-          }`}>
-            <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Out of Stock
-            </Text>
-            <Text className="text-2xl font-bold text-red-500">{stats.outOfStock}</Text>
-          </View>
-        </View>
-
         {/* Product List */}
-        <View className="flex-1 px-4">
+        <View className="flex-1 px-4 pb-4">
           <ProductList
+            products={safeProducts}
             viewMode={viewMode}
-            searchQuery={searchQuery}
-            category={selectedCategory}
+            loading={loading}
+            onEdit={handleEditProduct}
+            onDelete={handleDeleteProduct}
           />
         </View>
+
+        {/* Pagination */}
+        {lastPage > 1 && (
+          <View className="flex-row items-center justify-center py-4 space-x-2">
+            <TouchableOpacity
+              onPress={() => setPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`p-2 rounded-lg border ${currentPage === 1 ? "border-gray-200 dark:border-gray-700 opacity-40" : "border-gray-300 dark:border-gray-600"}`}
+            >
+              <Icon name="chevron-left" size={18} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            </TouchableOpacity>
+            <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+              Page {currentPage} of {lastPage}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setPage(currentPage + 1)}
+              disabled={currentPage === lastPage}
+              className={`p-2 rounded-lg border ${currentPage === lastPage ? "border-gray-200 dark:border-gray-700 opacity-40" : "border-gray-300 dark:border-gray-600"}`}
+            >
+              <Icon name="chevron-right" size={18} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        visible={showDeleteConfirm}
+        title="Delete Product"
+        message={`Are you sure you want to delete "${productToDelete?.name}"? This action cannot be undone.`}
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonColor="#ef4444"
+        loading={deleting}
+      />
+
+      {/* Success Modal */}
+      <SuccessModal
+        visible={showSuccessModal}
+        message={successMessage}
+        onClose={() => setShowSuccessModal(false)}
+        autoClose={true}
+        autoCloseDelay={2000}
+      />
+
       {/* Filters Modal */}
-      <ProductFilters 
-        visible={showFilters} 
-        onClose={handleFiltersClose}
+      <ProductFilters
+        visible={showFilters}
+        onClose={() => setShowFilters(false)}
+        onApply={handleApplyFilters}
+        onReset={handleResetFilters}
+        initialFilters={filters}
+        categories={categories}
         isDarkMode={isDarkMode}
       />
     </View>

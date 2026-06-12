@@ -1,21 +1,22 @@
 // components/navigation/MainNavigator.js
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useMemo } from "react";
-import { usePermissionStore, MENU_ITEMS } from "../../store/permissionStore";
+import { usePermissionStore } from "../../store/permissionStore";
 import ModernTabBar from "./ModernTabBar";
 
 // Import all screen components
 import DashboardScreen from "../../screens/dashboard/DashboardScreen";
-import ProductsStackNavigator from "./stacks/ProductsStack";
-import StocksStackNavigator from "./stacks/StocksStack";
-import BillsStackNavigator from "./stacks/BillsStack";
-import ReportsStackNavigator from "./stacks/ReportsStack";
-import CustomersStackNavigator from "./stacks/CustomersStack";
-import CategoriesStackNavigator from "./stacks/CategoriesStack";
 import BrandsStackNavigator from "./stacks/BrandsStack";
-import UnitsStackNavigator from "./stacks/UnitsStack";
-import StoresStackNavigator from "./stacks/StoresStack";
+import CategoriesStackNavigator from "./stacks/CategoriesStack";
+import CustomersStackNavigator from "./stacks/CustomersStack";
+
+import ProductsStackNavigator from "./stacks/ProductsStack";
+import ReportsStackNavigator from "./stacks/ReportsStack";
 import SettingsStackNavigator from "./stacks/SettingsStack";
+import StocksStackNavigator from "./stacks/StocksStack";
+import StoresStackNavigator from "./stacks/StoresStack";
+import UnitsStackNavigator from "./stacks/UnitsStack";
+import InvoicesStackNavigator from "./stacks/InvoicesStack";
 
 const Tab = createBottomTabNavigator();
 
@@ -24,7 +25,7 @@ const COMPONENT_MAP = {
   Dashboard: DashboardScreen,
   Products: ProductsStackNavigator,
   Stocks: StocksStackNavigator,
-  Bills: BillsStackNavigator,
+  Invoices: InvoicesStackNavigator,
   Reports: ReportsStackNavigator,
   Customers: CustomersStackNavigator,
   Categories: CategoriesStackNavigator,
@@ -40,11 +41,11 @@ const MainNavigator = () => {
   // Get menu items filtered by user permissions (like desktop)
   const visibleTabs = useMemo(() => {
     const filteredItems = getFilteredMenuItems();
-    
+
     // Convert to tab format and filter by permission
     return filteredItems
-      .filter(item => item.screen && COMPONENT_MAP[item.screen])
-      .map(item => ({
+      .filter((item) => item.screen && COMPONENT_MAP[item.screen])
+      .map((item) => ({
         name: item.screen,
         component: COMPONENT_MAP[item.screen],
         icon: item.icon,
@@ -54,7 +55,10 @@ const MainNavigator = () => {
       }));
   }, [sidebarPermissions]);
 
-  console.log('📱 Visible tabs:', visibleTabs.map(t => t.name));
+  console.log(
+    "📱 Visible tabs:",
+    visibleTabs.map((t) => t.name),
+  );
 
   return (
     <Tab.Navigator
@@ -64,11 +68,7 @@ const MainNavigator = () => {
       }}
     >
       {visibleTabs.map((tab) => (
-        <Tab.Screen
-          key={tab.name}
-          name={tab.name}
-          component={tab.component}
-        />
+        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
       ))}
     </Tab.Navigator>
   );

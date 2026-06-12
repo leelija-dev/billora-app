@@ -1,3 +1,4 @@
+// components/units/UnitCard.js
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
@@ -8,65 +9,47 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
 
-const UnitCard = ({ unit, onDelete, onUpdate }) => {
+const UnitCard = ({ unit, onEdit, onDelete }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
   const [showActions, setShowActions] = useState(false);
-  const scaleValue = useState(new Animated.Value(1))[0];
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!unit) return null;
 
-  const {
-    id,
-    code,
-    name,
-    created_at,
-    updated_at,
-    user_id,
-    created_by
-  } = unit;
-
-  const handlePress = () => {
-    navigation.navigate("UnitDetail", { unitId: id });
-  };
+  const { id, code, name, created_at, user_id, created_by } = unit;
 
   const handleEdit = () => {
     setShowActions(false);
-    navigation.navigate("AddUnit", { unitId: id });
+    if (onEdit) {
+      onEdit(unit);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDeletePress = () => {
     setShowActions(false);
-    Alert.alert(
-      "Delete Unit", 
-      `Are you sure you want to delete "${code} - ${name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            if (onDelete) {
-              const result = await onDelete(id);
-              console.log('UnitCard: Delete result:', result);
-              if (result?.success) {
-                Alert.alert("Success", "Unit deleted successfully");
-              } else {
-                Alert.alert("Error", result?.error || "Failed to delete unit");
-              }
-            }
-          },
-        },
-      ]
-    );
+    setShowDeleteConfirm(true);
   };
 
-  const handleLongPress = () => {
-    setShowActions(true);
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      if (onDelete) {
+        await onDelete(unit);
+        setShowDeleteConfirm(false);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      Alert.alert("Error", "Failed to delete unit");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Generate consistent gradient based on unit code
@@ -82,7 +65,6 @@ const UnitCard = ({ unit, onDelete, onUpdate }) => {
       ["#14b8a6", "#0d9488"], // Teal
     ];
     
-    // Use code to pick a consistent color
     const index = (code?.charCodeAt(0) || 0) % gradients.length;
     return gradients[index];
   };
@@ -95,8 +77,7 @@ const UnitCard = ({ unit, onDelete, onUpdate }) => {
         className={`w-full rounded-2xl shadow-lg overflow-hidden ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
         }`}
-        onPress={handlePress}
-        onLongPress={handleLongPress}
+        onLongPress={() => setShowActions(true)}
         delayLongPress={500}
         activeOpacity={0.7}
       >
@@ -160,24 +141,30 @@ const UnitCard = ({ unit, onDelete, onUpdate }) => {
                 {new Date(created_at).toLocaleDateString()}
               </Text>
             </View>
+          </View>
 
-            <View className="w-1/2 mb-2">
-              <Text className={`text-xs ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-400'
-              }`}>
-                Last Updated
-              </Text>
-              <Text className={`text-sm font-medium ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                {new Date(updated_at).toLocaleDateString()}
-              </Text>
-            </View>
+          {/* Action Buttons */}
+          <View className="flex-row justify-between mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <TouchableOpacity
+              onPress={handleEdit}
+              className="flex-1 flex-row items-center justify-center py-2 mr-2 rounded-lg bg-blue-100 dark:bg-blue-900/30"
+            >
+              <Icon name="pencil" size={16} color="#3b82f6" />
+              <Text className="text-blue-600 text-xs ml-1">Edit</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={handleDeletePress}
+              className="flex-1 flex-row items-center justify-center py-2 ml-2 rounded-lg bg-red-100 dark:bg-red-900/30"
+            >
+              <Icon name="delete" size={16} color="#ef4444" />
+              <Text className="text-red-500 text-xs ml-1">Delete</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
 
-      {/* Action Modal */}
+      {/* Action Modal for Long Press */}
       <Modal
         visible={showActions}
         transparent
@@ -232,39 +219,10 @@ const UnitCard = ({ unit, onDelete, onUpdate }) => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                className={`flex-row items-center p-4 rounded-xl mb-2 ${
-                  isDarkMode ? 'bg-purple-900/30' : 'bg-purple-50'
-                }`}
-                onPress={() => {
-                  setShowActions(false);
-                  navigation.navigate("Products", { unitId: id });
-                }}
-              >
-                <View className={`w-10 h-10 rounded-full items-center justify-center ${
-                  isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100'
-                }`}>
-                  <Icon name="package-variant" size={22} color="#8b5cf6" />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className={`text-base font-semibold ${
-                    isDarkMode ? 'text-white' : 'text-gray-800'
-                  }`}>
-                    View Products
-                  </Text>
-                  <Text className={`text-xs ${
-                    isDarkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    See products using this unit
-                  </Text>
-                </View>
-                <Icon name="chevron-right" size={20} color="#9ca3af" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 className={`flex-row items-center p-4 rounded-xl ${
                   isDarkMode ? 'bg-red-900/30' : 'bg-red-50'
                 }`}
-                onPress={handleDelete}
+                onPress={handleDeletePress}
               >
                 <View className={`w-10 h-10 rounded-full items-center justify-center ${
                   isDarkMode ? 'bg-red-900/50' : 'bg-red-100'
@@ -301,6 +259,60 @@ const UnitCard = ({ unit, onDelete, onUpdate }) => {
             </View>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={showDeleteConfirm}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteConfirm(false)}
+      >
+        <View className="flex-1 bg-black/50 items-center justify-center px-4">
+          <View className={`rounded-2xl p-6 w-full max-w-sm ${
+            isDarkMode ? 'bg-gray-800' : 'bg-white'
+          }`}>
+            <View className="items-center mb-4">
+              <View className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 items-center justify-center mb-3">
+                <Icon name="alert-circle" size={32} color="#ef4444" />
+              </View>
+              <Text className={`text-lg font-semibold text-center ${
+                isDarkMode ? 'text-white' : 'text-gray-800'
+              }`}>
+                Delete Unit
+              </Text>
+              <Text className={`text-sm text-center mt-2 ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                Are you sure you want to delete "{code} - {name}"? This action cannot be undone.
+              </Text>
+            </View>
+
+            <View className="flex-row gap-3 mt-4">
+              <TouchableOpacity
+                onPress={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-300 dark:border-gray-600"
+              >
+                <Text className={`text-center font-medium ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                }`}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmDelete}
+                disabled={deleting}
+                className="flex-1 py-3 rounded-xl bg-red-500 flex-row items-center justify-center"
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text className="text-white text-center font-medium">Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </>
   );

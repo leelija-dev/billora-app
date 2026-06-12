@@ -1,13 +1,18 @@
-import { apiClient } from './client';
+// api/stocks.js
+import apiClient from './client';
 
 export const stocksAPI = {
-  // Get all stocks
-  getAll: async (params = {}) => {
+  // Get all stocks with search and pagination
+  getAll: async (search = '', page = 1, perPage = 15) => {
     try {
-      const response = await apiClient.get('/stocks/', { params });
-      console.log('Stocks API Response:', response.data);
-      return response.data;
+      const params = { page, per_page: perPage };
+      if (search) params.search = search;
+      console.log('📦 Stocks API getAll called with params:', params);
+      const response = await apiClient.get('/stocks', { params });
+      console.log('✅ Stocks API getAll response status:', response.status);
+      return response;
     } catch (error) {
+      console.error('❌ Stocks API getAll error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -15,104 +20,62 @@ export const stocksAPI = {
   // Get single stock
   getById: async (id) => {
     try {
+      console.log('📦 Stocks API getById called with id:', id);
       const response = await apiClient.get(`/stocks/${id}`);
-      return response.data;
+      return response;
     } catch (error) {
       throw error.response?.data || error.message;
     }
   },
 
-  // Create new stock
+  // Create stock
   create: async (stockData) => {
     try {
-      // Map frontend field names to API expected field names
-      const payload = {
-        user_id: stockData.userId || stockData.user_id,
-        product_id: stockData.productId,
-        quantity: parseInt(stockData.quantity) || 0,
-        selling_price: parseFloat(stockData.sellingPrice) || 0,
-        product_package_id: stockData.productPackageId || null,
-        purchase_price: parseFloat(stockData.purchasePrice) || null,
-        unit_id: stockData.unitId || null,
-        created_by: stockData.createdBy || stockData.userId || stockData.user_id,
-      };
-      
-      console.log('Create Stock API payload:', payload);
-      const response = await apiClient.post('/stocks/store', payload);
-      return response.data;
+      console.log('📦 Stocks API create called with:', stockData);
+      const response = await apiClient.post('/stocks/store', stockData);
+      return response;
     } catch (error) {
-      console.error('Create Stock API error:', error.response?.data || error.message);
-      throw error;
+      throw error.response?.data || error.message;
     }
   },
 
   // Update stock
   update: async (id, stockData) => {
     try {
-      // Map frontend field names to API expected field names
-      const payload = {
-        quantity: parseInt(stockData.quantity) || 0,
-        selling_price: parseFloat(stockData.sellingPrice) || 0,
-        product_package_id: stockData.productPackageId || null,
-        purchase_price: parseFloat(stockData.purchasePrice) || null,
-        unit_id: stockData.unitId || null,
-      };
-      
-      console.log('Update Stock API payload:', payload);
-      const response = await apiClient.put(`/stocks/${id}`, payload);
-      return response.data;
+      console.log('📦 Stocks API update called with id:', id, stockData);
+      const response = await apiClient.put(`/stocks/${id}`, stockData);
+      return response;
     } catch (error) {
-      console.error('Update Stock API error:', error.response?.data || error.message);
-      throw error;
+      throw error.response?.data || error.message;
     }
   },
 
   // Delete stock
   delete: async (id, userId) => {
     try {
-      const response = await apiClient.post(`/stocks/${id}`, {
-        _method: 'DELETE',
-        user_id: userId
+      console.log('📦 Stocks API delete called with id:', id);
+      const response = await apiClient.delete(`/stocks/${id}`, { 
+        data: { user_id: userId }
       });
-      return response.data;
+      return response;
     } catch (error) {
       throw error.response?.data || error.message;
     }
   },
 
-  // Add stock (increment quantity)
-  addStock: async (id, stockData) => {
+  // Add stock quantity
+  addStock: async (id, userId, quantity) => {
     try {
-      const response = await apiClient.post(`/stocks/add-stock/${id}`, {
-        quantity: parseInt(stockData.quantity) || 0,
-        user_id: stockData.userId || stockData.user_id,
+      console.log('📦 Stocks API addStock called with id:', id, 'quantity:', quantity);
+      const response = await apiClient.post(`/stocks/add-stock/${id}`, { 
+        user_id: userId, 
+        quantity: quantity 
       });
-      return response.data;
-    } catch (error) {
-      console.error('Add Stock API error:', error.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  // Search stocks
-  search: async (query, filters = {}) => {
-    try {
-      const response = await apiClient.get('/stocks/', {
-        params: { search: query, ...filters }
-      });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  // Get stocks by product
-  getByProduct: async (productId) => {
-    try {
-      const response = await apiClient.get(`/stocks/product/${productId}`);
-      return response.data;
+      return response;
     } catch (error) {
       throw error.response?.data || error.message;
     }
   },
 };
+
+export default stocksAPI;

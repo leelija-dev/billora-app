@@ -17,16 +17,18 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import BrandFilters from "../../components/brands/BrandFilters";
 import BrandList from "../../components/brands/BrandList";
 import Header from "../../components/common/Header";
+import BrandForm from "../../components/brands/BrandForm";
 import { SuccessModal, ConfirmationModal } from "../../components/common/CustomModal";
-import { getNavigationItemsWithBadges } from "../../constants/navigationItems";
 import { useAuthStore } from "../../store/authStore";
 import useBrandStore from "../../store/brandStore";
 import { useThemeStore } from "../../store/themeStore";
+import { usePermissionStore } from "../../store/permissionStore";
 
 const BrandsScreen = () => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
   const { user } = useAuthStore();
+  const { getFilteredMenuItems } = usePermissionStore();
 
   // Get brand store state and actions
   const {
@@ -35,6 +37,8 @@ const BrandsScreen = () => {
     loading,
     filters,
     fetchBrands,
+    createBrand,
+    updateBrand,
     deleteBrand,
     setFilters,
   } = useBrandStore();
@@ -52,15 +56,32 @@ const BrandsScreen = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [initialLoading, setInitialLoading] = useState(true);
+  
+  // Add/Edit Form Modal
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const searchTimeoutRef = useRef(null);
   const isMounted = useRef(true);
 
+  // Get filtered menu items from permission store
+  const menuItems = useMemo(() => {
+    const filtered = getFilteredMenuItems();
+    return filtered.map(item => ({
+      id: item.id,
+      title: item.name,
+      screen: item.screen,
+      icon: item.icon,
+      iconActive: item.iconActive,
+      badge: item.badge || null,
+    }));
+  }, [getFilteredMenuItems]);
+
   // Get current user ID
   const getUserId = useCallback(() => {
-    if (user && user.id) {
-      return user.id.toString();
-    }
+    if (user && user.id) return user.id.toString();
     return "1";
   }, [user]);
 
@@ -74,46 +95,33 @@ const BrandsScreen = () => {
       } catch (error) {
         console.error("❌ Failed to fetch brands:", error);
       } finally {
-        if (isMounted.current) {
-          setInitialLoading(false);
-        }
+        if (isMounted.current) setInitialLoading(false);
       }
     };
-
     loadInitialData();
 
     return () => {
       isMounted.current = false;
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, [fetchBrands, getUserId]);
 
   // Handle search with debounce
   useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
-      setFilters({ search: searchQuery });
-    }, 500);
-
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => setFilters({ search: searchQuery }), 500);
     return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, [searchQuery, setFilters]);
 
-  // Refresh on focus - this will refresh the list when returning from AddBrandScreen
+  // Refresh on focus
   useFocusEffect(
     useCallback(() => {
       console.log("Brands screen focused - refreshing data");
       handleRefresh();
       return () => {};
-    }, []),
+    }, [])
   );
 
   const handleRefresh = async () => {
@@ -123,11 +131,59 @@ const BrandsScreen = () => {
   };
 
   const handleAddBrand = () => {
-    navigation.navigate("AddBrand", {});
+    setSelectedBrand(null);
+    setIsEditing(false);
+    setShowFormModal(true);
   };
 
   const handleEditBrand = (brand) => {
-    navigation.navigate("AddBrand", { brandId: brand.id, brand: brand });
+    setSelectedBrand(brand);
+    setIsEditing(true);
+    setShowFormModal(true);
+  };
+
+  const handleCancelForm = () => {
+    setShowFormModal(false);
+    setSelectedBrand(null);
+    setIsEditing(false);
+  };
+
+  const handleSubmitBrand = async (brandData) => {
+    setFormSubmitting(true);
+    try {
+      const userId = getUserId();
+      const payload = {
+        ...brandData,
+        user_id: userId,
+        created_by: userId,
+      };
+
+      if (isEditing && selectedBrand) {
+        const result = await updateBrand(selectedBrand.id, payload);
+        if (result) {
+          setSuccessMessage("Brand updated successfully");
+          setShowSuccessModal(true);
+          setTimeout(() => setShowSuccessModal(false), 2000);
+        }
+      } else {
+        const result = await createBrand(payload);
+        if (result) {
+          setSuccessMessage("Brand created successfully");
+          setShowSuccessModal(true);
+          setTimeout(() => setShowSuccessModal(false), 2000);
+        }
+      }
+
+      handleCancelForm();
+      await fetchBrands();
+    } catch (error) {
+      console.error("Submit error:", error);
+      setSuccessMessage(error.message || "An error occurred");
+      setShowSuccessModal(true);
+      setTimeout(() => setShowSuccessModal(false), 2000);
+    } finally {
+      setFormSubmitting(false);
+    }
   };
 
   // Delete brand function
@@ -138,7 +194,6 @@ const BrandsScreen = () => {
 
   const confirmDelete = async () => {
     if (!brandToDelete) return;
-    
     setDeleting(true);
     try {
       await deleteBrand(brandToDelete.id);
@@ -147,9 +202,7 @@ const BrandsScreen = () => {
       await fetchBrands();
       setSuccessMessage("Brand deleted successfully");
       setShowSuccessModal(true);
-      setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 2000);
+      setTimeout(() => setShowSuccessModal(false), 2000);
     } catch (error) {
       console.error('Delete error:', error);
     } finally {
@@ -180,79 +233,51 @@ const BrandsScreen = () => {
   // Calculate stats
   const safeBrands = Array.isArray(brands) ? brands : [];
   const totalBrandsCount = totalBrands || safeBrands.length;
-  const activeBrands = safeBrands.filter(
-    (b) => b.is_active === true || b.is_active === 1,
-  ).length;
+  const activeBrands = safeBrands.filter(b => b.is_active === true || b.is_active === 1).length;
 
   const latestUpdate = useMemo(() => {
     if (safeBrands.length === 0) return "N/A";
-    const dates = safeBrands.map((b) =>
-      b.updated_at ? new Date(b.updated_at).getTime() : 0,
-    );
-    const maxDate = new Date(Math.max(...dates));
-    return maxDate.toLocaleDateString();
+    const dates = safeBrands.map(b => b.updated_at ? new Date(b.updated_at).getTime() : 0);
+    return new Date(Math.max(...dates)).toLocaleDateString();
   }, [safeBrands]);
 
   const uniqueCreators = useMemo(() => {
     const creators = new Set();
-    safeBrands.forEach((b) => {
+    safeBrands.forEach(b => {
       if (b.created_by) creators.add(b.created_by);
       else if (b.user_id) creators.add(`User ${b.user_id}`);
     });
     return creators.size;
   }, [safeBrands]);
 
-  const navigationItems = useMemo(() => {
-    const badges = {
-      brands: totalBrandsCount.toString(),
-    };
-    return getNavigationItemsWithBadges(badges);
-  }, [totalBrandsCount]);
-
   if (initialLoading) {
     return (
       <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
-          Loading brands...
-        </Text>
+        <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>Loading brands...</Text>
       </View>
     );
   }
 
   return (
     <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} pb-16`}>
-      <StatusBar
-        barStyle={isDarkMode ? "light-content" : "dark-content"}
-        backgroundColor={isDarkMode ? "#111827" : "#ffffff"}
-      />
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
 
       <Header
         title="Brands"
         userName={user?.name || "User"}
         userEmail={user?.email || "guest@example.com"}
         activeScreen="Brands"
-        navigationItems={navigationItems}
+        navigationItems={menuItems}
         rightComponent={
           <View className="flex-row items-center">
-            <TouchableOpacity
-              onPress={toggleViewMode}
-              className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}
-            >
+            <TouchableOpacity onPress={toggleViewMode} className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
               <Icon name={viewMode === "grid" ? "view-grid" : "view-list"} size={22} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleRefresh}
-              className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}
-            >
+            <TouchableOpacity onPress={handleRefresh} className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
               <Icon name="refresh" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
             </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleAddBrand}
-              className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/30"
-            >
+            <TouchableOpacity onPress={handleAddBrand} className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/30">
               <Icon name="plus" size={24} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -280,24 +305,11 @@ const BrandsScreen = () => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={["#3b82f6"]}
-            tintColor={isDarkMode ? "#ffffff" : "#3b82f6"}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
       >
         {/* Stats Cards */}
         <View className="flex-row flex-wrap px-4 py-3">
-          <LinearGradient
-            colors={["#3b82f6", "#2563eb"]}
-            className="rounded-xl p-4 flex-1 mr-2"
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{borderRadius:8}}
-          >
+          <LinearGradient colors={["#3b82f6", "#2563eb"]} className="rounded-xl p-4 flex-1 mr-2" start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Text className="text-white/80 text-xs">Total Brands</Text>
             <Text className="text-white text-2xl font-bold">{totalBrandsCount}</Text>
             <View className="flex-row items-center mt-1">
@@ -374,11 +386,7 @@ const BrandsScreen = () => {
                 <TouchableOpacity
                   key={option.id}
                   onPress={() => setSortBy(option.id)}
-                  className={`flex-row items-center mr-2 px-4 py-2 rounded-full border ${
-                    sortBy === option.id
-                      ? "bg-blue-500 border-blue-500"
-                      : isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
-                  }`}
+                  className={`flex-row items-center mr-2 px-4 py-2 rounded-full border ${sortBy === option.id ? "bg-blue-500 border-blue-500" : isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}
                 >
                   <Icon name={option.icon} size={16} color={sortBy === option.id ? "#ffffff" : isDarkMode ? "#9CA3AF" : "#4b5563"} />
                   <Text className={`ml-2 text-sm ${sortBy === option.id ? "text-white" : isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
@@ -403,7 +411,31 @@ const BrandsScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Confirmation Modal */}
+      {/* Add/Edit Brand Modal */}
+      <Modal visible={showFormModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCancelForm}>
+        <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+          <View className={`px-4 pt-12 pb-4 flex-row items-center border-b ${isDarkMode ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
+            <TouchableOpacity onPress={handleCancelForm} className="p-2">
+              <Icon name="arrow-left" size={24} color={isDarkMode ? "#FFFFFF" : "#1F2937"} />
+            </TouchableOpacity>
+            <Text className={`flex-1 text-center text-lg font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}>
+              {isEditing ? "Edit Brand" : "Add New Brand"}
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <ScrollView className="flex-1 px-4 pt-4">
+            <BrandForm
+              initialData={selectedBrand}
+              mode={isEditing ? "edit" : "add"}
+              onSubmit={handleSubmitBrand}
+              onCancel={handleCancelForm}
+              isSubmitting={formSubmitting}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
       <ConfirmationModal
         visible={showDeleteConfirm}
         title="Delete Brand"
@@ -416,14 +448,8 @@ const BrandsScreen = () => {
         loading={deleting}
       />
 
-      {/* Success Modal - Only for delete operations */}
-      <SuccessModal
-        visible={showSuccessModal}
-        message={successMessage}
-        onClose={() => setShowSuccessModal(false)}
-        autoClose={true}
-        autoCloseDelay={2000}
-      />
+      {/* Success Modal */}
+      <SuccessModal visible={showSuccessModal} message={successMessage} onClose={() => setShowSuccessModal(false)} autoClose={true} autoCloseDelay={2000} />
 
       {/* Filters Modal */}
       <BrandFilters

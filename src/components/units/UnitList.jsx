@@ -1,3 +1,4 @@
+// components/units/UnitList.js
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -20,6 +21,7 @@ const UnitList = ({
   units = [],
   loading = false,
   onRefresh = () => {},
+  onEdit = () => {},
   onDelete = () => {},
 }) => {
   const navigation = useNavigation();
@@ -70,31 +72,6 @@ const UnitList = ({
     return filtered;
   }, [units, searchQuery, sortBy]);
 
-  // Statistics
-  const stats = useMemo(() => {
-    if (!Array.isArray(units)) return {
-      total: 0,
-    };
-    
-    return {
-      total: units.length,
-    };
-  }, [units]);
-
-  const handleUnitPress = (unit) => {
-    navigation.navigate("UnitDetail", { unitId: unit.id });
-  };
-
-  const handleDeleteUnit = async (unitId) => {
-    console.log('UnitList: Deleting unit:', unitId);
-    if (onDelete) {
-      const result = await onDelete(unitId);
-      console.log('UnitList: Delete result:', result);
-      return result;
-    }
-    return { success: false };
-  };
-
   const onRefreshLocal = async () => {
     console.log('UnitList: Refreshing...');
     setRefreshing(true);
@@ -125,7 +102,8 @@ const UnitList = ({
     <View key={item.id} className="w-[48%] mx-[1%] mb-3">
       <UnitCard 
         unit={item} 
-        onDelete={handleDeleteUnit}
+        onEdit={onEdit}
+        onDelete={onDelete}
       />
     </View>
   );
@@ -133,10 +111,11 @@ const UnitList = ({
   const renderListItem = (item) => (
     <TouchableOpacity
       key={item.id}
-      onPress={() => handleUnitPress(item)}
+      onPress={() => onEdit(item)}
       className={`flex-row rounded-xl mb-3 p-4 shadow-sm ${
         isDarkMode ? 'bg-gray-800' : 'bg-white'
       }`}
+      activeOpacity={0.7}
     >
       <View className="mr-3">
         <View className={`w-10 h-10 rounded-xl items-center justify-center ${
@@ -149,18 +128,13 @@ const UnitList = ({
       <View className="flex-1">
         <View className="flex-row justify-between items-start">
           <View className="flex-1">
-            <Text
-              className={`text-base font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-800'
-              }`}
-              numberOfLines={1}
-            >
+            <Text className={`text-base font-semibold ${
+              isDarkMode ? 'text-white' : 'text-gray-800'
+            }`} numberOfLines={1}>
               {item.code} - {item.name}
             </Text>
           </View>
-          <Text className={`text-xs ${
-            isDarkMode ? 'text-gray-500' : 'text-gray-400'
-          }`}>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
             #{item.id}
           </Text>
         </View>
@@ -175,13 +149,19 @@ const UnitList = ({
             </Text>
           </View>
           
-          <Text className={`text-xs ${
-            isDarkMode ? 'text-gray-500' : 'text-gray-400'
-          }`}>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
             {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
       </View>
+      
+      {/* Edit Button */}
+      <TouchableOpacity
+        onPress={() => onEdit(item)}
+        className="ml-2 p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30"
+      >
+        <Icon name="pencil" size={18} color="#3b82f6" />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
