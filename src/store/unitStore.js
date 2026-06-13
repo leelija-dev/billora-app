@@ -107,20 +107,55 @@ const useUnitStore = create((set, get) => ({
     }
   },
 
-  // Create unit
+  // Create unit - FIXED to handle API response that returns array of all units
   createUnit: async (unitData) => {
     console.log('📝 createUnit called with:', unitData);
     set({ loading: true, error: null });
 
     try {
       const response = await unitsAPI.create(unitData);
-      console.log('✅ Unit created successfully:', response.data);
+      console.log('✅ Unit creation API response:', response.data);
       
-      const newUnit = response?.data?.data || response?.data || response;
+      // The API returns an array of all units in response.data.data
+      // We need to find the newly created unit (the last one or by matching data)
+      let newUnit = null;
+      let allUnits = [];
       
-      await get().fetchUnits();
-      set({ loading: false });
-      return { success: true, data: newUnit };
+      // Extract all units from response
+      if (response?.data?.data && Array.isArray(response.data.data)) {
+        allUnits = response.data.data;
+        // The newly created unit is the last one in the array (most recent)
+        newUnit = allUnits[allUnits.length - 1];
+        console.log('📊 Extracted new unit from array (last item):', newUnit);
+      } else if (response?.data?.data && typeof response.data.data === 'object') {
+        newUnit = response.data.data;
+      } else if (response?.data) {
+        newUnit = response.data;
+      }
+      
+      // Check if we have a valid unit with id
+      if (newUnit && newUnit.id) {
+        console.log('✅ New unit extracted successfully:', newUnit);
+        
+        // Refresh the units list
+        await get().fetchUnits();
+        
+        set({ loading: false });
+        // Return success with the new unit data
+        return { 
+          success: true, 
+          data: newUnit 
+        };
+      } else {
+        console.error('❌ Could not extract new unit from response');
+        // Still refresh the list even if we can't extract the unit
+        await get().fetchUnits();
+        set({ loading: false });
+        return { 
+          success: true, 
+          data: { id: null, message: "Unit created but couldn't extract data" } 
+        };
+      }
     } catch (error) {
       console.error('❌ Failed to create unit:', error);
       set({
