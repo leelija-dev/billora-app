@@ -6,16 +6,12 @@
   <component name="ChangeListManager">
     <list default="true" id="f4f602c7-85e4-45b1-adc0-a611405c7b28" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/customers.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/customers.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/stores.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/stores.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/components/customers/CustomerCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/customers/CustomerCard.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/customers/CustomerForm.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/customers/CustomerForm.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/customers/CustomerList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/customers/CustomerList.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/customers/AddCustomerScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/customers/AddCustomerScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/customers/CustomerDetailScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/customers/CustomerDetailScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/stores/StoreCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/stores/StoreCard.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/stores/StoreForm.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/stores/StoreForm.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/screens/customers/CustomersScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/customers/CustomersScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/products/AddProductScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/products/AddProductScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/customerStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/customerStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/unitStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/unitStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/stores/StoresScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/stores/StoresScreen.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

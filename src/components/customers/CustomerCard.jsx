@@ -12,16 +12,15 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import useCustomerStore from "../../store/customerStore";
 import { useThemeStore } from "../../store/themeStore";
-import { ConfirmationModal, SuccessModal } from "../common/CustomModal";
+import { SuccessModal } from "../common/CustomModal";
 import PaymentModal from "./PaymentModal";
 
-const CustomerCard = ({ customer, onEdit, onDelete }) => {
+const CustomerCard = ({ customer, onEdit, onDelete, onPayment }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
   const { addDuePayment } = useCustomerStore();
   const [showActions, setShowActions] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -55,17 +54,17 @@ const CustomerCard = ({ customer, onEdit, onDelete }) => {
 
   const handleDeleteClick = () => {
     setShowActions(false);
-    setShowDeleteConfirm(true);
-  };
-
-  const handleConfirmDelete = () => {
-    setShowDeleteConfirm(false);
+    // Call onDelete directly - parent component will handle confirmation
     if (onDelete) onDelete(customer);
   };
 
   const handlePayment = () => {
     setShowActions(false);
-    setShowPaymentModal(true);
+    if (onPayment) {
+      onPayment(customer);
+    } else {
+      setShowPaymentModal(true);
+    }
   };
 
   const handlePaymentSubmit = async (amount) => {
@@ -233,48 +232,47 @@ const CustomerCard = ({ customer, onEdit, onDelete }) => {
           </View>
 
           {/* Action Buttons */}
-
           <View className="flex-row gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-  <TouchableOpacity
-    onPress={handleEdit}
-    className="flex-1 px-3 py-2 rounded-lg flex-row justify-center items-center bg-blue-100 dark:bg-blue-900/30"
-  >
-    <Icon name="pencil" size={14} color="#3b82f6" />
-    <Text className="text-blue-600 dark:text-blue-400 text-xs ml-1 font-medium">
-      Edit
-    </Text>
-  </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleEdit}
+              className="flex-1 px-3 py-2 rounded-lg flex-row justify-center items-center bg-blue-100 dark:bg-blue-900/30"
+            >
+              <Icon name="pencil" size={14} color="#3b82f6" />
+              <Text className="text-blue-600 dark:text-blue-400 text-xs ml-1 font-medium">
+                Edit
+              </Text>
+            </TouchableOpacity>
 
-  <TouchableOpacity
-    onPress={handleDeleteClick}
-    className="flex-1 px-3 py-2 rounded-lg flex-row justify-center items-center bg-red-100 dark:bg-red-900/30"
-  >
-    <Icon name="delete" size={14} color="#ef4444" />
-    <Text className="text-red-600 dark:text-red-400 text-xs ml-1 font-medium">
-      Delete
-    </Text>
-  </TouchableOpacity>
-</View>
-          <LinearGradient
-            colors={["#3b82f6", "#2563eb"]}
-            className="p-4"
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ borderRadius: 8 }}
-            className="mt-2"
-          >
-            {hasDue && (
+            <TouchableOpacity
+              onPress={handleDeleteClick}
+              className="flex-1 px-3 py-2 rounded-lg flex-row justify-center items-center bg-red-100 dark:bg-red-900/30"
+            >
+              <Icon name="delete" size={14} color="#ef4444" />
+              <Text className="text-red-600 dark:text-red-400 text-xs ml-1 font-medium">
+                Delete
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {hasDue && (
+            <LinearGradient
+              colors={["#3b82f6", "#2563eb"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 8 }}
+              className="mt-2"
+            >
               <TouchableOpacity
                 onPress={handlePayment}
-                className="px-3 py-1.5 rounded-lg flex-row  items-center justify-center  dark:bg-purple-900/30"
+                className="px-3 py-1.5 rounded-lg flex-row items-center justify-center"
               >
                 <Icon name="credit-card" size={14} color="white" />
-                <Text className="text-white dark:text-purple-400 text-xs ml-1 font-medium">
-                  Pay
+                <Text className="text-white text-xs ml-1 font-medium">
+                  Pay Now
                 </Text>
               </TouchableOpacity>
-            )}
-          </LinearGradient>
+            </LinearGradient>
+          )}
         </View>
       </TouchableOpacity>
 
@@ -402,18 +400,6 @@ const CustomerCard = ({ customer, onEdit, onDelete }) => {
         onSubmit={handlePaymentSubmit}
         loading={paymentProcessing}
         isDarkMode={isDarkMode}
-      />
-
-      {/* Delete Confirmation Modal */}
-      <ConfirmationModal
-        visible={showDeleteConfirm}
-        title="Delete Customer"
-        message={`Are you sure you want to delete "${name}"? This action cannot be undone.`}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-        confirmText="Delete"
-        cancelText="Cancel"
-        confirmButtonColor="#ef4444"
       />
 
       {/* Success Modal */}

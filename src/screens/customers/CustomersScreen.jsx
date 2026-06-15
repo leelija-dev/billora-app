@@ -363,7 +363,7 @@ const CustomersScreen = () => {
       >
         {/* Stats Cards */}
         <View className="flex-row flex-wrap px-4 py-3">
-          <LinearGradient colors={["#3b82f6", "#2563eb"]} className="rounded-xl p-4 flex-1 mr-2" start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <LinearGradient style={{borderRadius:8}} colors={["#3b82f6", "#2563eb"]} className="rounded-xl p-4 flex-1 mr-2" start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Text className="text-white/80 text-xs">Total Customers</Text>
             <Text className="text-white text-2xl font-bold">{totalCustomersCount}</Text>
             <View className="flex-row items-center mt-1">

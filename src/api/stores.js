@@ -1,104 +1,72 @@
-import { apiClient } from './client';
+// api/stores.js
+import apiClient from "./client";
 
 export const storesAPI = {
-  // Get all stores for a user
-  getAll: async (userId, params = {}) => {
+  // Get store/shop by user ID
+  getByUserId: async (userId, search = '') => {
     try {
+      const params = search ? { search } : {};
+      console.log('🏪 Fetching stores for user:', userId, 'params:', params);
       const response = await apiClient.get(`/store/${userId}`, { params });
-      console.log('Stores API Response:', response.data);
-      return response.data;
+      console.log('🏪 Stores fetched successfully');
+      return response;
     } catch (error) {
+      console.error('❌ Failed to fetch stores:', error);
       throw error.response?.data || error.message;
     }
   },
 
-  // Search stores
-  search: async (userId, query, params = {}) => {
-    try {
-      const api = apiClient;
-      const response = await api.get(`/store/${userId}`, {
-        params: { search: query, ...params }
-      });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
-  // Get single store
-  getById: async (id) => {
-    try {
-      const api = apiClient;
-      const response = await api.get(`/store/edit/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error('Get Store API error:', error.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  // Create new store
+  // Register/save store/shop
   create: async (storeData) => {
     try {
-      const api = apiClient;
-      
-      // Map frontend field names to API expected field names
-      const payload = {
-        user_id: storeData.userId || storeData.user_id,
-        name: storeData.name,
-        gst: storeData.gst || '',
-        email: storeData.email,
-        logo: storeData.logo || null,
-        mobile: storeData.mobile || '',
-        address: storeData.address,
-        city: storeData.city,
-        status: storeData.status ? 1 : 0,
-        created_by: storeData.createdBy || storeData.userId || storeData.user_id,
-      };
-      
-      console.log('Create Store API payload:', payload);
-      const response = await api.post('/store/store', payload);
-      return response.data;
+      console.log('🏪 Creating store with data:', storeData);
+      const response = await apiClient.post('/store/store', storeData);
+      console.log('🏪 Store created successfully');
+      return response;
     } catch (error) {
-      console.error('Create Store API error:', error.response?.data || error.message);
-      throw error;
+      console.error('❌ Failed to create store:', error);
+      throw error.response?.data || error.message;
     }
   },
 
-  // Update store
+  // Edit/show shop (GET method)
+  getEditData: async (userId) => {
+    try {
+      console.log('🏪 Fetching edit data for user:', userId);
+      const response = await apiClient.get(`/store/edit/${userId}`);
+      console.log('🏪 Edit data fetched successfully');
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to fetch edit data:', error);
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Update shop
   update: async (id, storeData) => {
     try {
-      const api = apiClient;
-      
-      // Map frontend field names to API expected field names
-      const payload = {
-        name: storeData.name,
-        gst: storeData.gst || '',
-        email: storeData.email,
-        logo: storeData.logo || null,
-        mobile: storeData.mobile || '',
-        address: storeData.address,
-        city: storeData.city,
-        status: storeData.status ? 1 : 0,
-      };
-      
-      console.log('Update Store API payload:', payload);
-      const response = await api.put(`/store/${id}`, payload);
-      return response.data;
+      console.log(`🏪 Updating store ${id} with data:`, storeData);
+      const response = await apiClient.put(`/store/${id}`, storeData);
+      console.log('🏪 Store updated successfully');
+      return response;
     } catch (error) {
-      console.error('Update Store API error:', error.response?.data || error.message);
-      throw error;
+      console.error(`❌ Failed to update store ${id}:`, error);
+      throw error.response?.data || error.message;
     }
   },
 
-  // Delete store
+  // Delete shop
   delete: async (id) => {
     try {
-      const api = apiClient;
-      const response = await api.delete(`/store/${id}`);
-      return response.data;
+      console.log(`🏪 Deleting store with ID: ${id}`);
+      const response = await apiClient.delete(`/store/${id}`);
+      console.log('🏪 Store deleted successfully');
+      return response;
     } catch (error) {
+      console.error(`❌ Failed to delete store ${id}:`, error);
       throw error.response?.data || error.message;
     }
   },
 };
+
+export default storesAPI;
