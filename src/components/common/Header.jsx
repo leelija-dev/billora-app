@@ -20,6 +20,7 @@ import { useThemeStore } from "../../store/themeStore";
 import { useAuthStore } from "../../store/authStore";
 import { usePermissionStore, MENU_ITEMS } from "../../store/permissionStore";
 
+
 const { width } = Dimensions.get("window");
 const DRAWER_WIDTH = width * 0.8;
 

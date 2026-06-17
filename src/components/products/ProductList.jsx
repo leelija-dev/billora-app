@@ -7,13 +7,22 @@ import {
   ScrollView,
   Image,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  Dimensions,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useThemeStore } from "../../store/themeStore";
+import { useAuthStore } from "../../store/authStore";
+import { stocksAPI } from "../../api/stocks";
+import Toast from "react-native-toast-message";
 import ProductCard from "./ProductCard";
 import useProductStore from "../../store/productStore";
+
+const { width } = Dimensions.get("window");
 
 const ProductList = ({
   viewMode = "grid",
@@ -23,16 +32,25 @@ const ProductList = ({
   loading: externalLoading = false,
   onEdit,
   onDelete,
+  onStockUpdate,
 }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
-  const { getProductTotalStock, getProductStocks } = useProductStore();
+  const { user } = useAuthStore();
+  const { getProductTotalStock, getProductStocks, fetchProducts, currentPage } = useProductStore();
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  
+  // Stock modal states
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [stockQuantity, setStockQuantity] = useState("");
+  const [addingStock, setAddingStock] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 500,
+      duration: 600,
       useNativeDriver: true,
     }).start();
   }, []);
@@ -56,6 +74,18 @@ const ProductList = ({
   const filteredProducts = useMemo(() => {
     let filtered = [...products];
 
+    if (selectedFilter === "lowStock") {
+      filtered = filtered.filter((p) => {
+        const stock = getProductTotalStock(p);
+        const minStock = safeNumber(p.minimum_stock_quantity || p.reorder_level || 10);
+        return stock <= minStock && stock > 0;
+      });
+    } else if (selectedFilter === "outOfStock") {
+      filtered = filtered.filter((p) => getProductTotalStock(p) === 0);
+    } else if (selectedFilter === "inStock") {
+      filtered = filtered.filter((p) => getProductTotalStock(p) > 0);
+    }
+
     if (category !== "all") {
       filtered = filtered.filter(
         (p) => p.category?.name?.toLowerCase() === category.toLowerCase(),
@@ -74,7 +104,7 @@ const ProductList = ({
     }
 
     return filtered;
-  }, [products, category, searchQuery]);
+  }, [products, category, searchQuery, selectedFilter]);
 
   const stats = useMemo(() => {
     const totalStock = products.reduce((sum, p) => sum + getProductTotalStock(p), 0);
@@ -84,12 +114,14 @@ const ProductList = ({
       return stock <= minStock && stock > 0;
     }).length;
     const outOfStockCount = products.filter((p) => getProductTotalStock(p) === 0).length;
+    const inStockCount = products.length - lowStockCount - outOfStockCount;
 
     return {
       total: products.length,
       totalStock,
       lowStock: lowStockCount,
       outOfStock: outOfStockCount,
+      inStock: inStockCount,
     };
   }, [products]);
 
@@ -111,33 +143,128 @@ const ProductList = ({
     }
   };
 
+  const handleAddStock = (product) => {
+    setSelectedProduct(product);
+    setShowStockModal(true);
+    setStockQuantity("");
+  };
+
+  const handleSubmitStock = async () => {
+    if (!selectedProduct) return;
+    
+    const quantity = parseFloat(stockQuantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Please enter a valid quantity' });
+      return;
+    }
+
+    setAddingStock(true);
+    try {
+      const stocksList = getProductStocks(selectedProduct);
+      const primaryStock = stocksList[0];
+      
+      if (!primaryStock) {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'No stock record found for this product' });
+        return;
+      }
+
+      await stocksAPI.addStock(primaryStock.id, user?.id, quantity);
+      
+      Toast.show({ 
+        type: 'success', 
+        text1: 'Success', 
+        text2: `Added ${quantity} ${selectedProduct.unit?.name || 'units'} to ${selectedProduct.name}` 
+      });
+      
+      setShowStockModal(false);
+      setStockQuantity("");
+      setSelectedProduct(null);
+      
+      // Refresh products to get updated stock data
+      await fetchProducts(currentPage, true);
+      
+      if (onStockUpdate) {
+        onStockUpdate();
+      }
+    } catch (error) {
+      console.error("Error adding stock:", error);
+      Toast.show({ type: 'error', text1: 'Error', text2: error.message || 'Failed to add stock' });
+    } finally {
+      setAddingStock(false);
+    }
+  };
+
+  // Get button colors based on stock situation (matching ProductCard)
+  const getStockButtonColors = (product) => {
+    const totalStock = getProductTotalStock(product);
+    const minStock = safeNumber(product.minimum_stock_quantity || product.reorder_level || 10);
+    const isOutOfStock = totalStock === 0;
+    const isLowStock = totalStock <= minStock && totalStock > 0;
+    
+    if (isOutOfStock) {
+      return {
+        bg: isDarkMode ? 'bg-orange-900/30' : 'bg-orange-100',
+        textColor: isDarkMode ? 'text-orange-400' : 'text-orange-600',
+        iconColor: "#F97316",
+        buttonBg: "#F97316",
+        label: "Add Stock"
+      };
+    } else if (isLowStock) {
+      return {
+        bg: isDarkMode ? 'bg-yellow-900/30' : 'bg-yellow-100',
+        textColor: isDarkMode ? 'text-yellow-400' : 'text-yellow-600',
+        iconColor: "#EAB308",
+        buttonBg: "#EAB308",
+        label: "Add Stock"
+      };
+    } else {
+      return {
+        bg: isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-100',
+        textColor: isDarkMode ? 'text-emerald-400' : 'text-emerald-600',
+        iconColor: "#10B981",
+        buttonBg: "#10B981",
+        label: "Add Stock"
+      };
+    }
+  };
+
   const renderHeader = () => (
-    <Animated.View style={{ opacity: fadeAnim, marginBottom: 16 }}>
-      <View className="flex-row justify-between items-center mb-3">
-        <Text className={isDarkMode ? 'text-gray-400' : 'text-gray-600'}>
-          {filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"} found
+    <Animated.View style={{ opacity: fadeAnim }} className="mb-5">
+      {/* Stats Row */}
+      <View className="flex-row justify-between items-center mb-4">
+        <Text className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          {filteredProducts.length} of {stats.total} products
         </Text>
         <View className={`flex-row items-center px-3 py-1.5 rounded-full shadow-sm ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
         }`}>
-          <Icon name="package-variant" size={16} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
-          <Text className={`text-sm ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            {stats.total} total
+          <Icon name="package-variant" size={16} color={isDarkMode ? "#60A5FA" : "#3B82F6"} />
+          <Text className={`text-sm font-semibold ml-1.5 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+            {stats.totalStock} units
           </Text>
         </View>
       </View>
+
+      
     </Animated.View>
   );
 
-  const renderGridItem = (item) => (
-    <View key={item.id} className="w-[48%] mx-[1%] mb-3">
-      <ProductCard 
-        product={item} 
-        onEdit={() => handleEditProduct(item)}
-        onDelete={() => handleDeleteProduct(item.id)}
-      />
-    </View>
-  );
+  const renderGridItem = (item) => {
+    const totalStock = getProductTotalStock(item);
+    const isLowStock = totalStock <= safeNumber(item.minimum_stock_quantity || item.reorder_level || 10) && totalStock > 0;
+    const isOutOfStock = totalStock === 0;
+
+    return (
+      <View key={item.id} className="w-[48%] mx-[1%] mb-4">
+        <ProductCard 
+          product={item} 
+          onEdit={() => handleEditProduct(item)}
+          onDelete={() => handleDeleteProduct(item.id)}
+          onAddStock={() => handleAddStock(item)}
+        />
+      </View>
+    );
+  };
 
   const renderListItem = (item) => {
     const totalStock = getProductTotalStock(item);
@@ -145,101 +272,147 @@ const ProductList = ({
     const minStock = safeNumber(item.minimum_stock_quantity || item.reorder_level || 10);
     const sellingPrice = safeNumber(item.selling_price);
     const purchasePrice = safeNumber(item.purchase_price);
+    const discount = safeNumber(item.discount_percentage);
+    const gst = safeNumber(item.gst_percentage);
     
     const isLowStock = totalStock <= minStock && totalStock > 0;
     const isOutOfStock = totalStock === 0;
     
-    const getStockColor = () => {
-      if (isOutOfStock) return "text-red-600";
-      if (isLowStock) return "text-orange-600";
-      return "text-green-600";
+    const getStockStatus = () => {
+      if (isOutOfStock) return { label: "Out of Stock", color: "#EF4444", bg: isDarkMode ? "#7F1D1D" : "#FEE2E2", textColor: isDarkMode ? "#FCA5A5" : "#DC2626" };
+      if (isLowStock) return { label: "Low Stock", color: "#F59E0B", bg: isDarkMode ? "#78350F" : "#FEF3C7", textColor: isDarkMode ? "#FBBF24" : "#D97706" };
+      return { label: "In Stock", color: "#10B981", bg: isDarkMode ? "#064E3B" : "#D1FAE5", textColor: isDarkMode ? "#34D399" : "#059669" };
     };
-    
-    const getStockBg = () => {
-      if (isOutOfStock) return isDarkMode ? 'bg-red-900/30' : 'bg-red-100';
-      if (isLowStock) return isDarkMode ? 'bg-orange-900/30' : 'bg-orange-100';
-      return isDarkMode ? 'bg-green-900/30' : 'bg-green-100';
-    };
+
+    const stockStatus = getStockStatus();
+    const buttonColors = getStockButtonColors(item);
 
     return (
       <TouchableOpacity
         key={item.id}
         onPress={() => handleProductPress(item)}
-        className={`flex-row rounded-xl mb-3 p-3 shadow-sm ${
+        activeOpacity={0.7}
+        className={`flex-row rounded-2xl mb-4 p-4 shadow-lg ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
         }`}
+        style={{
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDarkMode ? 0.3 : 0.08,
+          shadowRadius: 8,
+          elevation: 4,
+        }}
       >
-        <Image
-          source={{ uri: item.image || 'https://via.placeholder.com/80' }}
-          className="w-20 h-20 rounded-lg"
-          resizeMode="cover"
-        />
-        <View className="flex-1 ml-3">
+        {/* Product Image */}
+        <View className="relative">
+          {item.image ? (
+            <Image
+              source={{ uri: item.image }}
+              className="w-24 h-24 rounded-xl"
+              resizeMode="cover"
+            />
+          ) : (
+            <LinearGradient
+              colors={isDarkMode ? ["#374151", "#1F2937"] : ["#F3F4F6", "#E5E7EB"]}
+              className="w-24 h-24 rounded-xl items-center justify-center"
+            >
+              <Icon name="package-variant" size={32} color={isDarkMode ? "#6B7280" : "#9CA3AF"} />
+            </LinearGradient>
+          )}
+          
+          {/* Discount Badge */}
+          {discount > 0 && (
+            <View className="absolute -top-2 -left-2 bg-red-500 rounded-full px-2 py-1 shadow-md">
+              <Text className="text-white text-xs font-bold">-{discount}%</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Product Details */}
+        <View className="flex-1 ml-4">
+          {/* Header Row */}
           <View className="flex-row justify-between items-start">
             <View className="flex-1">
-              <Text className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+              <Text className={`text-[10px] font-mono mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                 {item.sku || "N/A"}
               </Text>
               <Text
-                className={`text-base font-semibold ${
+                className={`text-base font-bold leading-5 ${
                   isDarkMode ? 'text-white' : 'text-gray-800'
                 }`}
-                numberOfLines={1}
+                numberOfLines={2}
               >
                 {item.name}
               </Text>
             </View>
           </View>
 
-          <View className="flex-row items-center mt-1">
-            <Icon name="tag" size={12} color="#9ca3af" />
-            <Text className={`text-xs ml-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-              {item.category?.name || 'No Category'}
-            </Text>
-            <Text className={`text-xs mx-2 ${isDarkMode ? 'text-gray-700' : 'text-gray-300'}`}>•</Text>
-            <Icon name="factory" size={12} color="#9ca3af" />
-            <Text className={`text-xs ml-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-              {item.brand?.name || 'No Brand'}
-            </Text>
+          {/* Category & Brand */}
+          <View className="flex-row items-center mt-2 flex-wrap gap-2">
+            {item.category?.name && (
+              <View className={`flex-row items-center px-2 py-1 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <Icon name="tag-outline" size={12} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
+                <Text className={`text-xs ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {item.category.name}
+                </Text>
+              </View>
+            )}
+            {item.brand?.name && (
+              <View className={`flex-row items-center px-2 py-1 rounded-md ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <Icon name="factory" size={12} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
+                <Text className={`text-xs ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {item.brand.name}
+                </Text>
+              </View>
+            )}
           </View>
 
-          <View className="flex-row justify-between items-center mt-2">
+          {/* Price & Stock */}
+          <View className="flex-row justify-between items-end mt-3">
             <View>
-              <Text className="text-lg font-bold text-blue-600">
-                ₹{formatCurrency(sellingPrice)}
-              </Text>
-              {purchasePrice > 0 && (
-                <Text className={`text-xs ${isDarkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                  Cost: ₹{formatCurrency(purchasePrice)}
+              <View className="flex-row items-baseline gap-2">
+                <Text className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  ₹{formatCurrency(sellingPrice)}
+                </Text>
+                {purchasePrice > 0 && purchasePrice !== sellingPrice && (
+                  <Text className={`text-xs line-through ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    ₹{formatCurrency(purchasePrice)}
+                  </Text>
+                )}
+              </View>
+              {gst > 0 && (
+                <Text className={`text-[10px] ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  GST: {gst}%
                 </Text>
               )}
             </View>
 
-            <View className="flex-row items-center">
-              <View className={`px-2 py-1 rounded-full ${getStockBg()}`}>
-                <Text className={`text-xs font-medium ${getStockColor()}`}>
-                  {totalStock} in stock
-                </Text>
-              </View>
+            <View className={`px-2.5 py-1 rounded-lg ${stockStatus.bg}`}>
+              <Text className={`text-xs font-semibold ${stockStatus.textColor}`}>
+                {stockStatus.label} • {totalStock} units
+              </Text>
             </View>
           </View>
 
-          {/* Stock breakdown - Like desktop */}
+          {/* Stock Breakdown */}
           {stocksList.length > 1 && (
-            <View className="mt-1">
-              <View className="flex-row flex-wrap">
+            <View className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+              <Text className={`text-[10px] font-medium mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                Stock by Unit:
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
                 {stocksList.slice(0, 2).map((stock, idx) => (
-                  <View key={idx} className="flex-row items-center mr-3">
-                    <Text className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <View key={idx} className={`flex-row items-center px-2 py-0.5 rounded-md ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                    <Text className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       {stock.unit?.name || `Unit ${stock.unit_id}`}:
                     </Text>
-                    <Text className={`text-xs font-medium ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    <Text className={`text-[10px] font-semibold ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                       {parseFloat(stock.quantity).toFixed(2)}
                     </Text>
                   </View>
                 ))}
                 {stocksList.length > 2 && (
-                  <Text className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  <Text className={`text-[10px] ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     +{stocksList.length - 2} more
                   </Text>
                 )}
@@ -247,21 +420,35 @@ const ProductList = ({
             </View>
           )}
           
-          {/* Action Buttons for List View */}
-          <View className="flex-row justify-end mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+          {/* Action Buttons - Colors based on stock situation */}
+          <View className="flex-row justify-end gap-3 mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+            {/* Add Stock Button - Color changes based on stock status */}
+            <TouchableOpacity
+              onPress={() => handleAddStock(item)}
+              className={`flex-row items-center px-3 py-1.5 rounded-lg ${buttonColors.bg}`}
+            >
+              <Icon name="plus-circle" size={14} color={buttonColors.iconColor} />
+              <Text className={`text-xs font-medium ml-1 ${buttonColors.textColor}`}>
+                {buttonColors.label}
+              </Text>
+            </TouchableOpacity>
+            
+            {/* Edit Button - Always Blue */}
             <TouchableOpacity
               onPress={() => handleEditProduct(item)}
-              className="flex-row items-center mr-4 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg"
+              className="flex-row items-center px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30"
             >
-              <Icon name="pencil" size={16} color="#3b82f6" />
-              <Text className="text-blue-600 dark:text-blue-400 text-xs ml-1">Edit</Text>
+              <Icon name="pencil" size={14} color="#3B82F6" />
+              <Text className="text-blue-600 dark:text-blue-400 text-xs font-medium ml-1">Edit</Text>
             </TouchableOpacity>
+            
+            {/* Delete Button - Always Red */}
             <TouchableOpacity
               onPress={() => handleDeleteProduct(item.id)}
-              className="flex-row items-center px-3 py-1.5 bg-red-100 dark:bg-red-900/30 rounded-lg"
+              className="flex-row items-center px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30"
             >
-              <Icon name="delete" size={16} color="#ef4444" />
-              <Text className="text-red-600 dark:text-red-400 text-xs ml-1">Delete</Text>
+              <Icon name="delete" size={14} color="#EF4444" />
+              <Text className="text-red-600 dark:text-red-400 text-xs font-medium ml-1">Delete</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -282,11 +469,105 @@ const ProductList = ({
     return rows;
   };
 
+  const renderStockModal = () => (
+    <Modal
+      visible={showStockModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowStockModal(false)}
+    >
+      <TouchableOpacity
+        className="flex-1 bg-black/60 justify-center items-center px-4"
+        activeOpacity={1}
+        onPress={() => setShowStockModal(false)}
+      >
+        <View className={`rounded-2xl w-full ${isDarkMode ? 'bg-gray-800' : 'bg-white'} overflow-hidden shadow-xl`}>
+          <LinearGradient
+            colors={isDarkMode ? ["#1F2937", "#111827"] : ["#F9FAFB", "#FFFFFF"]}
+            className="p-4 border-b border-gray-200 dark:border-gray-700"
+          >
+            <Text className={`text-lg font-semibold text-center ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              Add Stock
+            </Text>
+            <Text className={`text-xs text-center mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              {selectedProduct?.name}
+            </Text>
+          </LinearGradient>
+
+          <View className="p-4">
+            <View className={`p-3 rounded-lg mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+              <View className="flex-row justify-between items-center mb-2">
+                <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Current Stock:
+                </Text>
+                <Text className={`text-lg font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                  {getProductTotalStock(selectedProduct)} {selectedProduct?.unit?.name || 'units'}
+                </Text>
+              </View>
+              {selectedProduct?.minimum_stock_quantity && (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Minimum Stock Level:
+                  </Text>
+                  <Text className={`text-xs font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                    {selectedProduct.minimum_stock_quantity} {selectedProduct?.unit?.name || 'units'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Quantity to Add *
+            </Text>
+            <TextInput
+              className={`border rounded-xl px-4 py-3 text-base ${
+                isDarkMode 
+                  ? 'border-gray-600 text-white bg-gray-700' 
+                  : 'border-gray-300 text-gray-800 bg-gray-50'
+              }`}
+              placeholder="Enter quantity"
+              placeholderTextColor={isDarkMode ? '#9CA3AF' : '#9ca3af'}
+              keyboardType="numeric"
+              value={stockQuantity}
+              onChangeText={setStockQuantity}
+              autoFocus
+            />
+
+            <View className="flex-row justify-end gap-3 mt-6">
+              <TouchableOpacity
+                onPress={() => setShowStockModal(false)}
+                className={`px-4 py-2 rounded-lg border ${
+                  isDarkMode ? 'border-gray-600' : 'border-gray-300'
+                }`}
+              >
+                <Text className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSubmitStock}
+                disabled={addingStock}
+                className="bg-emerald-500 px-6 py-2 rounded-lg flex-row items-center shadow-md"
+              >
+                {addingStock ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Icon name="check" size={18} color="#fff" />
+                    <Text className="text-white ml-2 font-semibold">Add Stock</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center py-12">
-        <ActivityIndicator size="large" color="#3b82f6" />
-        <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+      <View className="flex-1 justify-center items-center py-20">
+        <ActivityIndicator size="large" color="#3B82F6" />
+        <Text className={`mt-4 text-base ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
           Loading products...
         </Text>
       </View>
@@ -297,13 +578,18 @@ const ProductList = ({
     return (
       <View className="flex-1">
         {renderHeader()}
-        <View className="items-center justify-center py-16">
-          <Icon name="package-variant" size={80} color="#d1d5db" />
-          <Text className={`text-lg font-semibold mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        <View className="items-center justify-center py-20">
+          <LinearGradient
+            colors={isDarkMode ? ["#1F2937", "#111827"] : ["#F9FAFB", "#F3F4F6"]}
+            className="w-32 h-32 rounded-full items-center justify-center"
+          >
+            <Icon name="package-variant" size={48} color={isDarkMode ? "#4B5563" : "#9CA3AF"} />
+          </LinearGradient>
+          <Text className={`text-xl font-bold mt-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
             No Products Found
           </Text>
           <Text className={`text-sm text-center mt-2 px-8 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-            {searchQuery || category !== "all"
+            {searchQuery || selectedFilter !== "all"
               ? "Try adjusting your search or filters"
               : "Tap the + button to add your first product"}
           </Text>
@@ -315,13 +601,15 @@ const ProductList = ({
   return (
     <View className="flex-1">
       {renderHeader()}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View className="pb-4">
-          {viewMode === "grid" 
-            ? renderGridItems() 
-            : filteredProducts.map(item => renderListItem(item))}
-        </View>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      >
+        {viewMode === "grid" 
+          ? renderGridItems() 
+          : filteredProducts.map(item => renderListItem(item))}
       </ScrollView>
+      {renderStockModal()}
     </View>
   );
 };

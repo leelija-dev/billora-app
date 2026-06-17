@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../../store/authStore';
 import useDeletedProductStore from '../../store/deletedProductStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -31,6 +30,7 @@ const DeletedProductsScreen = () => {
     restoreProduct,
     forceDeleteProduct,
     bulkForceDeleteProducts,
+    setCurrentUserId,
   } = useDeletedProductStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,6 +43,13 @@ const DeletedProductsScreen = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  // Set current user ID in store
+  useEffect(() => {
+    if (user?.id) {
+      setCurrentUserId(user.id);
+    }
+  }, [user?.id]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -70,68 +77,122 @@ const DeletedProductsScreen = () => {
     setRefreshing(false);
   };
 
-  const handleRestore = (product) => {
+  // Function to handle restore button click
+  const handleRestorePress = (product) => {
     setSelectedProduct(product);
     setShowRestoreConfirm(true);
   };
 
-  const confirmRestore = async () => {
-    if (!selectedProduct) return;
-    setUpdating(true);
-    try {
-      await restoreProduct(selectedProduct.id);
-      setShowRestoreConfirm(false);
-      setSelectedProduct(null);
-      setSuccessMessage('Product restored successfully');
-      setShowSuccessModal(true);
-      setTimeout(() => setShowSuccessModal(false), 2000);
-    } catch (error) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to restore product' });
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleForceDelete = (product) => {
+  // Function to handle force delete button click
+  const handleForceDeletePress = (product) => {
     setSelectedProduct(product);
     setShowDeleteConfirm(true);
   };
 
-  const confirmForceDelete = async () => {
+  // Confirm restore action
+  const confirmRestore = async () => {
     if (!selectedProduct) return;
     setUpdating(true);
     try {
-      await forceDeleteProduct(selectedProduct.id);
-      setShowDeleteConfirm(false);
-      setSelectedProduct(null);
-      setSuccessMessage('Product permanently deleted');
-      setShowSuccessModal(true);
-      setTimeout(() => setShowSuccessModal(false), 2000);
+      const result = await restoreProduct(selectedProduct.id);
+      if (result.success) {
+        setShowRestoreConfirm(false);
+        setSelectedProduct(null);
+        setSuccessMessage('Product restored successfully');
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 2000);
+        // Refresh the list
+        if (user?.id) {
+          await fetchDeletedProducts(user.id, searchTerm);
+        }
+      } else {
+        Toast.show({ 
+          type: 'error', 
+          text1: 'Error', 
+          text2: result.error || 'Failed to restore product' 
+        });
+      }
     } catch (error) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to permanently delete product' });
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Error', 
+        text2: 'Failed to restore product' 
+      });
     } finally {
       setUpdating(false);
     }
   };
 
+  // Confirm force delete action
+  const confirmForceDelete = async () => {
+    if (!selectedProduct) return;
+    setUpdating(true);
+    try {
+      const result = await forceDeleteProduct(selectedProduct.id);
+      if (result.success) {
+        setShowDeleteConfirm(false);
+        setSelectedProduct(null);
+        setSuccessMessage('Product permanently deleted');
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 2000);
+        // Refresh the list
+        if (user?.id) {
+          await fetchDeletedProducts(user.id, searchTerm);
+        }
+      } else {
+        Toast.show({ 
+          type: 'error', 
+          text1: 'Error', 
+          text2: result.error || 'Failed to permanently delete product' 
+        });
+      }
+    } catch (error) {
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Error', 
+        text2: 'Failed to permanently delete product' 
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Handle bulk force delete
   const handleBulkForceDelete = () => {
     if (selectedProducts.length > 0) {
       setShowBulkDeleteConfirm(true);
     }
   };
 
+  // Confirm bulk force delete
   const confirmBulkForceDelete = async () => {
     if (selectedProducts.length === 0) return;
     setUpdating(true);
     try {
-      await bulkForceDeleteProducts(selectedProducts);
-      setSelectedProducts([]);
-      setShowBulkDeleteConfirm(false);
-      setSuccessMessage(`${selectedProducts.length} products permanently deleted`);
-      setShowSuccessModal(true);
-      setTimeout(() => setShowSuccessModal(false), 2000);
+      const result = await bulkForceDeleteProducts(selectedProducts);
+      if (result.success) {
+        setSelectedProducts([]);
+        setShowBulkDeleteConfirm(false);
+        setSuccessMessage(`${selectedProducts.length} products permanently deleted`);
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 2000);
+        // Refresh the list
+        if (user?.id) {
+          await fetchDeletedProducts(user.id, searchTerm);
+        }
+      } else {
+        Toast.show({ 
+          type: 'error', 
+          text1: 'Error', 
+          text2: result.error || 'Failed to permanently delete products' 
+        });
+      }
     } catch (error) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to permanently delete products' });
+      Toast.show({ 
+        type: 'error', 
+        text1: 'Error', 
+        text2: 'Failed to permanently delete products' 
+      });
     } finally {
       setUpdating(false);
     }
@@ -165,6 +226,7 @@ const DeletedProductsScreen = () => {
     });
   };
 
+  // Product Card Component
   const ProductCard = ({ product, isSelected, onSelect, onRestore, onForceDelete }) => (
     <View className={`rounded-2xl p-4 mb-3 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
       <View className="flex-row">
@@ -290,8 +352,8 @@ const DeletedProductsScreen = () => {
                 product={product}
                 isSelected={selectedProducts.includes(product.id)}
                 onSelect={toggleProductSelection}
-                onRestore={handleRestore}
-                onForceDelete={handleForceDelete}
+                onRestore={handleRestorePress}
+                onForceDelete={handleForceDeletePress}
               />
             ))}
             <View className="py-4 items-center">

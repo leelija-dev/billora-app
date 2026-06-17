@@ -9,7 +9,7 @@ export const useThemeStore = create(
       isDarkMode: false,
       systemTheme: true, // Default to system theme
       
-      toggleDarkMode: () => set((state) => ({ 
+      toggleTheme: () => set((state) => ({ 
         isDarkMode: !state.isDarkMode,
         systemTheme: false 
       })),

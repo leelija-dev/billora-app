@@ -4,7 +4,8 @@ import { useThemeStore } from "../../../store/themeStore";
 import StackHeader from "../StackHeader";
 import ProductsScreen from "../../../screens/products/ProductsScreen";
 import AddProductScreen from "../../../screens/products/AddProductScreen";
-import ProductDetailScreen from "../../../screens/products/ProductDetailScreen";
+import DeletedProductsScreen from "../../../screens/products/DeletedProductsScreen";
+
 
 const Stack = createNativeStackNavigator();
 
@@ -33,12 +34,13 @@ const ProductsStackNavigator = () => {
         })}
       />
       <Stack.Screen 
-        name="ProductDetail" 
-        component={ProductDetailScreen} 
+        name="DeletedProduct" 
+        component={DeletedProductsScreen} 
         options={({ navigation }) => ({
-          header: () => <StackHeader title="Product Details" navigation={navigation} />,
+          header: () => <StackHeader title="Deleted Product" navigation={navigation} />,
         })}
       />
+      
     </Stack.Navigator>
   );
 };

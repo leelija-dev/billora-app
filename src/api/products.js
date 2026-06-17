@@ -1,3 +1,4 @@
+// api/products.js
 import apiClient from './client';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -26,6 +27,26 @@ export const productsAPI = {
       return response;
     } catch (error) {
       console.error("❌ Failed to fetch products:", error);
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get products by URL (for pagination)
+  getByUrl: async (url) => {
+    try {
+      console.log("📦 Fetching products by URL:", url);
+      // If url is a full URL, extract the path
+      let path = url;
+      if (url.startsWith('http')) {
+        // Remove base URL to get relative path
+        const baseUrl = apiClient.defaults.baseURL || '';
+        path = url.replace(baseUrl, '');
+      }
+      const response = await apiClient.get(path);
+      console.log("📦 Products fetched by URL successfully:", response.data);
+      return response;
+    } catch (error) {
+      console.error("❌ Failed to fetch products by URL:", error);
       throw error.response?.data || error.message;
     }
   },

@@ -1,3 +1,6 @@
+import { SafeAreaView, Text } from "react-native";
+import { useThemeStore } from "../../store/themeStore";
+
 export default function NotificationSettingsScreen() {
   const { isDarkMode } = useThemeStore();
   return (

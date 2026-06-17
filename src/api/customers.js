@@ -16,6 +16,58 @@ export const customersAPI = {
       throw error.response?.data || error.message;
     }
   },
+   // Get due customers (like web version)
+  getDueCustomers: async (userId, search = "", page = 1) => {
+    try {
+      console.log("💰 Fetching due customers for user:", userId);
+      const response = await apiClient.get(`/customer/${userId}`, {
+        params: {
+          dueCustomer: 1,
+          search: search || undefined,
+          page: page,
+          per_page: 15,
+        },
+      });
+      console.log("💰 Due customers fetched:", response.data);
+      return response;
+    } catch (error) {
+      console.error("❌ Failed to fetch due customers:", error);
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get customers by city (customers who have city information)
+  getCustomersByCity: async (userId, search = "", page = 1) => {
+    try {
+      console.log("🏙️ Fetching customers with city information");
+      const response = await apiClient.get(`/customer/${userId}`, {
+        params: {
+          city: 1, // Pass 1 to get customers with city
+          search: search || undefined,
+          page: page,
+          per_page: 15,
+        },
+      });
+      console.log("🏙️ Customers with city fetched:", response.data);
+      return response;
+    } catch (error) {
+      console.error("❌ Failed to fetch customers with city:", error);
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get unique cities (non-null cities from customers)
+  getUniqueCities: async (userId) => {
+    try {
+      console.log("🏙️ Fetching unique cities for user:", userId);
+      const response = await apiClient.get(`/customer/${userId}/cities`);
+      console.log("🏙️ Unique cities fetched:", response.data);
+      return response;
+    } catch (error) {
+      console.error("❌ Failed to fetch unique cities:", error);
+      throw error.response?.data || error.message;
+    }
+  },
 
   // Get single customer
   getById: async (id) => {

@@ -395,6 +395,7 @@ const DashboardScreen = () => {
           colors={["#6366F1", "#8B5CF6"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
+          style={{borderRadius:14}}
           className="mx-4 mt-4 p-5 rounded-3xl"
         >
           <View className="flex-row justify-between items-center">

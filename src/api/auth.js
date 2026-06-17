@@ -1,10 +1,14 @@
 // api/auth.js
-import apiClient from './client';
+import apiClient from "./client";
 
 export const authAPI = {
   login: async (email, password) => {
     try {
-      const response = await apiClient.post("/users/login", { email, password });
+      const response = await apiClient.post("/users/login", {
+        email,
+        password,
+      });
+      // console.log("response checking login", response);
       return response;
     } catch (error) {
       throw error.response?.data || error.message;

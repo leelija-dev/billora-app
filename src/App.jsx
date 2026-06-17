@@ -10,6 +10,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import Sidebar from "./components/navigation/SideBar.jsx";
 import { ThemeProvider, useTheme } from "./components/ThemeProvider";
 import "./global.css";
+import { navigationRef } from "./services/navigationService";
 import { useAuthStore } from "./store/authStore";
 
 // Import screens
@@ -349,7 +350,7 @@ const AppContent = () => {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <StatusBar style="auto" />
       {isAuthenticated ? <MainNavigator /> : <AuthStackNavigator />}
     </NavigationContainer>

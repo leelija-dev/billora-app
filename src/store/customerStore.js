@@ -23,10 +23,221 @@ const useCustomerStore = create((set, get) => ({
     city: "",
     dueStatus: "all",
   },
+  
+  // New filter states (like web version)
+  activeFilterType: "all", // 'all', 'due', 'city'
+  filteredCustomers: [],
+  filteredTotal: 0,
+  availableCities: [],
+  citiesLoading: false,
+  selectedCity: "",
 
-  // Fetch customers
+  // Fetch due customers (like web version)
+  fetchDueCustomers: async (search = "", page = 1) => {
+    console.log("💰 fetchDueCustomers called with search:", search, "page:", page);
+    set({ loading: true, error: null, activeFilterType: "due" });
+
+    try {
+      const { user } = useAuthStore.getState();
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await customersAPI.getDueCustomers(user.id, search, page);
+      console.log("📦 Due Customers API Response:", response);
+
+      let customersArray = [];
+      let total = 0;
+      let paginationData = {};
+
+      // Handle nested response structure (same as web version)
+      if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+        customersArray = response.data.data.data;
+        total = response.data.data.total || customersArray.length;
+        paginationData = response.data.data;
+      } else if (response?.data?.data && Array.isArray(response.data.data)) {
+        customersArray = response.data.data;
+        total = response.data.data.total || customersArray.length;
+        paginationData = response.data;
+      } else if (Array.isArray(response?.data)) {
+        customersArray = response.data;
+        total = customersArray.length;
+      } else if (response?.data && typeof response.data === "object") {
+        for (const key in response.data) {
+          if (Array.isArray(response.data[key])) {
+            customersArray = response.data[key];
+            total = customersArray.length;
+            break;
+          }
+        }
+      }
+
+      if (!Array.isArray(customersArray)) {
+        customersArray = [];
+        total = 0;
+      }
+
+      console.log("💰 Due customers extracted:", customersArray.length);
+
+      set({
+        customers: customersArray,
+        filteredCustomers: customersArray,
+        filteredTotal: total,
+        totalCustomers: total,
+        currentPage: paginationData.current_page || page,
+        lastPage: paginationData.last_page || 1,
+        loading: false,
+      });
+      
+      return { success: true, data: customersArray, total };
+    } catch (error) {
+      console.error("❌ Failed to fetch due customers:", error);
+      set({
+        customers: [],
+        filteredCustomers: [],
+        filteredTotal: 0,
+        totalCustomers: 0,
+        loading: false,
+        error: error.message || "Failed to fetch due customers",
+      });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Fetch customers with city (like web version)
+  fetchCityCustomers: async (search = "", page = 1) => {
+    console.log("🏙️ fetchCityCustomers called with search:", search, "page:", page);
+    set({ loading: true, error: null, activeFilterType: "city" });
+
+    try {
+      const { user } = useAuthStore.getState();
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await customersAPI.getCustomersByCity(user.id, search, page);
+      console.log("📦 City Customers API Response:", response);
+
+      let customersArray = [];
+      let total = 0;
+      let paginationData = {};
+
+      // Handle nested response structure (same as web version)
+      if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
+        customersArray = response.data.data.data;
+        total = response.data.data.total || customersArray.length;
+        paginationData = response.data.data;
+      } else if (response?.data?.data && Array.isArray(response.data.data)) {
+        customersArray = response.data.data;
+        total = response.data.data.total || customersArray.length;
+        paginationData = response.data;
+      } else if (Array.isArray(response?.data)) {
+        customersArray = response.data;
+        total = customersArray.length;
+      } else if (response?.data && typeof response.data === "object") {
+        for (const key in response.data) {
+          if (Array.isArray(response.data[key])) {
+            customersArray = response.data[key];
+            total = customersArray.length;
+            break;
+          }
+        }
+      }
+
+      if (!Array.isArray(customersArray)) {
+        customersArray = [];
+        total = 0;
+      }
+
+      console.log("🏙️ City customers extracted:", customersArray.length);
+
+      set({
+        customers: customersArray,
+        filteredCustomers: customersArray,
+        filteredTotal: total,
+        totalCustomers: total,
+        currentPage: paginationData.current_page || page,
+        lastPage: paginationData.last_page || 1,
+        loading: false,
+      });
+      
+      return { success: true, data: customersArray, total };
+    } catch (error) {
+      console.error("❌ Failed to fetch city customers:", error);
+      set({
+        customers: [],
+        filteredCustomers: [],
+        filteredTotal: 0,
+        totalCustomers: 0,
+        loading: false,
+        error: error.message || "Failed to fetch city customers",
+      });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Fetch unique cities (like web version)
+  fetchAvailableCities: async () => {
+    console.log("🏙️ fetchAvailableCities called");
+    set({ citiesLoading: true });
+
+    try {
+      const { user } = useAuthStore.getState();
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+
+      const response = await customersAPI.getUniqueCities(user.id);
+      console.log("📦 Cities API Response:", response);
+
+      let citiesArray = [];
+      if (response?.data?.data && Array.isArray(response.data.data)) {
+        citiesArray = response.data.data;
+      } else if (Array.isArray(response?.data)) {
+        citiesArray = response.data;
+      } else if (response?.data && typeof response.data === "object") {
+        for (const key in response.data) {
+          if (Array.isArray(response.data[key])) {
+            citiesArray = response.data[key];
+            break;
+          }
+        }
+      }
+
+      set({ availableCities: citiesArray, citiesLoading: false });
+      return citiesArray;
+    } catch (error) {
+      console.error("❌ Failed to fetch cities:", error);
+      set({ availableCities: [], citiesLoading: false });
+      return [];
+    }
+  },
+
+  // Reset to all customers (like web version)
+  resetToAllCustomers: async (page = 1, search = "") => {
+    console.log("🔄 resetToAllCustomers called");
+    set({ activeFilterType: "all", selectedCity: "" });
+    await get().fetchCustomers(page, true);
+  },
+
+  // Clear all filters (like web version)
+  clearAllFilters: () => {
+    console.log("🧹 clearAllFilters called");
+    set({
+      activeFilterType: "all",
+      selectedCity: "",
+      filters: {
+        search: "",
+        status: "",
+        city: "",
+        dueStatus: "all",
+      },
+    });
+  },
+
+  // Fetch customers (updated to handle filter type)
   fetchCustomers: async (page = 1, forceRefresh = false) => {
-    const { filters, perPage } = get();
+    const { filters, perPage, activeFilterType } = get();
     const { user } = useAuthStore.getState();
 
     if (!user?.id) {
@@ -34,7 +245,16 @@ const useCustomerStore = create((set, get) => ({
       return;
     }
 
-    console.log("🔄 fetchCustomers called with page:", page, "filters:", filters);
+    console.log("🔄 fetchCustomers called with page:", page, "activeFilterType:", activeFilterType);
+    
+    // If we're in a filtered mode, use the appropriate API
+    if (activeFilterType === "due") {
+      return get().fetchDueCustomers(filters.search, page);
+    } else if (activeFilterType === "city") {
+      return get().fetchCityCustomers(filters.search, page);
+    }
+
+    // Normal all customers fetch
     set({ loading: true, error: null });
 
     try {
@@ -100,6 +320,8 @@ const useCustomerStore = create((set, get) => ({
 
       set({
         customers: filteredCustomers,
+        filteredCustomers: filteredCustomers,
+        filteredTotal: pageData.total,
         totalCustomers: pageData.total,
         currentPage: pageData.current_page,
         lastPage: pageData.last_page,
@@ -113,11 +335,37 @@ const useCustomerStore = create((set, get) => ({
       console.error("❌ Failed to fetch customers:", error);
       set({
         customers: [],
+        filteredCustomers: [],
+        filteredTotal: 0,
         totalCustomers: 0,
         loading: false,
         error: error.message || "Failed to fetch customers",
       });
     }
+  },
+
+  // Get current display customers (like web version)
+  getDisplayCustomers: () => {
+    const { customers, filteredCustomers, activeFilterType } = get();
+    return activeFilterType === "all" ? customers : filteredCustomers;
+  },
+
+  // Get display total (like web version)
+  getDisplayTotal: () => {
+    const { totalCustomers, filteredTotal, activeFilterType } = get();
+    return activeFilterType === "all" ? totalCustomers : filteredTotal;
+  },
+
+  // Get stats for display (like web version)
+  getDisplayStats: () => {
+    const displayCustomers = get().getDisplayCustomers();
+    return {
+      total: displayCustomers.length,
+      totalDue: displayCustomers.reduce(
+        (sum, c) => sum + (parseFloat(c?.due_amount) || 0),
+        0,
+      ),
+    };
   },
 
   // Get single customer - FIXED for correct API structure
@@ -130,9 +378,6 @@ const useCustomerStore = create((set, get) => ({
       let customerData = null;
       let paymentHistory = [];
       
-      // According to your API response structure:
-      // response.data.data contains the customer object
-      // response.data.bill_payment_history contains the payment history at root level
       if (response?.data?.data) {
         customerData = response.data.data;
         console.log("✅ Extracted customer from response.data.data");
@@ -144,18 +389,15 @@ const useCustomerStore = create((set, get) => ({
         console.log("✅ Extracted customer from response");
       }
       
-      // Get payment history from root level of response
       if (response?.data?.bill_payment_history && Array.isArray(response.data.bill_payment_history)) {
         paymentHistory = response.data.bill_payment_history;
-        console.log("✅ Extracted payment history from response.data.bill_payment_history:", paymentHistory.length);
+        console.log("✅ Extracted payment history:", paymentHistory.length);
       }
       
-      // Attach payment history to customer object (like desktop version)
       if (customerData) {
         customerData.bill_payment_history = paymentHistory;
       }
       
-      // Log the extracted data
       console.log("📊 Final Customer Data:", {
         id: customerData?.id,
         name: customerData?.name,
@@ -373,8 +615,15 @@ const useCustomerStore = create((set, get) => ({
       const { user } = useAuthStore.getState();
       await customersAPI.addDuePayment(id, user?.id, amount);
 
-      // Refresh customers to get updated due amount
-      await get().fetchCustomers(get().currentPage, true);
+      // Refresh based on current filter type
+      const { activeFilterType, filters } = get();
+      if (activeFilterType === "due") {
+        await get().fetchDueCustomers(filters.search, get().currentPage);
+      } else if (activeFilterType === "city") {
+        await get().fetchCityCustomers(filters.search, get().currentPage);
+      } else {
+        await get().fetchCustomers(get().currentPage, true);
+      }
 
       set({ loading: false });
       return { success: true };
@@ -399,7 +648,6 @@ const useCustomerStore = create((set, get) => ({
       
       let historyArray = [];
       
-      // Handle different response structures
       if (response?.data?.bill_payment_history && Array.isArray(response.data.bill_payment_history)) {
         historyArray = response.data.bill_payment_history;
       } else if (response?.data?.data?.bill_payment_history && Array.isArray(response.data.data.bill_payment_history)) {
@@ -428,14 +676,28 @@ const useCustomerStore = create((set, get) => ({
     set({ filters: updatedFilters });
 
     setTimeout(() => {
-      get().fetchCustomers(1, true);
+      const { activeFilterType } = get();
+      if (activeFilterType === "due") {
+        get().fetchDueCustomers(updatedFilters.search, 1);
+      } else if (activeFilterType === "city") {
+        get().fetchCityCustomers(updatedFilters.search, 1);
+      } else {
+        get().fetchCustomers(1, true);
+      }
     }, 100);
   },
 
   // Change page
   setPage: (page) => {
-    if (page >= 1 && page <= get().lastPage) {
-      get().fetchCustomers(page, true);
+    const { lastPage, activeFilterType, filters } = get();
+    if (page >= 1 && page <= lastPage) {
+      if (activeFilterType === "due") {
+        get().fetchDueCustomers(filters.search, page);
+      } else if (activeFilterType === "city") {
+        get().fetchCityCustomers(filters.search, page);
+      } else {
+        get().fetchCustomers(page, true);
+      }
     }
   },
 

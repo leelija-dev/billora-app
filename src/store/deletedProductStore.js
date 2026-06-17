@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { productsAPI } from "../api/products";
+import apiClient from "../api/client";
 
 const useDeletedProductStore = create((set, get) => ({
   deletedProducts: [],
@@ -22,18 +23,37 @@ const useDeletedProductStore = create((set, get) => ({
 
     try {
       const response = await productsAPI.getDeleted(userId, search, page);
+      console.log("📦 Raw API response:", response.data);
       
       let productsArray = [];
       let paginationData = {};
       
-      if (response?.data?.data?.data) {
+      // Handle different response structures
+      if (response?.data?.data?.products) {
+        // Structure: { data: { products: [...], current_page: 1, ... } }
+        productsArray = response.data.data.products;
+        paginationData = response.data.data;
+      } else if (response?.data?.data?.data) {
+        // Structure: { data: { data: [...], current_page: 1, ... } }
         productsArray = response.data.data.data;
         paginationData = response.data.data;
+      } else if (response?.data?.products) {
+        // Structure: { products: [...], current_page: 1, ... }
+        productsArray = response.data.products;
+        paginationData = response.data;
       } else if (response?.data?.data) {
+        // Structure: { data: [...] }
         productsArray = Array.isArray(response.data.data) ? response.data.data : [];
         paginationData = response.data;
       } else if (response?.data) {
+        // Structure: { ... }
         productsArray = Array.isArray(response.data) ? response.data : [];
+        paginationData = {};
+      }
+
+      // Ensure productsArray is always an array
+      if (!Array.isArray(productsArray)) {
+        productsArray = [];
       }
 
       const pageData = {
@@ -43,6 +63,9 @@ const useDeletedProductStore = create((set, get) => ({
         total: paginationData.total || productsArray.length,
       };
 
+      console.log("✅ Products array:", productsArray.length);
+      console.log("✅ Pagination:", pageData);
+
       set({
         deletedProducts: productsArray,
         totalDeletedProducts: pageData.total,
@@ -50,9 +73,9 @@ const useDeletedProductStore = create((set, get) => ({
         lastPage: pageData.last_page,
         pagination: pageData,
         loading: false,
+        error: null,
       });
 
-      console.log("✅ Deleted products loaded:", productsArray.length);
       return response;
     } catch (error) {
       console.error("❌ Failed to fetch deleted products:", error);
@@ -72,18 +95,31 @@ const useDeletedProductStore = create((set, get) => ({
 
     try {
       const response = await apiClient.get(url);
+      console.log("📦 Raw URL response:", response.data);
       
       let productsArray = [];
       let paginationData = {};
       
-      if (response?.data?.data?.data) {
+      // Handle different response structures
+      if (response?.data?.data?.products) {
+        productsArray = response.data.data.products;
+        paginationData = response.data.data;
+      } else if (response?.data?.data?.data) {
         productsArray = response.data.data.data;
         paginationData = response.data.data;
+      } else if (response?.data?.products) {
+        productsArray = response.data.products;
+        paginationData = response.data;
       } else if (response?.data?.data) {
         productsArray = Array.isArray(response.data.data) ? response.data.data : [];
         paginationData = response.data;
       } else if (response?.data) {
         productsArray = Array.isArray(response.data) ? response.data : [];
+      }
+
+      // Ensure productsArray is always an array
+      if (!Array.isArray(productsArray)) {
+        productsArray = [];
       }
 
       set({
@@ -92,9 +128,10 @@ const useDeletedProductStore = create((set, get) => ({
         currentPage: paginationData.current_page || 1,
         lastPage: paginationData.last_page || 1,
         loading: false,
+        error: null,
       });
 
-      console.log("✅ Deleted products loaded from URL");
+      console.log("✅ Deleted products loaded from URL:", productsArray.length);
     } catch (error) {
       console.error("❌ Failed to fetch deleted products by URL:", error);
       set({ loading: false, error: error.message });
@@ -109,8 +146,9 @@ const useDeletedProductStore = create((set, get) => ({
       await productsAPI.restore(id);
       console.log("✅ Product restored successfully");
 
-      const { fetchDeletedProducts } = get();
-      await fetchDeletedProducts();
+      const state = get();
+      const { fetchDeletedProducts } = state;
+      await fetchDeletedProducts(state.currentUserId);
       
       set({ loading: false });
       return { success: true };
@@ -132,8 +170,9 @@ const useDeletedProductStore = create((set, get) => ({
       await productsAPI.forceDelete(id);
       console.log("✅ Product permanently deleted");
 
-      const { fetchDeletedProducts } = get();
-      await fetchDeletedProducts();
+      const state = get();
+      const { fetchDeletedProducts } = state;
+      await fetchDeletedProducts(state.currentUserId);
       
       set({ loading: false });
       return { success: true };
@@ -155,8 +194,9 @@ const useDeletedProductStore = create((set, get) => ({
       await productsAPI.bulkForceDelete(ids);
       console.log("✅ Products bulk permanently deleted");
 
-      const { fetchDeletedProducts } = get();
-      await fetchDeletedProducts();
+      const state = get();
+      const { fetchDeletedProducts } = state;
+      await fetchDeletedProducts(state.currentUserId);
       
       set({ loading: false });
       return { success: true };
@@ -171,6 +211,9 @@ const useDeletedProductStore = create((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+  
+  // Add this to store userId for refresh operations
+  setCurrentUserId: (userId) => set({ currentUserId: userId }),
 }));
 
 export default useDeletedProductStore;
