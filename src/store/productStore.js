@@ -1,4 +1,4 @@
-// store/productStore.js
+// store/productStore.js - COMPLETE FIXED VERSION
 import { create } from "zustand";
 import { productsAPI } from "../api/products";
 
@@ -29,7 +29,6 @@ const useProductStore = create((set, get) => ({
     sortOrder: "asc",
   },
 
-  // Get product total stock from stocks array
   getProductTotalStock: (product) => {
     if (!product || !product.stocks || !Array.isArray(product.stocks)) return 0;
     return product.stocks.reduce((total, stock) => {
@@ -38,174 +37,61 @@ const useProductStore = create((set, get) => ({
     }, 0);
   },
 
-  // Get product stocks
   getProductStocks: (product) => {
-    if (!product || !product.stocks || !Array.isArray(product.stocks)) return [];
+    if (!product || !product.stocks || !Array.isArray(product.stocks))
+      return [];
     return product.stocks;
   },
 
-  // Fetch products with pagination - FIXED for your API structure
   fetchProducts: async (page = 1, forceRefresh = false) => {
     const { filters, perPage } = get();
-    
-    console.log("🔄 fetchProducts called with page:", page, "filters:", filters);
+
+    console.log('🔄 fetchProducts called with page:', page);
     set({ loading: true, error: null });
 
     try {
-      const params = { page, per_page: perPage };
-      if (filters.search) params.search = filters.search;
-      if (filters.category_id) params.category_id = filters.category_id;
-      if (filters.brand_id) params.brand_id = filters.brand_id;
+      const response = await productsAPI.getAll(
+        filters.search,
+        page,
+        perPage
+      );
+      console.log('📦 Products API Response received');
+      console.log('📦 Full response structure:', JSON.stringify(response.data, null, 2));
 
-      const response = await productsAPI.getAll(params.search, page, perPage);
-      console.log("📦 Products API Response received");
-      
-      // Extract products and pagination data - FIXED for your API structure
-      let productsArray = [];
-      let paginationData = {};
-      
-      // Your API returns: response.data = { status, message, data: { current_page, data: [...], last_page, ... } }
-      const apiData = response.data;
-      
-      if (apiData?.data) {
-        // The products are at apiData.data.data
-        if (apiData.data.data && Array.isArray(apiData.data.data)) {
-          productsArray = apiData.data.data;
-          paginationData = apiData.data;
-          console.log("✅ Found products at apiData.data.data:", productsArray.length);
-        } else if (Array.isArray(apiData.data)) {
-          productsArray = apiData.data;
-          paginationData = {
-            current_page: page,
-            last_page: 1,
-            per_page: perPage,
-            total: productsArray.length,
-          };
-          console.log("✅ Found products at apiData.data (array):", productsArray.length);
-        } else {
-          // Try to find data anywhere
-          const possibleData = apiData.data.data || apiData.data || [];
-          if (Array.isArray(possibleData)) {
-            productsArray = possibleData;
-            paginationData = {
-              current_page: apiData.data.current_page || page,
-              last_page: apiData.data.last_page || 1,
-              per_page: apiData.data.per_page || perPage,
-              total: apiData.data.total || possibleData.length,
-            };
-            console.log("✅ Found products in nested structure:", productsArray.length);
-          } else {
-            productsArray = [];
-            paginationData = {
-              current_page: page,
-              last_page: 1,
-              per_page: perPage,
-              total: 0,
-            };
-          }
-        }
-      } else if (apiData && Array.isArray(apiData)) {
-        productsArray = apiData;
-        paginationData = {
-          current_page: page,
-          last_page: 1,
-          per_page: perPage,
-          total: productsArray.length,
-        };
-      } else {
-        productsArray = [];
-        paginationData = {
-          current_page: page,
-          last_page: 1,
-          per_page: perPage,
-          total: 0,
-        };
-      }
-      
-      // Ensure productsArray is an array
-      if (!Array.isArray(productsArray)) {
-        productsArray = [];
-      }
+      // FIXED: Correctly extract products from the response
+      const responseData = response.data;
+      const paginationData = responseData.data || {};
+      const products = paginationData.data || [];
 
-      console.log("📊 Extracted products:", productsArray.length);
-      console.log("📊 Pagination data:", paginationData);
+      console.log('📦 responseData:', responseData);
+      console.log('📦 paginationData:', paginationData);
+      console.log('📦 Extracted products count:', products.length);
 
-      // Apply status filter locally (like desktop)
-      let filteredProducts = [...productsArray];
-      const { status, sortBy, sortOrder } = filters;
-      
-      if (status !== "all") {
-        if (status === "active") {
-          filteredProducts = productsArray.filter(p => p.is_active === 1);
-        } else if (status === "inactive") {
-          filteredProducts = productsArray.filter(p => p.is_active === 0);
-        } else if (status === "low_stock") {
-          filteredProducts = productsArray.filter(p => {
-            const totalStock = get().getProductTotalStock(p);
-            const minStock = p.minimum_stock_quantity || 10;
-            return totalStock <= minStock && totalStock > 0;
-          });
-        } else if (status === "out_of_stock") {
-          filteredProducts = productsArray.filter(p => get().getProductTotalStock(p) === 0);
-        }
-      }
-
-      // Apply sorting
-      filteredProducts.sort((a, b) => {
-        let valA, valB;
-        if (sortBy === "name") {
-          valA = (a.name || "").toLowerCase();
-          valB = (b.name || "").toLowerCase();
-        } else if (sortBy === "price") {
-          valA = parseFloat(a.selling_price || 0);
-          valB = parseFloat(b.selling_price || 0);
-        } else if (sortBy === "stock") {
-          valA = get().getProductTotalStock(a);
-          valB = get().getProductTotalStock(b);
-        } else if (sortBy === "date") {
-          valA = new Date(a.created_at || 0).getTime();
-          valB = new Date(b.created_at || 0).getTime();
-        } else {
-          valA = a.id || 0;
-          valB = b.id || 0;
-        }
-
-        if (sortOrder === "asc") {
-          return valA > valB ? 1 : -1;
-        } else {
-          return valA < valB ? 1 : -1;
-        }
-      });
-
-      // Build pagination data
-      const pageData = {
-        current_page: parseInt(paginationData.current_page) || page,
-        last_page: parseInt(paginationData.last_page) || 1,
-        per_page: parseInt(paginationData.per_page) || perPage,
-        total: parseInt(paginationData.total) || filteredProducts.length,
+      const pagination = {
+        current_page: paginationData.current_page || page,
+        last_page: paginationData.last_page || 1,
+        per_page: paginationData.per_page || perPage,
+        total: paginationData.total || products.length,
         next_page_url: paginationData.next_page_url || null,
         prev_page_url: paginationData.prev_page_url || null,
         first_page_url: paginationData.first_page_url || null,
         last_page_url: paginationData.last_page_url || null,
       };
 
-      console.log("✅ Final pagination data:", pageData);
-      console.log("✅ last_page:", pageData.last_page);
-
-      // Update state
       set({
-        products: filteredProducts,
-        totalProducts: pageData.total,
-        currentPage: pageData.current_page,
-        lastPage: pageData.last_page,
-        pagination: pageData,
+        products: products,
+        totalProducts: pagination.total,
+        currentPage: pagination.current_page,
+        lastPage: pagination.last_page,
+        pagination: pagination,
         loading: false,
+        error: null,
       });
 
-      console.log("✅ Products loaded:", filteredProducts.length, "Total:", pageData.total);
-      return response;
+      console.log('✅ Products loaded successfully, count:', products.length);
+      return response.data;
     } catch (error) {
-      console.error("❌ Failed to fetch products:", error);
+      console.error('❌ Failed to fetch products:', error);
       set({
         products: [],
         totalProducts: 0,
@@ -227,139 +113,55 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Fetch products by URL (for pagination)
   fetchProductsByUrl: async (url) => {
     if (!url) {
-      console.warn("fetchProductsByUrl called with null URL");
+      console.warn('fetchProductsByUrl called with null URL');
       return;
     }
 
-    console.log("🔄 fetchProductsByUrl called with URL:", url);
+    console.log('🔄 fetchProductsByUrl called with URL:', url);
     set({ loading: true, error: null });
 
     try {
       const response = await productsAPI.getByUrl(url);
-      console.log("📦 Products by URL Response received");
+      console.log('📦 Products by URL Response received');
+      console.log('📦 Full response structure:', JSON.stringify(response.data, null, 2));
 
-      // Extract data - same structure as fetchProducts
-      let productsArray = [];
-      let paginationData = {};
-      
-      const apiData = response.data;
-      
-      if (apiData?.data) {
-        if (apiData.data.data && Array.isArray(apiData.data.data)) {
-          productsArray = apiData.data.data;
-          paginationData = apiData.data;
-          console.log("✅ Found products at apiData.data.data:", productsArray.length);
-        } else if (Array.isArray(apiData.data)) {
-          productsArray = apiData.data;
-          paginationData = {
-            current_page: parseInt(url.match(/page=(\d+)/)?.[1] || 1),
-            last_page: 1,
-            per_page: get().perPage,
-            total: productsArray.length,
-          };
-        } else {
-          const possibleData = apiData.data.data || apiData.data || [];
-          if (Array.isArray(possibleData)) {
-            productsArray = possibleData;
-            paginationData = {
-              current_page: apiData.data.current_page || parseInt(url.match(/page=(\d+)/)?.[1] || 1),
-              last_page: apiData.data.last_page || 1,
-              per_page: apiData.data.per_page || get().perPage,
-              total: apiData.data.total || possibleData.length,
-            };
-          } else {
-            productsArray = [];
-            paginationData = {
-              current_page: parseInt(url.match(/page=(\d+)/)?.[1] || 1),
-              last_page: 1,
-              per_page: get().perPage,
-              total: 0,
-            };
-          }
-        }
-      } else {
-        productsArray = [];
-        paginationData = {
-          current_page: parseInt(url.match(/page=(\d+)/)?.[1] || 1),
-          last_page: 1,
-          per_page: get().perPage,
-          total: 0,
-        };
-      }
+      const responseData = response.data;
+      const paginationData = responseData.data || {};
+      const products = paginationData.data || [];
 
-      // Apply filters and sorting (same as fetchProducts)
-      let filteredProducts = [...productsArray];
-      const { status, sortBy, sortOrder } = get().filters;
-      
-      if (status !== "all") {
-        if (status === "active") {
-          filteredProducts = productsArray.filter(p => p.is_active === 1);
-        } else if (status === "inactive") {
-          filteredProducts = productsArray.filter(p => p.is_active === 0);
-        } else if (status === "low_stock") {
-          filteredProducts = productsArray.filter(p => {
-            const totalStock = get().getProductTotalStock(p);
-            const minStock = p.minimum_stock_quantity || 10;
-            return totalStock <= minStock && totalStock > 0;
-          });
-        } else if (status === "out_of_stock") {
-          filteredProducts = productsArray.filter(p => get().getProductTotalStock(p) === 0);
-        }
-      }
+      console.log('📦 responseData:', responseData);
+      console.log('📦 paginationData:', paginationData);
+      console.log(`✅ Products by URL extracted: ${products.length} products`);
 
-      // Apply sorting
-      filteredProducts.sort((a, b) => {
-        let valA, valB;
-        if (sortBy === "name") {
-          valA = (a.name || "").toLowerCase();
-          valB = (b.name || "").toLowerCase();
-        } else if (sortBy === "price") {
-          valA = parseFloat(a.selling_price || 0);
-          valB = parseFloat(b.selling_price || 0);
-        } else if (sortBy === "stock") {
-          valA = get().getProductTotalStock(a);
-          valB = get().getProductTotalStock(b);
-        } else if (sortBy === "date") {
-          valA = new Date(a.created_at || 0).getTime();
-          valB = new Date(b.created_at || 0).getTime();
-        } else {
-          valA = a.id || 0;
-          valB = b.id || 0;
-        }
-
-        if (sortOrder === "asc") {
-          return valA > valB ? 1 : -1;
-        } else {
-          return valA < valB ? 1 : -1;
-        }
-      });
-
-      const pageData = {
-        current_page: parseInt(paginationData.current_page) || parseInt(url.match(/page=(\d+)/)?.[1] || 1),
-        last_page: parseInt(paginationData.last_page) || 1,
-        per_page: parseInt(paginationData.per_page) || get().perPage,
-        total: parseInt(paginationData.total) || filteredProducts.length,
+      const pagination = {
+        current_page: paginationData.current_page || 1,
+        last_page: paginationData.last_page || 1,
+        per_page: paginationData.per_page || get().perPage,
+        total: paginationData.total || products.length,
         next_page_url: paginationData.next_page_url || null,
         prev_page_url: paginationData.prev_page_url || null,
         first_page_url: paginationData.first_page_url || null,
         last_page_url: paginationData.last_page_url || null,
       };
 
+      console.log('📊 Pagination data:', pagination);
+
       set({
-        products: filteredProducts,
-        totalProducts: pageData.total,
-        currentPage: pageData.current_page,
-        lastPage: pageData.last_page,
-        pagination: pageData,
+        products: products,
+        totalProducts: pagination.total,
+        currentPage: pagination.current_page,
+        lastPage: pagination.last_page,
+        pagination: pagination,
         loading: false,
+        error: null,
       });
 
-      console.log("✅ Products by URL loaded:", filteredProducts.length);
+      console.log(`✅ Products by URL loaded: ${products.length} products`);
+      return response.data;
     } catch (error) {
-      console.error("❌ Failed to fetch products by URL:", error);
+      console.error('❌ Failed to fetch products by URL:', error);
       set({
         loading: false,
         error: error.message || "Failed to fetch products",
@@ -367,13 +169,12 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Get single product
   getProduct: async (id) => {
-    console.log("🔍 getProduct called with:", id);
+    console.log('🔍 getProduct called with:', id);
     try {
       const response = await productsAPI.getById(id);
       let productData = null;
-      
+
       if (response?.data?.data?.data) {
         productData = response.data.data.data;
       } else if (response?.data?.data) {
@@ -383,23 +184,22 @@ const useProductStore = create((set, get) => ({
       } else {
         productData = response;
       }
-      
+
       return productData;
     } catch (error) {
-      console.error("❌ Failed to fetch product:", error);
+      console.error('❌ Failed to fetch product:', error);
       throw error;
     }
   },
 
-  // Create product
   createProduct: async (productData) => {
-    console.log("📝 createProduct called with:", productData);
+    console.log('📝 createProduct called');
     set({ loading: true, error: null });
 
     try {
       const response = await productsAPI.create(productData);
-      console.log("✅ Product created successfully:", response);
-      
+      console.log('✅ Product created successfully');
+
       let newProduct = null;
       if (response?.data?.data?.data) {
         newProduct = response.data.data.data;
@@ -412,11 +212,11 @@ const useProductStore = create((set, get) => ({
       }
 
       await get().fetchProducts(1, true);
-      
+
       set({ loading: false });
       return { success: true, data: newProduct };
     } catch (error) {
-      console.error("❌ Failed to create product:", error);
+      console.error('❌ Failed to create product:', error);
       set({
         error: error.message || "Failed to create product",
         loading: false,
@@ -425,15 +225,14 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Update product
   updateProduct: async (id, productData) => {
-    console.log("✏️ updateProduct called with:", id, productData);
+    console.log('✏️ updateProduct called');
     set({ loading: true, error: null });
 
     try {
       const response = await productsAPI.update(id, productData);
-      console.log("✅ Product updated successfully:", response);
-      
+      console.log('✅ Product updated successfully');
+
       let updatedProduct = null;
       if (response?.data?.data?.data) {
         updatedProduct = response.data.data.data;
@@ -446,11 +245,11 @@ const useProductStore = create((set, get) => ({
       }
 
       await get().fetchProducts(get().currentPage, true);
-      
+
       set({ loading: false });
       return { success: true, data: updatedProduct };
     } catch (error) {
-      console.error("❌ Failed to update product:", error);
+      console.error('❌ Failed to update product:', error);
       set({
         error: error.message || "Failed to update product",
         loading: false,
@@ -459,21 +258,20 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Delete product (soft delete)
   deleteProduct: async (id) => {
-    console.log("🗑️ deleteProduct called with:", id);
+    console.log('🗑️ deleteProduct called');
     set({ loading: true, error: null });
 
     try {
       await productsAPI.delete(id);
-      console.log("✅ Product deleted successfully");
+      console.log('✅ Product deleted successfully');
 
       await get().fetchProducts(get().currentPage, true);
-      
+
       set({ loading: false });
       return { success: true };
     } catch (error) {
-      console.error("❌ Failed to delete product:", error);
+      console.error('❌ Failed to delete product:', error);
       set({
         error: error.message || "Failed to delete product",
         loading: false,
@@ -482,34 +280,54 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Set filters
+  bulkDeleteProducts: async (ids) => {
+    console.log('📦 Bulk delete called');
+    set({ loading: true, error: null });
+
+    try {
+      await productsAPI.bulkDelete(ids);
+      console.log('✅ Products bulk deleted successfully');
+
+      await get().fetchProducts(get().currentPage, true);
+
+      set({ loading: false });
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Failed to bulk delete products:', error);
+      set({
+        error: error.message || "Failed to bulk delete products",
+        loading: false,
+      });
+      return { success: false, error: error.message };
+    }
+  },
+
   setFilters: (newFilters) => {
     const currentFilters = get().filters;
     const updatedFilters = { ...currentFilters, ...newFilters };
-    set({ 
+    set({
       filters: updatedFilters,
-      currentPage: 1
+      currentPage: 1,
     });
 
     setTimeout(() => {
       get().fetchProducts(1, true);
-    }, 100);
+    }, 300);
   },
 
-  // Change page
   setPage: (page) => {
     const { lastPage, currentPage, pagination } = get();
-    
-    console.log("📄 setPage called with:", page, "current:", currentPage, "last:", lastPage);
-    
+
+    console.log('📄 setPage called with:', page, 'current:', currentPage, 'last:', lastPage);
+
     if (page < 1) page = 1;
     if (page > lastPage) page = lastPage;
-    
+
     if (page !== currentPage) {
-      console.log("📄 Changing page to:", page);
-      set({ currentPage: page });
+      console.log('📄 Changing page to:', page);
       
-      // Try to use pagination URL if available (like desktop)
+      set({ currentPage: page });
+
       let pageUrl = null;
       if (pagination) {
         if (page === 1 && pagination.first_page_url) {
@@ -517,14 +335,15 @@ const useProductStore = create((set, get) => ({
         } else if (page === pagination.last_page && pagination.last_page_url) {
           pageUrl = pagination.last_page_url;
         } else if (pagination.first_page_url) {
-          // Construct URL with page parameter
           const baseUrl = pagination.first_page_url.split('?')[0];
-          const searchParams = new URLSearchParams(pagination.first_page_url.split('?')[1] || '');
+          const searchParams = new URLSearchParams(
+            pagination.first_page_url.split('?')[1] || ""
+          );
           searchParams.set('page', page);
           pageUrl = `${baseUrl}?${searchParams.toString()}`;
         }
       }
-      
+
       if (pageUrl) {
         get().fetchProductsByUrl(pageUrl);
       } else {
@@ -533,8 +352,9 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Clear error
   clearError: () => set({ error: null }),
 }));
 
+// FIXED: Make sure this is a default export
+export { useProductStore };
 export default useProductStore;

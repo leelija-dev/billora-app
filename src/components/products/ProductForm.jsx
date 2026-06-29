@@ -3,7 +3,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Alert, ScrollView, Text, TouchableOpacity, View, Modal, FlatList, Image } from "react-native";
+import { Alert, ScrollView, Text, TouchableOpacity, View, Modal, FlatList, Image, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from 'expo-image-picker';
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -46,10 +46,40 @@ const ProductForm = ({ productId }) => {
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [showUnitDropdown, setShowUnitDropdown] = useState(false);
 
+  // Safe navigation function
+  const safeGoBack = () => {
+    try {
+      if (navigation && navigation.canGoBack && navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        // Fallback - navigate to Products screen
+        try {
+          navigation.navigate('Products');
+        } catch (navError) {
+          console.error('Cannot navigate to Products:', navError);
+          // Last resort - use navigation service if available
+          try {
+            const { navigate } = require('../../services/navigationService');
+            navigate('Products');
+          } catch (serviceError) {
+            console.error('Navigation service not available:', serviceError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Try to navigate to Products as fallback
+      try {
+        navigation.navigate('Products');
+      } catch (finalError) {
+        console.error('Final navigation attempt failed:', finalError);
+      }
+    }
+  };
+
   // Image picker function
   const handleImagePicker = async () => {
     try {
-      // Request permission
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permissionResult.granted === false) {
         Alert.alert('Permission Required', 'Please grant camera roll permissions to upload images.');
@@ -80,7 +110,6 @@ const ProductForm = ({ productId }) => {
   // Camera function
   const handleCamera = async () => {
     try {
-      // Request permission
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (permissionResult.granted === false) {
         Alert.alert('Permission Required', 'Please grant camera permissions to take photos.');
@@ -114,18 +143,9 @@ const ProductForm = ({ productId }) => {
       'Add Product Image',
       'Choose an option',
       [
-        {
-          text: 'Take Photo',
-          onPress: handleCamera,
-        },
-        {
-          text: 'Choose from Gallery',
-          onPress: handleImagePicker,
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Take Photo', onPress: handleCamera },
+        { text: 'Choose from Gallery', onPress: handleImagePicker },
+        { text: 'Cancel', style: 'cancel' },
       ],
     );
   };
@@ -141,7 +161,6 @@ const ProductForm = ({ productId }) => {
       try {
         setLoadingDropdowns(true);
         
-        // Fetch categories
         const categoriesResponse = await categoriesAPI.getAll();
         let categoriesData = [];
         if (categoriesResponse?.data?.data) {
@@ -155,7 +174,6 @@ const ProductForm = ({ productId }) => {
         }
         setCategories(categoriesData);
         
-        // Fetch brands
         const brandsResponse = await brandsAPI.getAll();
         let brandsData = [];
         if (brandsResponse?.data?.data) {
@@ -169,7 +187,6 @@ const ProductForm = ({ productId }) => {
         }
         setBrands(brandsData);
         
-        // Fetch units
         const unitsResponse = await unitsAPI.getAll();
         let unitsData = [];
         if (unitsResponse?.data?.data) {
@@ -203,7 +220,7 @@ const ProductForm = ({ productId }) => {
     setValue,
   } = useForm({
     defaultValues: {
-      user_id: "1", // This should come from auth store
+      user_id: "1",
       name: "",
       sku: "",
       description: "",
@@ -213,7 +230,7 @@ const ProductForm = ({ productId }) => {
       discount_percentage: "",
       unit_amount: "",
       is_active: true,
-      created_by: "1", // This should come from auth store
+      created_by: "1",
     },
   });
 
@@ -227,27 +244,21 @@ const ProductForm = ({ productId }) => {
 
   useEffect(() => {
     if (isEditing && productId) {
-      // Fetch product data for editing
       const fetchProductForEdit = async () => {
         try {
           setLoading(true);
           const response = await productsAPI.getById(productId);
           
-          // Handle paginated API response structure
           let productData = null;
           if (response?.data?.data) {
             if (response.data.data.data && Array.isArray(response.data.data.data)) {
-              // This is for list endpoints - not expected here
               productData = response.data.data.data.find(item => item.id == productId);
             } else if (response.data.data.id) {
-              // Single product response
               productData = response.data.data;
             }
           } else if (response?.data?.id) {
-            // Direct product data
             productData = response.data;
           } else if (response?.id) {
-            // Response itself is the product
             productData = response;
           }
           
@@ -286,7 +297,7 @@ const ProductForm = ({ productId }) => {
     try {
       setLoading(true);
       const productData = {
-        user_id: parseInt(data.user_id) || 1, // Ensure user_id is sent as integer
+        user_id: parseInt(data.user_id) || 1,
         name: data.name,
         sku: data.sku,
         description: data.description,
@@ -318,7 +329,8 @@ const ProductForm = ({ productId }) => {
         showSuccess("Product created successfully");
       }
 
-      navigation.goBack();
+      // Use safe navigation
+      safeGoBack();
     } catch (error) {
       console.error('Product creation error:', error);
       const errorMessage = error.response?.data?.message || 
@@ -344,8 +356,9 @@ const ProductForm = ({ productId }) => {
             try {
               setLoading(true);
               await productsAPI.deleteProduct(selectedProduct.id);
-              navigation.goBack();
               showSuccess("Product deleted successfully");
+              // Use safe navigation
+              safeGoBack();
             } catch (error) {
               showError(error.message || "Failed to delete product");
             } finally {
@@ -384,7 +397,7 @@ const ProductForm = ({ productId }) => {
             </View>
             <FlatList
               data={items}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.id?.toString() || item.id}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   className={`p-4 border-b ${
@@ -407,6 +420,18 @@ const ProductForm = ({ productId }) => {
     </Modal>
   );
 
+  // Loading state
+  if (loadingDropdowns) {
+    return (
+      <View className={`flex-1 items-center justify-center ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className={`mt-4 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+          Loading form data...
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView className={`flex-1 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <ScrollView
@@ -414,6 +439,25 @@ const ProductForm = ({ productId }) => {
         contentContainerClassName="px-5 pb-16 pt-0"
         showsVerticalScrollIndicator={false}
       >
+        {/* Back Button */}
+        <TouchableOpacity
+          onPress={safeGoBack}
+          className={`flex-row items-center mt-2 mb-4 p-2 rounded-xl self-start ${
+            isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
+          }`}
+        >
+          <Icon name="arrow-left" size={20} color={isDarkMode ? '#ffffff' : '#1F2937'} />
+          <Text className={`ml-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            Back
+          </Text>
+        </TouchableOpacity>
+
+        <Text className={`text-2xl font-bold mb-6 ${
+          isDarkMode ? 'text-white' : 'text-gray-800'
+        }`}>
+          {isEditing ? 'Edit Product' : 'Add New Product'}
+        </Text>
+
         {/* Image Upload Section */}
         <View className="mb-6">
           <Text className={`text-base font-semibold mb-4 ${
@@ -422,7 +466,6 @@ const ProductForm = ({ productId }) => {
             Product Images
           </Text>
           
-          {/* Image Preview */}
           {productImages.length > 0 && (
             <View className="flex-row flex-wrap gap-2 mb-4">
               {productImages.map((image, index) => (
@@ -443,7 +486,6 @@ const ProductForm = ({ productId }) => {
             </View>
           )}
           
-          {/* Add Image Button */}
           <TouchableOpacity
             onPress={showImageOptions}
             className={`w-full h-32 rounded-2xl border-2 border-dashed items-center justify-center ${
@@ -469,7 +511,6 @@ const ProductForm = ({ productId }) => {
             Basic Information
           </Text>
 
-          {/* Hidden user_id field */}
           <Controller
             control={control}
             name="user_id"
@@ -483,7 +524,6 @@ const ProductForm = ({ productId }) => {
             )}
           />
 
-          {/* Product Name */}
           <Controller
             control={control}
             name="name"
@@ -509,7 +549,6 @@ const ProductForm = ({ productId }) => {
             )}
           />
 
-          {/* SKU */}
           <Controller
             control={control}
             name="sku"
@@ -531,7 +570,6 @@ const ProductForm = ({ productId }) => {
             )}
           />
 
-          {/* Description */}
           <Controller
             control={control}
             name="description"
@@ -700,7 +738,6 @@ const ProductForm = ({ productId }) => {
           </Text>
 
           <View className="flex-row gap-4 mb-4">
-            {/* Selling Price */}
             <View className="flex-1">
               <Controller
                 control={control}
@@ -730,7 +767,6 @@ const ProductForm = ({ productId }) => {
               />
             </View>
 
-            {/* Purchase Price */}
             <View className="flex-1">
               <Controller
                 control={control}
@@ -762,7 +798,6 @@ const ProductForm = ({ productId }) => {
           </View>
 
           <View className="flex-row gap-4 mb-4">
-            {/* GST Percentage */}
             <View className="flex-1">
               <Controller
                 control={control}
@@ -793,7 +828,6 @@ const ProductForm = ({ productId }) => {
               />
             </View>
 
-            {/* Discount Percentage */}
             <View className="flex-1">
               <Controller
                 control={control}
@@ -825,7 +859,6 @@ const ProductForm = ({ productId }) => {
             </View>
           </View>
 
-          {/* Profit Margin Display */}
           {watch("selling_price") && watch("purchase_price") && (
             <LinearGradient
               colors={isDarkMode ? ["#065f46", "#064e3b"] : ["#d1fae5", "#a7f3d0"]}
@@ -834,11 +867,11 @@ const ProductForm = ({ productId }) => {
               <Text className={isDarkMode ? "text-green-400" : "text-green-800"}>
                 Profit Margin:{" "}
                 {(
-                  ((watch("selling_price") - watch("purchase_price")) /
-                    watch("purchase_price")) *
+                  ((parseFloat(watch("selling_price")) - parseFloat(watch("purchase_price"))) /
+                    parseFloat(watch("purchase_price"))) *
                   100
                 ).toFixed(1)}
-                % (₹{(watch("selling_price") - watch("purchase_price")).toFixed(2)})
+                % (₹{(parseFloat(watch("selling_price")) - parseFloat(watch("purchase_price"))).toFixed(2)})
               </Text>
             </LinearGradient>
           )}

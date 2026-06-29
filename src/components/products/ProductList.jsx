@@ -1,5 +1,4 @@
 // components/products/ProductList.js
-import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,11 +29,13 @@ const ProductList = ({
   category = "all",
   products: externalProducts = [],
   loading: externalLoading = false,
+  onView,
   onEdit,
   onDelete,
   onStockUpdate,
+  isPaginating = false,
 }) => {
-  const navigation = useNavigation();
+  
   const { isDarkMode } = useThemeStore();
   const { user } = useAuthStore();
   const { getProductTotalStock, getProductStocks, fetchProducts, currentPage } = useProductStore();
@@ -126,24 +127,42 @@ const ProductList = ({
   }, [products]);
 
   const handleProductPress = (product) => {
-    navigation.navigate("ProductDetail", { productId: product.id });
+    if (isPaginating) {
+      console.log('Navigation disabled during pagination');
+      return;
+    }
+    
+    if (onView) {
+      onView(product);
+    }
   };
 
   const handleEditProduct = (product) => {
+    if (isPaginating) {
+      console.log('Edit disabled during pagination');
+      return;
+    }
+    
     if (onEdit) {
       onEdit(product);
-    } else {
-      navigation.navigate("AddProduct", { productId: product.id });
     }
   };
 
   const handleDeleteProduct = (productId) => {
+    if (isPaginating) {
+      console.log('Delete disabled during pagination');
+      return;
+    }
     if (onDelete) {
       onDelete(productId);
     }
   };
 
   const handleAddStock = (product) => {
+    if (isPaginating) {
+      console.log('Add stock disabled during pagination');
+      return;
+    }
     setSelectedProduct(product);
     setShowStockModal(true);
     setStockQuantity("");
@@ -194,43 +213,8 @@ const ProductList = ({
     }
   };
 
-  // Get button colors based on stock situation (matching ProductCard)
-  const getStockButtonColors = (product) => {
-    const totalStock = getProductTotalStock(product);
-    const minStock = safeNumber(product.minimum_stock_quantity || product.reorder_level || 10);
-    const isOutOfStock = totalStock === 0;
-    const isLowStock = totalStock <= minStock && totalStock > 0;
-    
-    if (isOutOfStock) {
-      return {
-        bg: isDarkMode ? 'bg-orange-900/30' : 'bg-orange-100',
-        textColor: isDarkMode ? 'text-orange-400' : 'text-orange-600',
-        iconColor: "#F97316",
-        buttonBg: "#F97316",
-        label: "Add Stock"
-      };
-    } else if (isLowStock) {
-      return {
-        bg: isDarkMode ? 'bg-yellow-900/30' : 'bg-yellow-100',
-        textColor: isDarkMode ? 'text-yellow-400' : 'text-yellow-600',
-        iconColor: "#EAB308",
-        buttonBg: "#EAB308",
-        label: "Add Stock"
-      };
-    } else {
-      return {
-        bg: isDarkMode ? 'bg-emerald-900/30' : 'bg-emerald-100',
-        textColor: isDarkMode ? 'text-emerald-400' : 'text-emerald-600',
-        iconColor: "#10B981",
-        buttonBg: "#10B981",
-        label: "Add Stock"
-      };
-    }
-  };
-
   const renderHeader = () => (
     <Animated.View style={{ opacity: fadeAnim }} className="mb-5">
-      {/* Stats Row */}
       <View className="flex-row justify-between items-center mb-4">
         <Text className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
           {filteredProducts.length} of {stats.total} products
@@ -244,27 +228,21 @@ const ProductList = ({
           </Text>
         </View>
       </View>
-
-      
     </Animated.View>
   );
 
-  const renderGridItem = (item) => {
-    const totalStock = getProductTotalStock(item);
-    const isLowStock = totalStock <= safeNumber(item.minimum_stock_quantity || item.reorder_level || 10) && totalStock > 0;
-    const isOutOfStock = totalStock === 0;
-
-    return (
-      <View key={item.id} className="w-[48%] mx-[1%] mb-4">
-        <ProductCard 
-          product={item} 
-          onEdit={() => handleEditProduct(item)}
-          onDelete={() => handleDeleteProduct(item.id)}
-          onAddStock={() => handleAddStock(item)}
-        />
-      </View>
-    );
-  };
+  const renderGridItem = (item) => (
+    <View key={item.id} className="w-[48%] mx-[1%] mb-4">
+      <ProductCard 
+        product={item} 
+        onPress={handleProductPress}
+        onEdit={() => handleEditProduct(item)}
+        onDelete={() => handleDeleteProduct(item.id)}
+        onAddStock={() => handleAddStock(item)}
+        isPaginating={isPaginating}
+      />
+    </View>
+  );
 
   const renderListItem = (item) => {
     const totalStock = getProductTotalStock(item);
@@ -285,16 +263,15 @@ const ProductList = ({
     };
 
     const stockStatus = getStockStatus();
-    const buttonColors = getStockButtonColors(item);
 
     return (
       <TouchableOpacity
         key={item.id}
         onPress={() => handleProductPress(item)}
-        activeOpacity={0.7}
+        activeOpacity={isPaginating ? 1 : 0.7}
         className={`flex-row rounded-2xl mb-4 p-4 shadow-lg ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
-        }`}
+        } ${isPaginating ? 'opacity-70' : 'opacity-100'}`}
         style={{
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 2 },
@@ -320,7 +297,6 @@ const ProductList = ({
             </LinearGradient>
           )}
           
-          {/* Discount Badge */}
           {discount > 0 && (
             <View className="absolute -top-2 -left-2 bg-red-500 rounded-full px-2 py-1 shadow-md">
               <Text className="text-white text-xs font-bold">-{discount}%</Text>
@@ -330,7 +306,6 @@ const ProductList = ({
 
         {/* Product Details */}
         <View className="flex-1 ml-4">
-          {/* Header Row */}
           <View className="flex-row justify-between items-start">
             <View className="flex-1">
               <Text className={`text-[10px] font-mono mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -394,58 +369,21 @@ const ProductList = ({
             </View>
           </View>
 
-          {/* Stock Breakdown */}
-          {stocksList.length > 1 && (
-            <View className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-              <Text className={`text-[10px] font-medium mb-1 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                Stock by Unit:
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {stocksList.slice(0, 2).map((stock, idx) => (
-                  <View key={idx} className={`flex-row items-center px-2 py-0.5 rounded-md ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                    <Text className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {stock.unit?.name || `Unit ${stock.unit_id}`}:
-                    </Text>
-                    <Text className={`text-[10px] font-semibold ml-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {parseFloat(stock.quantity).toFixed(2)}
-                    </Text>
-                  </View>
-                ))}
-                {stocksList.length > 2 && (
-                  <Text className={`text-[10px] ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    +{stocksList.length - 2} more
-                  </Text>
-                )}
-              </View>
-            </View>
-          )}
-          
-          {/* Action Buttons - Colors based on stock situation */}
+          {/* Action Buttons */}
           <View className="flex-row justify-end gap-3 mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-            {/* Add Stock Button - Color changes based on stock status */}
-            <TouchableOpacity
-              onPress={() => handleAddStock(item)}
-              className={`flex-row items-center px-3 py-1.5 rounded-lg ${buttonColors.bg}`}
-            >
-              <Icon name="plus-circle" size={14} color={buttonColors.iconColor} />
-              <Text className={`text-xs font-medium ml-1 ${buttonColors.textColor}`}>
-                {buttonColors.label}
-              </Text>
-            </TouchableOpacity>
-            
-            {/* Edit Button - Always Blue */}
             <TouchableOpacity
               onPress={() => handleEditProduct(item)}
-              className="flex-row items-center px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30"
+              disabled={isPaginating}
+              className={`flex-row items-center px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 ${isPaginating ? 'opacity-50' : 'opacity-100'}`}
             >
               <Icon name="pencil" size={14} color="#3B82F6" />
               <Text className="text-blue-600 dark:text-blue-400 text-xs font-medium ml-1">Edit</Text>
             </TouchableOpacity>
             
-            {/* Delete Button - Always Red */}
             <TouchableOpacity
               onPress={() => handleDeleteProduct(item.id)}
-              className="flex-row items-center px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30"
+              disabled={isPaginating}
+              className={`flex-row items-center px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 ${isPaginating ? 'opacity-50' : 'opacity-100'}`}
             >
               <Icon name="delete" size={14} color="#EF4444" />
               <Text className="text-red-600 dark:text-red-400 text-xs font-medium ml-1">Delete</Text>

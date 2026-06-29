@@ -1,6 +1,5 @@
 // api/products.js
 import apiClient from './client';
-import * as ImagePicker from 'expo-image-picker';
 
 export const productsAPI = {
   // Get create page data (brands, categories, units, input permissions)
@@ -16,7 +15,7 @@ export const productsAPI = {
     }
   },
 
-  // Get all products with pagination
+  // Get all products with pagination - EXACTLY like web version
   getAll: async (search = "", page = 1, perPage = 15) => {
     try {
       const params = { page, per_page: perPage };
@@ -31,17 +30,35 @@ export const productsAPI = {
     }
   },
 
-  // Get products by URL (for pagination)
+  // Get products by URL (for pagination) - EXACTLY like web version
   getByUrl: async (url) => {
     try {
       console.log("📦 Fetching products by URL:", url);
-      // If url is a full URL, extract the path
+      
+      // Extract the path from the full URL - EXACTLY like web version
       let path = url;
+      
+      // If url is a full URL with base URL, extract the path
       if (url.startsWith('http')) {
-        // Remove base URL to get relative path
-        const baseUrl = apiClient.defaults.baseURL || '';
-        path = url.replace(baseUrl, '');
+        const baseUrl = apiClient.defaults?.baseURL || '';
+        if (baseUrl && url.startsWith(baseUrl)) {
+          path = url.replace(baseUrl, '');
+        } else {
+          try {
+            const urlObj = new URL(url);
+            path = urlObj.pathname + urlObj.search;
+          } catch (e) {
+            path = url;
+          }
+        }
       }
+      
+      // Ensure the path starts with a slash
+      if (!path.startsWith('/')) {
+        path = '/' + path;
+      }
+      
+      console.log("📦 Requesting path:", path);
       const response = await apiClient.get(path);
       console.log("📦 Products fetched by URL successfully:", response.data);
       return response;

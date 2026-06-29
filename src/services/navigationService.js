@@ -4,10 +4,15 @@ import { createNavigationContainerRef, useNavigation as useNavigationHook } from
 export const navigationRef = createNavigationContainerRef();
 
 export function navigate(name, params) {
-  if (navigationRef.isReady()) {
-    navigationRef.navigate(name, params);
-  } else {
-    console.warn('Navigation not ready, cannot navigate to:', name);
+  console.log('🧭 navigate called:', name, params);
+  try {
+    if (navigationRef.isReady()) {
+      navigationRef.navigate(name, params);
+    } else {
+      console.warn('Navigation not ready, cannot navigate to:', name);
+    }
+  } catch (error) {
+    console.error('Navigation error in navigate function:', error);
   }
 }
 
