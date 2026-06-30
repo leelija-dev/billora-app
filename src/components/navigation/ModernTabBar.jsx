@@ -98,7 +98,7 @@ const ModernTabBar = ({ state, descriptors, navigation, tabs }) => {
   );
 
   return (
-    <View className="absolute bottom-0 left-0 right-0">
+    <View className="absolute bottom-0 left-0 right-0 hidden">
       <View className="mx-4 mb-2 rounded-3xl overflow-hidden">
         <BlurView
           intensity={80}

@@ -6,7 +6,6 @@ import ProductsScreen from "../../../screens/products/ProductsScreen";
 import AddProductScreen from "../../../screens/products/AddProductScreen";
 import DeletedProductsScreen from "../../../screens/products/DeletedProductsScreen";
 
-
 const Stack = createNativeStackNavigator();
 
 const ProductsStackNavigator = () => {
@@ -37,10 +36,9 @@ const ProductsStackNavigator = () => {
         name="DeletedProduct" 
         component={DeletedProductsScreen} 
         options={({ navigation }) => ({
-          header: () => <StackHeader title="Deleted Product" navigation={navigation} />,
+          header: () => <StackHeader title="Deleted Products" navigation={navigation} />,
         })}
       />
-      
     </Stack.Navigator>
   );
 };
