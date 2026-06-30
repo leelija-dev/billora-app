@@ -1,25 +1,25 @@
 // components/products/ProductList.js
+import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  ScrollView,
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  Modal,
-  Dimensions,
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useThemeStore } from "../../store/themeStore";
-import { useAuthStore } from "../../store/authStore";
-import { stocksAPI } from "../../api/stocks";
 import Toast from "react-native-toast-message";
-import ProductCard from "./ProductCard";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { stocksAPI } from "../../api/stocks";
+import { useAuthStore } from "../../store/authStore";
 import useProductStore from "../../store/productStore";
+import { useThemeStore } from "../../store/themeStore";
+import ProductCard from "./ProductCard";
 
 const { width } = Dimensions.get("window");
 
@@ -47,6 +47,8 @@ const ProductList = ({
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [stockQuantity, setStockQuantity] = useState("");
   const [addingStock, setAddingStock] = useState(false);
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [showStockDropdown, setShowStockDropdown] = useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -166,6 +168,8 @@ const ProductList = ({
     setSelectedProduct(product);
     setShowStockModal(true);
     setStockQuantity("");
+    setSelectedStock(null);
+    setShowStockDropdown(false);
   };
 
   const handleSubmitStock = async () => {
@@ -177,17 +181,14 @@ const ProductList = ({
       return;
     }
 
+    if (!selectedStock) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Please select a stock' });
+      return;
+    }
+
     setAddingStock(true);
     try {
-      const stocksList = getProductStocks(selectedProduct);
-      const primaryStock = stocksList[0];
-      
-      if (!primaryStock) {
-        Toast.show({ type: 'error', text1: 'Error', text2: 'No stock record found for this product' });
-        return;
-      }
-
-      await stocksAPI.addStock(primaryStock.id, user?.id, quantity);
+      await stocksAPI.addStock(selectedStock.id, user?.id, quantity);
       
       Toast.show({ 
         type: 'success', 
@@ -198,6 +199,7 @@ const ProductList = ({
       setShowStockModal(false);
       setStockQuantity("");
       setSelectedProduct(null);
+      setSelectedStock(null);
       
       // Refresh products to get updated stock data
       await fetchProducts(currentPage, true);
@@ -433,26 +435,73 @@ const ProductList = ({
           </LinearGradient>
 
           <View className="p-4">
-            <View className={`p-3 rounded-lg mb-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-              <View className="flex-row justify-between items-center mb-2">
-                <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Current Stock:
-                </Text>
-                <Text className={`text-lg font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                  {getProductTotalStock(selectedProduct)} {selectedProduct?.unit?.name || 'units'}
-                </Text>
+            <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Select Stock *
+            </Text>
+            <TouchableOpacity
+              onPress={() => setShowStockDropdown(!showStockDropdown)}
+              className={`border rounded-xl px-4 py-3 flex-row justify-between items-center ${
+                isDarkMode 
+                  ? 'border-gray-600 text-white bg-gray-700' 
+                  : 'border-gray-300 text-gray-800 bg-gray-50'
+              }`}
+            >
+              <Text className={selectedStock ? 'text-base' : 'text-base text-gray-500'}>
+                {selectedStock ? selectedStock.name || `Stock #${selectedStock.id}` : 'Select a stock'}
+              </Text>
+              <Icon name={showStockDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+            </TouchableOpacity>
+
+            {showStockDropdown && (
+              <View className={`mt-2 border rounded-xl overflow-hidden ${
+                isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'
+              }`}>
+                <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 150 }}>
+                  {getProductStocks(selectedProduct).map((stock) => (
+                    <TouchableOpacity
+                      key={stock.id}
+                      onPress={() => {
+                        setSelectedStock(stock);
+                        setShowStockDropdown(false);
+                      }}
+                      className={`px-4 py-3 border-b ${
+                        isDarkMode ? 'border-gray-600' : 'border-gray-200'
+                      } ${selectedStock?.id === stock.id ? (isDarkMode ? 'bg-blue-900/30' : 'bg-blue-50') : ''}`}
+                    >
+                      <Text className={`text-base ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                        {stock.name || `Stock #${stock.id}`}
+                      </Text>
+                      <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Current: {stock.quantity || 0} {selectedProduct?.unit?.name || 'units'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
-              {selectedProduct?.minimum_stock_quantity && (
-                <View className="flex-row justify-between items-center">
-                  <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Minimum Stock Level:
+            )}
+
+            {selectedStock && (
+              <View className={`p-3 rounded-lg mb-4 mt-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <View className="flex-row justify-between items-center mb-2">
+                  <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Current Stock in {selectedStock.name || `Stock #${selectedStock.id}`}:
                   </Text>
-                  <Text className={`text-xs font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {selectedProduct.minimum_stock_quantity} {selectedProduct?.unit?.name || 'units'}
+                  <Text className={`text-lg font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                    {selectedStock.quantity || 0} {selectedProduct?.unit?.name || 'units'}
                   </Text>
                 </View>
-              )}
-            </View>
+                {selectedProduct?.minimum_stock_quantity && (
+                  <View className="flex-row justify-between items-center">
+                    <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Minimum Stock Level:
+                    </Text>
+                    <Text className={`text-xs font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {selectedProduct.minimum_stock_quantity} {selectedProduct?.unit?.name || 'units'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
             
             <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
               Quantity to Add *
