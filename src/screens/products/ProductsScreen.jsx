@@ -46,6 +46,7 @@ const ProductScreen = ({ navigation }) => {
     pagination,
     filters,
     fetchProducts,
+    fetchProductsByUrl,
     setFilters,
     setPage,
     deleteProduct,
@@ -225,54 +226,12 @@ const ProductScreen = ({ navigation }) => {
     await fetchProducts(currentPage, true);
   };
 
-  // Handle page change
-  const handlePageChange = (page) => {
-    if (page !== currentPage && page >= 1 && page <= lastPage) {
-      setPage(page);
+  // Handle page change using URL-based pagination
+  const handlePageChange = (url) => {
+    if (url) {
+      fetchProductsByUrl(url);
     }
   };
-
-  // Get page numbers for pagination
-  const getPageNumbers = useMemo(() => {
-    const pages = [];
-    const maxVisible = 5;
-
-    if (lastPage <= maxVisible) {
-      for (let i = 1; i <= lastPage; i++) {
-        pages.push(i);
-      }
-    } else {
-      pages.push(1);
-
-      let start = Math.max(2, currentPage - 1);
-      let end = Math.min(lastPage - 1, currentPage + 1);
-
-      if (currentPage <= 3) {
-        end = 4;
-      }
-      if (currentPage >= lastPage - 2) {
-        start = lastPage - 3;
-      }
-
-      if (start > 2) {
-        pages.push("...");
-      }
-
-      for (let i = start; i <= end; i++) {
-        pages.push(i);
-      }
-
-      if (end < lastPage - 1) {
-        pages.push("...");
-      }
-
-      if (lastPage > 1) {
-        pages.push(lastPage);
-      }
-    }
-
-    return pages;
-  }, [currentPage, lastPage]);
 
   // Handle view mode toggle
   const toggleViewMode = () => {
@@ -296,9 +255,76 @@ const ProductScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  // Pagination Component
+  // Pagination Component - URL-based like admin version
   const Pagination = () => {
-    if (lastPage <= 1) return null;
+    if (!pagination || pagination.last_page <= 1) return null;
+
+    const {
+      current_page,
+      last_page,
+      per_page,
+      total,
+      next_page_url,
+      prev_page_url,
+      first_page_url,
+      last_page_url,
+    } = pagination;
+
+    // Get page numbers for display
+    const getPageNumbers = () => {
+      const pages = [];
+      const maxVisible = 5;
+
+      if (last_page <= maxVisible) {
+        for (let i = 1; i <= last_page; i++) {
+          pages.push({ number: i, url: getPageUrl(i) });
+        }
+      } else {
+        pages.push({ number: 1, url: first_page_url });
+
+        let start = Math.max(2, current_page - 1);
+        let end = Math.min(last_page - 1, current_page + 1);
+
+        if (current_page <= 3) {
+          end = 4;
+        }
+        if (current_page >= last_page - 2) {
+          start = last_page - 3;
+        }
+
+        if (start > 2) {
+          pages.push({ number: "...", url: null });
+        }
+
+        for (let i = start; i <= end; i++) {
+          pages.push({ number: i, url: getPageUrl(i) });
+        }
+
+        if (end < last_page - 1) {
+          pages.push({ number: "...", url: null });
+        }
+
+        if (last_page > 1) {
+          pages.push({ number: last_page, url: last_page_url });
+        }
+      }
+
+      return pages;
+    };
+
+    // Helper to get URL for a specific page number
+    const getPageUrl = (page) => {
+      if (page === 1) return first_page_url;
+      if (page === last_page) return last_page_url;
+      if (page === current_page + 1) return next_page_url;
+      if (page === current_page - 1) return prev_page_url;
+      
+      // Construct URL for other pages
+      const basePath = pagination.path || "/products";
+      return `${basePath}?page=${page}`;
+    };
+
+    const pageNumbers = getPageNumbers();
 
     return (
       <View
@@ -315,8 +341,7 @@ const ProductScreen = ({ navigation }) => {
               isDarkMode ? "text-gray-400" : "text-gray-500"
             }`}
           >
-            {(currentPage - 1) * perPage + 1}-
-            {Math.min(currentPage * perPage, totalProducts)} of {totalProducts}
+            {pagination.from || 0}-{pagination.to || 0} of {total}
           </Text>
 
           <Text
@@ -324,7 +349,7 @@ const ProductScreen = ({ navigation }) => {
               isDarkMode ? "text-gray-300" : "text-gray-600"
             }`}
           >
-            {currentPage} / {lastPage}
+            {current_page} / {last_page}
           </Text>
         </View>
 
@@ -332,10 +357,10 @@ const ProductScreen = ({ navigation }) => {
         <View className="flex-row items-center justify-center">
           {/* Previous */}
           <TouchableOpacity
-            disabled={currentPage === 1}
-            onPress={() => handlePageChange(currentPage - 1)}
+            disabled={!prev_page_url}
+            onPress={() => handlePageChange(prev_page_url)}
             className={`w-11 h-11 rounded-full items-center justify-center ${
-              currentPage === 1
+              !prev_page_url
                 ? "opacity-40"
                 : isDarkMode
                   ? "bg-gray-800"
@@ -351,8 +376,8 @@ const ProductScreen = ({ navigation }) => {
 
           {/* Pages */}
           <View className="flex-row mx-3">
-            {getPageNumbers.map((page, index) => {
-              if (page === "...") {
+            {pageNumbers.map((page, index) => {
+              if (page.number === "...") {
                 return (
                   <View
                     key={index}
@@ -372,9 +397,9 @@ const ProductScreen = ({ navigation }) => {
               return (
                 <TouchableOpacity
                   key={index}
-                  onPress={() => handlePageChange(page)}
+                  onPress={() => handlePageChange(page.url)}
                   className={`w-11 h-11 rounded-xl mx-1 items-center justify-center ${
-                    page === currentPage
+                    page.number === current_page
                       ? "bg-blue-600"
                       : isDarkMode
                         ? "bg-gray-800"
@@ -383,14 +408,14 @@ const ProductScreen = ({ navigation }) => {
                 >
                   <Text
                     className={`font-semibold ${
-                      page === currentPage
+                      page.number === current_page
                         ? "text-white"
                         : isDarkMode
                           ? "text-gray-300"
                           : "text-gray-700"
                     }`}
                   >
-                    {page}
+                    {page.number}
                   </Text>
                 </TouchableOpacity>
               );
@@ -399,10 +424,10 @@ const ProductScreen = ({ navigation }) => {
 
           {/* Next */}
           <TouchableOpacity
-            disabled={currentPage === lastPage}
-            onPress={() => handlePageChange(currentPage + 1)}
+            disabled={!next_page_url}
+            onPress={() => handlePageChange(next_page_url)}
             className={`w-11 h-11 rounded-full items-center justify-center ${
-              currentPage === lastPage
+              !next_page_url
                 ? "opacity-40"
                 : isDarkMode
                   ? "bg-gray-800"

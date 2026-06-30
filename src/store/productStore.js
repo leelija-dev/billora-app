@@ -143,13 +143,45 @@ const useProductStore = create((set, get) => ({
 
     try {
       const response = await productsAPI.getByUrl(url);
-      console.log("📦 Products by URL Response received");
 
-      const responseData = response.data;
+      let responseData = response.data;
       
-      // The response structure is: { status, message, data: { current_page, data: [...] } }
-      // Same extraction logic as fetchProducts
+      // Parse JSON string if response is a string
+      if (typeof responseData === 'string') {
+        try {
+          responseData = JSON.parse(responseData);
+        } catch (parseError) {
+          // Silently fall back to regular fetchProducts on parse errors
+          throw parseError;
+        }
+      }
+      
+      // Validate response structure
+      if (!responseData || typeof responseData !== 'object') {
+        throw new Error("Invalid API response structure");
+      }
+
+      // The response structure can be:
+      // 1. { status, message, data: { current_page, data: [...] } }
+      // 2. { status: true, message, source: "Cache", data: { current_page, data: [...] } }
       const paginationData = responseData?.data || {};
+      
+      console.log("📦 Pagination data extracted:", paginationData);
+      
+      // Check if paginationData has the expected structure
+      if (!paginationData || typeof paginationData !== 'object') {
+        console.error("❌ Invalid pagination data structure:", paginationData);
+        console.error("❌ Full response data:", responseData);
+        throw new Error("Invalid pagination data structure");
+      }
+
+      // Check if paginationData has the required fields (data array or current_page)
+      // Handle both cached and non-cached responses
+      if (!paginationData.data && !paginationData.current_page) {
+        console.error("❌ Pagination data missing required fields:", paginationData);
+        throw new Error("Pagination data missing required fields");
+      }
+
       const products = paginationData?.data || [];
 
       console.log(`📦 Extracted ${products.length} products from URL`);
@@ -192,12 +224,21 @@ const useProductStore = create((set, get) => ({
       console.log(`✅ Products by URL loaded: ${products.length} products`);
       return response.data;
     } catch (error) {
-      console.error("❌ Failed to fetch products by URL:", error);
-      set({
-        loading: false,
-        error: error.message || "Failed to fetch products",
-      });
-      throw error;
+      // Silently fall back to regular fetchProducts on errors
+      // Extract page number from URL as fallback
+      let page = 1;
+      try {
+        const urlObj = new URL(url);
+        const pageParam = urlObj.searchParams.get('page');
+        if (pageParam) {
+          page = parseInt(pageParam, 10);
+        }
+      } catch (e) {
+        // Use default page 1 if URL parsing fails
+      }
+
+      // Fallback to regular fetchProducts
+      return get().fetchProducts(page, true);
     }
   },
 
