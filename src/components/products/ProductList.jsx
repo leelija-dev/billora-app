@@ -374,6 +374,15 @@ const ProductList = ({
           {/* Action Buttons */}
           <View className="flex-row justify-end gap-3 mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
             <TouchableOpacity
+              onPress={() => handleAddStock(item)}
+              disabled={isPaginating}
+              className={`flex-row items-center px-3 py-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 ${isPaginating ? 'opacity-50' : 'opacity-100'}`}
+            >
+              <Icon name="plus" size={14} color="#10B981" />
+              <Text className="text-emerald-600 dark:text-emerald-400 text-xs font-medium ml-1">Add Stock</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
               onPress={() => handleEditProduct(item)}
               disabled={isPaginating}
               className={`flex-row items-center px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 ${isPaginating ? 'opacity-50' : 'opacity-100'}`}
@@ -435,7 +444,7 @@ const ProductList = ({
           </LinearGradient>
 
           <View className="p-4">
-            <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
               Select Stock *
             </Text>
             <TouchableOpacity
@@ -446,7 +455,7 @@ const ProductList = ({
                   : 'border-gray-300 text-gray-800 bg-gray-50'
               }`}
             >
-              <Text className={selectedStock ? 'text-base' : 'text-base text-gray-500'}>
+              <Text className={`text-base ${selectedStock ? (isDarkMode ? 'text-white' : 'text-gray-800') : 'text-gray-500'}`}>
                 {selectedStock ? selectedStock.name || `Stock #${selectedStock.id}` : 'Select a stock'}
               </Text>
               <Icon name={showStockDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
@@ -468,7 +477,7 @@ const ProductList = ({
                         isDarkMode ? 'border-gray-600' : 'border-gray-200'
                       } ${selectedStock?.id === stock.id ? (isDarkMode ? 'bg-blue-900/30' : 'bg-blue-50') : ''}`}
                     >
-                      <Text className={`text-base ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <Text className={`text-base ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
                         {stock.name || `Stock #${stock.id}`}
                       </Text>
                       <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -483,7 +492,7 @@ const ProductList = ({
             {selectedStock && (
               <View className={`p-3 rounded-lg mb-4 mt-4 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
                 <View className="flex-row justify-between items-center mb-2">
-                  <Text className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <Text className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
                     Current Stock in {selectedStock.name || `Stock #${selectedStock.id}`}:
                   </Text>
                   <Text className={`text-lg font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
@@ -503,7 +512,7 @@ const ProductList = ({
               </View>
             )}
             
-            <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+            <Text className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
               Quantity to Add *
             </Text>
             <TextInput
@@ -527,7 +536,7 @@ const ProductList = ({
                   isDarkMode ? 'border-gray-600' : 'border-gray-300'
                 }`}
               >
-                <Text className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>Cancel</Text>
+                <Text className={isDarkMode ? 'text-gray-200' : 'text-gray-700'}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSubmitStock}

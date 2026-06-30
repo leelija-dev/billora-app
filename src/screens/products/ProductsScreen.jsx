@@ -530,7 +530,7 @@ const ProductScreen = ({ navigation }) => {
               <>
                 <View className="flex-row justify-between items-start mb-4">
                   <Text
-                    className={`text-2xl font-bold flex-1 mr-2 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                    className={`text-2xl font-bold flex-1 mr-2 ${isDarkMode ? "text-white" : "text-gray-900"}`}
                   >
                     {selectedProduct.name || "Unnamed Product"}
                   </Text>
@@ -602,7 +602,7 @@ const ProductScreen = ({ navigation }) => {
                   className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
                 >
                   <Text
-                    className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                    className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
                   >
                     Pricing
                   </Text>
@@ -664,7 +664,7 @@ const ProductScreen = ({ navigation }) => {
                   className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
                 >
                   <Text
-                    className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                    className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
                   >
                     Stock Information
                   </Text>
@@ -715,7 +715,7 @@ const ProductScreen = ({ navigation }) => {
                     className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
                   >
                     <Text
-                      className={`text-sm font-semibold mb-1 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                      className={`text-sm font-semibold mb-1 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
                     >
                       Description
                     </Text>
@@ -760,7 +760,7 @@ const ProductScreen = ({ navigation }) => {
             className={`p-4 border-t ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
           >
             <Text
-              className={`text-center font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              className={`text-center font-medium ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
             >
               Close
             </Text>
@@ -789,14 +789,14 @@ const ProductScreen = ({ navigation }) => {
           </View>
 
           <Text
-            className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+            className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-gray-900"}`}
           >
             Filter Products
           </Text>
 
           <View className="mb-6">
             <Text
-              className={`text-sm font-medium mb-3 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+              className={`text-sm font-medium mb-3 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
             >
               Status
             </Text>

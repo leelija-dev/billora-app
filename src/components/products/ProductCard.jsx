@@ -3,14 +3,14 @@ import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Toast from "react-native-toast-message";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -380,7 +380,7 @@ const ProductCard = ({
             {/* Product Name */}
             <Text
               className={`text-base font-semibold mb-2 leading-5 ${
-                isDarkMode ? "text-gray-100" : "text-gray-800"
+                isDarkMode ? "text-gray-100" : "text-gray-900"
               }`}
               numberOfLines={2}
             >
@@ -477,7 +477,7 @@ const ProductCard = ({
                 >
                   <Text
                     className={`text-xs font-medium ${
-                      isDarkMode ? "text-gray-400" : "text-gray-600"
+                      isDarkMode ? "text-gray-300" : "text-gray-700"
                     }`}
                   >
                     GST {gst}%
@@ -495,7 +495,7 @@ const ProductCard = ({
               >
                 <Text
                   className={`text-xs font-medium mb-1.5 ${
-                    isDarkMode ? "text-gray-400" : "text-gray-500"
+                    isDarkMode ? "text-gray-300" : "text-gray-600"
                   }`}
                 >
                   Stock Breakdown:
@@ -514,7 +514,7 @@ const ProductCard = ({
                     </Text>
                     <Text
                       className={`text-xs font-medium ${
-                        isDarkMode ? "text-gray-300" : "text-gray-700"
+                        isDarkMode ? "text-gray-200" : "text-gray-700"
                       }`}
                     >
                       {parseFloat(stock.quantity).toFixed(2)}
@@ -583,7 +583,7 @@ const ProductCard = ({
               className={`p-4 border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
             >
               <Text
-                className={`text-lg font-semibold text-center ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                className={`text-lg font-semibold text-center ${isDarkMode ? "text-white" : "text-gray-900"}`}
               >
                 Add Stock
               </Text>
@@ -599,7 +599,7 @@ const ProductCard = ({
                 className={`p-3 rounded-lg mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
               >
                 <Text
-                  className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                  className={`text-sm ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
                 >
                   Current Stock:{" "}
                   <Text className="font-bold text-emerald-600 dark:text-emerald-400">
@@ -610,7 +610,7 @@ const ProductCard = ({
               </View>
 
               <Text
-                className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
               >
                 Quantity to Add *
               </Text>
@@ -636,7 +636,7 @@ const ProductCard = ({
                   }`}
                 >
                   <Text
-                    className={isDarkMode ? "text-gray-300" : "text-gray-700"}
+                    className={isDarkMode ? "text-gray-200" : "text-gray-700"}
                   >
                     Cancel
                   </Text>
@@ -691,7 +691,7 @@ const ProductCard = ({
             <View className="p-5">
               <Text
                 className={`text-lg font-semibold mb-4 text-center ${
-                  isDarkMode ? "text-white" : "text-gray-800"
+                  isDarkMode ? "text-white" : "text-gray-900"
                 }`}
               >
                 {name}
@@ -713,7 +713,7 @@ const ProductCard = ({
                 <View className="ml-3 flex-1">
                   <Text
                     className={`text-base font-semibold ${
-                      isDarkMode ? "text-white" : "text-gray-800"
+                      isDarkMode ? "text-gray-100" : "text-gray-900"
                     }`}
                   >
                     Edit Product
@@ -749,7 +749,7 @@ const ProductCard = ({
                 <View className="ml-3 flex-1">
                   <Text
                     className={`text-base font-semibold ${
-                      isDarkMode ? "text-white" : "text-gray-800"
+                      isDarkMode ? "text-gray-100" : "text-gray-900"
                     }`}
                   >
                     Add Stock
@@ -785,7 +785,7 @@ const ProductCard = ({
                 <View className="ml-3 flex-1">
                   <Text
                     className={`text-base font-semibold ${
-                      isDarkMode ? "text-white" : "text-gray-800"
+                      isDarkMode ? "text-gray-100" : "text-gray-900"
                     }`}
                   >
                     Delete Product
@@ -813,7 +813,7 @@ const ProductCard = ({
               >
                 <Text
                   className={`text-base font-semibold ${
-                    isDarkMode ? "text-gray-300" : "text-gray-600"
+                    isDarkMode ? "text-gray-200" : "text-gray-700"
                   }`}
                 >
                   Cancel
