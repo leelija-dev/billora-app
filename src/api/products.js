@@ -5,24 +5,24 @@ export const productsAPI = {
   // Get create page data (brands, categories, units, input permissions)
   getCreatePage: async (userId) => {
     try {
-      console.log(`Fetching create page data for user: ${userId}`);
+      console.log(`📦 Fetching create page data for user: ${userId}`);
       const response = await apiClient.get(`/products/create/${userId}`);
-      console.log("Create page data fetched successfully:", response.data);
+      console.log("✅ Create page data fetched successfully:", response.data);
       return response;
     } catch (error) {
-      console.error("Failed to fetch create page data:", error);
+      console.error("❌ Failed to fetch create page data:", error);
       throw error.response?.data || error.message;
     }
   },
 
-  // Get all products with pagination - EXACTLY like web version
+  // Get all products with pagination
   getAll: async (search = "", page = 1, perPage = 15) => {
     try {
       const params = { page, per_page: perPage };
       if (search) params.search = search;
       console.log("📦 Fetching all products with params:", params);
       const response = await apiClient.get("/products", { params });
-      console.log("📦 Products fetched successfully:", response.data);
+      console.log("✅ Products fetched successfully");
       return response;
     } catch (error) {
       console.error("❌ Failed to fetch products:", error);
@@ -30,27 +30,32 @@ export const productsAPI = {
     }
   },
 
-  // Get products by URL (for pagination) - EXACTLY like web version
+  // Get products by URL (for pagination)
   getByUrl: async (url) => {
     try {
       console.log("📦 Fetching products by URL:", url);
       
-      // Extract the path from the full URL - EXACTLY like web version
+      // Extract the path from the full URL
       let path = url;
       
-      // If url is a full URL with base URL, extract the path
+      // If url is a full URL with base URL, extract just the path and query
       if (url.startsWith('http')) {
-        const baseUrl = apiClient.defaults?.baseURL || '';
-        if (baseUrl && url.startsWith(baseUrl)) {
-          path = url.replace(baseUrl, '');
-        } else {
-          try {
-            const urlObj = new URL(url);
-            path = urlObj.pathname + urlObj.search;
-          } catch (e) {
-            path = url;
-          }
+        try {
+          const urlObj = new URL(url);
+          // Get the full path including query parameters
+          path = urlObj.pathname + urlObj.search;
+          console.log("📦 Extracted path from URL:", path);
+        } catch (e) {
+          console.warn("⚠️ Failed to parse URL, using as is:", url);
+          path = url;
         }
+      }
+      
+      // Since apiClient already has /api in baseURL, remove /api from the path
+      // This prevents /api/api/products
+      if (path.startsWith('/api/')) {
+        path = path.replace('/api', '');
+        console.log("📦 Removed /api prefix from path:", path);
       }
       
       // Ensure the path starts with a slash
@@ -58,9 +63,9 @@ export const productsAPI = {
         path = '/' + path;
       }
       
-      console.log("📦 Requesting path:", path);
+      console.log("📦 Final request path:", path);
       const response = await apiClient.get(path);
-      console.log("📦 Products fetched by URL successfully:", response.data);
+      console.log("✅ Products fetched by URL successfully");
       return response;
     } catch (error) {
       console.error("❌ Failed to fetch products by URL:", error);
@@ -75,7 +80,7 @@ export const productsAPI = {
       if (search) params.search = search;
       console.log("📦 Fetching deleted products with params:", params);
       const response = await apiClient.get(`/products/deleted-products/${userId}`, { params });
-      console.log("📦 Deleted products fetched successfully:", response.data);
+      console.log("✅ Deleted products fetched successfully");
       return response;
     } catch (error) {
       console.error("❌ Failed to fetch deleted products:", error);
@@ -88,7 +93,7 @@ export const productsAPI = {
     try {
       console.log(`📦 Fetching product with ID: ${id}`);
       const response = await apiClient.get(`/products/${id}`);
-      console.log("📦 Product fetched successfully:", response.data);
+      console.log("✅ Product fetched successfully");
       return response;
     } catch (error) {
       console.error(`❌ Failed to fetch product ${id}:`, error);
@@ -99,7 +104,7 @@ export const productsAPI = {
   // Create product
   create: async (productData) => {
     try {
-      console.log("Creating product with data:", productData);
+      console.log("📝 Creating product with data:", productData);
 
       const formData = new FormData();
 
@@ -220,10 +225,10 @@ export const productsAPI = {
           "Content-Type": "multipart/form-data",
         },
       });
-      console.log("Product created successfully:", response.data);
+      console.log("✅ Product created successfully");
       return response;
     } catch (error) {
-      console.error("Failed to create product:", error);
+      console.error("❌ Failed to create product:", error);
       throw error.response?.data || error.message;
     }
   },
@@ -231,7 +236,7 @@ export const productsAPI = {
   // Update product
   update: async (id, productData) => {
     try {
-      console.log(`Updating product ${id} with data:`, productData);
+      console.log(`✏️ Updating product ${id} with data:`, productData);
 
       const hasNewImages = productData.image?.uri || 
         (Array.isArray(productData.images) && productData.images.some(img => img.uri));
@@ -377,10 +382,10 @@ export const productsAPI = {
         response = await apiClient.put(`/products/${id}`, cleanedData);
       }
 
-      console.log("Product updated successfully:", response.data);
+      console.log("✅ Product updated successfully");
       return response;
     } catch (error) {
-      console.error(`Failed to update product ${id}:`, error);
+      console.error(`❌ Failed to update product ${id}:`, error);
       throw error.response?.data || error.message;
     }
   },
@@ -388,9 +393,9 @@ export const productsAPI = {
   // Delete product (soft delete)
   delete: async (id) => {
     try {
-      console.log(`📦 Deleting product with ID: ${id}`);
+      console.log(`🗑️ Deleting product with ID: ${id}`);
       const response = await apiClient.delete(`/products/${id}`);
-      console.log("📦 Product deleted successfully");
+      console.log("✅ Product deleted successfully");
       return response;
     } catch (error) {
       console.error(`❌ Failed to delete product ${id}:`, error);
@@ -401,9 +406,9 @@ export const productsAPI = {
   // Restore product
   restore: async (id) => {
     try {
-      console.log(`📦 Restoring product with ID: ${id}`);
+      console.log(`♻️ Restoring product with ID: ${id}`);
       const response = await apiClient.patch(`/products/${id}/restore`);
-      console.log("📦 Product restored successfully");
+      console.log("✅ Product restored successfully");
       return response;
     } catch (error) {
       console.error(`❌ Failed to restore product ${id}:`, error);
@@ -414,9 +419,9 @@ export const productsAPI = {
   // Permanently delete product
   forceDelete: async (id) => {
     try {
-      console.log(`📦 Permanently deleting product with ID: ${id}`);
+      console.log(`💥 Permanently deleting product with ID: ${id}`);
       const response = await apiClient.delete(`/products/${id}/force`);
-      console.log("📦 Product permanently deleted");
+      console.log("✅ Product permanently deleted");
       return response;
     } catch (error) {
       console.error(`❌ Failed to permanently delete product ${id}:`, error);
@@ -431,7 +436,7 @@ export const productsAPI = {
       const response = await apiClient.delete("/products/bulk-delete", {
         data: { ids },
       });
-      console.log("📦 Products bulk deleted successfully");
+      console.log("✅ Products bulk deleted successfully");
       return response;
     } catch (error) {
       console.error("❌ Failed to bulk delete products:", error);
@@ -442,11 +447,11 @@ export const productsAPI = {
   // Bulk permanently delete products
   bulkForceDelete: async (ids) => {
     try {
-      console.log(`📦 Bulk permanently deleting products with IDs:`, ids);
+      console.log(`💥 Bulk permanently deleting products with IDs:`, ids);
       const response = await apiClient.delete(`/products/bulk-force-delete`, {
         data: { ids },
       });
-      console.log("📦 Products bulk permanently deleted");
+      console.log("✅ Products bulk permanently deleted");
       return response;
     } catch (error) {
       console.error("❌ Failed to bulk permanently delete products:", error);
@@ -457,11 +462,11 @@ export const productsAPI = {
   // Search products
   search: async (query, filters = {}) => {
     try {
-      console.log("📦 Searching products with query:", query, filters);
+      console.log("🔍 Searching products with query:", query, filters);
       const response = await apiClient.get("/products", {
         params: { search: query, ...filters },
       });
-      console.log("📦 Products search results:", response.data);
+      console.log("✅ Products search results fetched");
       return response;
     } catch (error) {
       console.error("❌ Failed to search products:", error);
@@ -472,11 +477,11 @@ export const productsAPI = {
   // Get products by category
   getByCategory: async (categoryId, page = 1) => {
     try {
-      console.log(`📦 Fetching products by category ID: ${categoryId}`);
+      console.log(`📂 Fetching products by category ID: ${categoryId}`);
       const response = await apiClient.get("/products", {
         params: { category_id: categoryId, page },
       });
-      console.log("📦 Products by category fetched successfully:", response.data);
+      console.log("✅ Products by category fetched successfully");
       return response;
     } catch (error) {
       console.error(`❌ Failed to fetch products by category ${categoryId}:`, error);
