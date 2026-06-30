@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import Header from "../../components/common/Header";
 import SearchSelect from "../../components/common/SearchSelect";
 import FormModal from "../../components/modals/FormModal";
 import CategoryForm from "../../components/forms/CategoryForm";
@@ -32,7 +33,7 @@ import useProductStore from "../../store/productStore";
 import { useThemeStore } from "../../store/themeStore";
 import useUnitStore from "../../store/unitStore";
 
-const API_BASE_URL = "https://api.thefastbill.com/api";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://192.168.1.173:8000/api";
 
 const AddProductScreen = () => {
   const navigation = useNavigation();
@@ -785,6 +786,12 @@ const handleCreateUnit = async (data) => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
     >
+      <Header
+        title={productId ? "Edit Product" : "Add Product"}
+        showBackButton={true}
+        showSidebar={false}
+        rightComponent={null}
+      />
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-4 pb-32">
           {/* Single Image Upload */}
