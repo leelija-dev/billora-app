@@ -647,18 +647,6 @@ const ProductScreen = ({ navigation }) => {
                       ₹{formatPrice(selectedProduct.selling_price)}
                     </Text>
                   </View>
-                  <View className="flex-row justify-between mb-1.5">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      Purchase Price
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      ₹{formatPrice(selectedProduct.purchase_price)}
-                    </Text>
-                  </View>
                   {selectedProduct.mrp && (
                     <View className="flex-row justify-between mb-1.5">
                       <Text
@@ -673,17 +661,87 @@ const ProductScreen = ({ navigation }) => {
                       </Text>
                     </View>
                   )}
-                  {selectedProduct.gst_percentage && (
-                    <View className="flex-row justify-between">
+                  {selectedProduct.purchase_price && (
+                    <View className="flex-row justify-between mb-1.5">
                       <Text
                         className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
                       >
-                        GST
+                        Purchase Price
+                      </Text>
+                      <Text
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
+                      >
+                        ₹{formatPrice(selectedProduct.purchase_price)}
+                      </Text>
+                    </View>
+                  )}
+                  {selectedProduct.wholesale_price && (
+                    <View className="flex-row justify-between mb-1.5">
+                      <Text
+                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                      >
+                        Wholesale Price
+                      </Text>
+                      <Text
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
+                      >
+                        ₹{formatPrice(selectedProduct.wholesale_price)}
+                      </Text>
+                    </View>
+                  )}
+                  {selectedProduct.gst_percentage && (
+                    <View className="flex-row justify-between mb-1.5">
+                      <Text
+                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                      >
+                        GST %
                       </Text>
                       <Text
                         className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
                       >
                         {selectedProduct.gst_percentage}%
+                      </Text>
+                    </View>
+                  )}
+                  {selectedProduct.purchase_gst_percentage && (
+                    <View className="flex-row justify-between mb-1.5">
+                      <Text
+                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                      >
+                        Purchase GST %
+                      </Text>
+                      <Text
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
+                      >
+                        {selectedProduct.purchase_gst_percentage}%
+                      </Text>
+                    </View>
+                  )}
+                  {selectedProduct.discount_percentage && (
+                    <View className="flex-row justify-between mb-1.5">
+                      <Text
+                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                      >
+                        Discount %
+                      </Text>
+                      <Text
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
+                      >
+                        {selectedProduct.discount_percentage}%
+                      </Text>
+                    </View>
+                  )}
+                  {selectedProduct.gst_hsn_code && (
+                    <View className="flex-row justify-between">
+                      <Text
+                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                      >
+                        GST HSN Code
+                      </Text>
+                      <Text
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
+                      >
+                        {selectedProduct.gst_hsn_code}
                       </Text>
                     </View>
                   )}
@@ -738,6 +796,203 @@ const ProductScreen = ({ navigation }) => {
                     </View>
                   )}
                 </View>
+
+                {/* Variants */}
+                {selectedProduct.variants && Array.isArray(selectedProduct.variants) && selectedProduct.variants.length > 0 && (
+                  <View
+                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+                    >
+                      Variants
+                    </Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {selectedProduct.variants.map((variant, idx) => (
+                        <View
+                          key={idx}
+                          className={`px-3 py-2 rounded-lg ${isDarkMode ? "bg-gray-600" : "bg-gray-100"}`}
+                        >
+                          {variant.size && (
+                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                              Size: {variant.size}
+                            </Text>
+                          )}
+                          {variant.color && (
+                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                              Color: {variant.color}
+                            </Text>
+                          )}
+                          {variant.material && (
+                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                              Material: {variant.material}
+                            </Text>
+                          )}
+                          {variant.gender && (
+                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                              Gender: {variant.gender}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Attributes */}
+                {selectedProduct.attributes && (
+                  <View
+                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+                    >
+                      Attributes
+                    </Text>
+                    {(() => {
+                      let attrs = selectedProduct.attributes;
+                      if (typeof attrs === 'string') {
+                        try {
+                          attrs = JSON.parse(attrs);
+                        } catch (e) {
+                          return (
+                            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+                              {attrs}
+                            </Text>
+                          );
+                        }
+                      }
+                      if (!attrs || typeof attrs !== 'object') return null;
+
+                      let values = [];
+                      if (Array.isArray(attrs)) {
+                        attrs.forEach((item) => {
+                          if (typeof item === 'object' && item !== null) {
+                            values.push(...Object.values(item));
+                          } else {
+                            values.push(item);
+                          }
+                        });
+                      } else {
+                        values = Object.entries(attrs).map(([key, val]) => `${key}: ${val}`);
+                      }
+
+                      return values.map((val, idx) => (
+                        <View key={idx} className={`px-2 py-1 rounded-md mb-1 ${isDarkMode ? "bg-gray-600" : "bg-gray-100"}`}>
+                          <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                            {val}
+                          </Text>
+                        </View>
+                      ));
+                    })()}
+                  </View>
+                )}
+
+                {/* Medicine-specific fields */}
+                {(selectedProduct.expiry_date || selectedProduct.batch_number || selectedProduct.manufacturer_name || selectedProduct.prescription_required || selectedProduct.schedule_type || selectedProduct.salt_composition) && (
+                  <View
+                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+                    >
+                      Medicine Details
+                    </Text>
+                    {selectedProduct.expiry_date && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Expiry Date</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {new Date(selectedProduct.expiry_date).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.batch_number && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Batch Number</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.batch_number}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.manufacturer_name && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Manufacturer</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.manufacturer_name}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.prescription_required !== undefined && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Prescription Required</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.prescription_required ? "Yes" : "No"}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.schedule_type && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Schedule Type</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.schedule_type}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.salt_composition && (
+                      <View className="flex-row justify-between">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Salt Composition</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.salt_composition}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Additional fields */}
+                {(selectedProduct.warehouse_location || selectedProduct.supplier_id || selectedProduct.warranty_months || selectedProduct.is_returnable !== undefined || selectedProduct.is_refundable !== undefined) && (
+                  <View
+                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+                    >
+                      Additional Information
+                    </Text>
+                    {selectedProduct.warehouse_location && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Warehouse Location</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.warehouse_location}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.warranty_months && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Warranty</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.warranty_months} months
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.is_returnable !== undefined && (
+                      <View className="flex-row justify-between mb-1.5">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Returnable</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.is_returnable ? "Yes" : "No"}
+                        </Text>
+                      </View>
+                    )}
+                    {selectedProduct.is_refundable !== undefined && (
+                      <View className="flex-row justify-between">
+                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Refundable</Text>
+                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
+                          {selectedProduct.is_refundable ? "Yes" : "No"}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
 
                 {selectedProduct.description && (
                   <View

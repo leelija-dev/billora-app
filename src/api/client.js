@@ -85,6 +85,7 @@ apiClient.interceptors.response.use(
       status: response.status,
       url: response.config.url,
     });
+    console.log('📄 Full Response Data:', JSON.stringify(response.data, null, 2));
     return response;
   },
   async (error) => {

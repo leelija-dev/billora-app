@@ -58,12 +58,70 @@ const useProductStore = create((set, get) => ({
     try {
       const response = await productsAPI.getAll(filters.search, page, perPage);
       console.log("📦 Products API Response received");
+      console.log("📦 Full response object:", response);
+      console.log("📦 response.data:", response.data);
+      console.log("📦 response.data type:", typeof response.data);
 
-      const responseData = response.data;
+      let responseData = response.data;
       
-      // The response structure is: { status, message, data: { current_page, data: [...] } }
-      const paginationData = responseData?.data || {};
-      const products = paginationData?.data || [];
+      // Parse JSON string if response.data is a string
+      if (typeof responseData === 'string') {
+        console.log("📦 response.data is string, parsing JSON...");
+        try {
+          responseData = JSON.parse(responseData);
+          console.log("✅ JSON parsed successfully");
+        } catch (parseError) {
+          console.error("❌ Failed to parse JSON string:", parseError);
+          throw new Error("Invalid JSON response from server");
+        }
+      }
+      
+      // Handle different response structures from backend
+      // Backend returns: { status: true, message: "...", data: { current_page, data: [...], ... } }
+      let paginationData, products;
+      
+      if (responseData?.data && typeof responseData.data === 'object') {
+        // Standard Laravel response with pagination
+        paginationData = responseData.data;
+        products = paginationData.data || [];
+      } else if (responseData?.current_page !== undefined) {
+        // Direct pagination object
+        paginationData = responseData;
+        products = paginationData.data || [];
+      } else if (Array.isArray(responseData)) {
+        // Direct array response
+        products = responseData;
+        paginationData = {
+          current_page: 1,
+          last_page: 1,
+          per_page: products.length,
+          total: products.length,
+          next_page_url: null,
+          prev_page_url: null,
+          first_page_url: null,
+          last_page_url: null,
+          path: null,
+          from: null,
+          to: null,
+        };
+      } else {
+        // Fallback
+        console.warn("⚠️ Unexpected response structure:", responseData);
+        products = [];
+        paginationData = {
+          current_page: 1,
+          last_page: 1,
+          per_page: perPage,
+          total: 0,
+          next_page_url: null,
+          prev_page_url: null,
+          first_page_url: null,
+          last_page_url: null,
+          path: null,
+          from: null,
+          to: null,
+        };
+      }
 
       console.log(`📦 Extracted ${products.length} products`);
       console.log("📄 Pagination info:", {
@@ -146,13 +204,15 @@ const useProductStore = create((set, get) => ({
 
       let responseData = response.data;
       
-      // Parse JSON string if response is a string
+      // Parse JSON string if response.data is a string
       if (typeof responseData === 'string') {
+        console.log("📦 response.data is string in fetchProductsByUrl, parsing JSON...");
         try {
           responseData = JSON.parse(responseData);
+          console.log("✅ JSON parsed successfully in fetchProductsByUrl");
         } catch (parseError) {
-          // Silently fall back to regular fetchProducts on parse errors
-          throw parseError;
+          console.error("❌ Failed to parse JSON string in fetchProductsByUrl:", parseError);
+          throw new Error("Invalid JSON response from server");
         }
       }
       
@@ -161,28 +221,51 @@ const useProductStore = create((set, get) => ({
         throw new Error("Invalid API response structure");
       }
 
-      // The response structure can be:
-      // 1. { status, message, data: { current_page, data: [...] } }
-      // 2. { status: true, message, source: "Cache", data: { current_page, data: [...] } }
-      const paginationData = responseData?.data || {};
+      // Handle different response structures from backend
+      let paginationData, products;
       
-      console.log("📦 Pagination data extracted:", paginationData);
-      
-      // Check if paginationData has the expected structure
-      if (!paginationData || typeof paginationData !== 'object') {
-        console.error("❌ Invalid pagination data structure:", paginationData);
-        console.error("❌ Full response data:", responseData);
-        throw new Error("Invalid pagination data structure");
+      if (responseData?.data && typeof responseData.data === 'object') {
+        // Standard Laravel response with pagination
+        paginationData = responseData.data;
+        products = paginationData.data || [];
+      } else if (responseData?.current_page !== undefined) {
+        // Direct pagination object
+        paginationData = responseData;
+        products = paginationData.data || [];
+      } else if (Array.isArray(responseData)) {
+        // Direct array response
+        products = responseData;
+        paginationData = {
+          current_page: 1,
+          last_page: 1,
+          per_page: products.length,
+          total: products.length,
+          next_page_url: null,
+          prev_page_url: null,
+          first_page_url: null,
+          last_page_url: null,
+          path: null,
+          from: null,
+          to: null,
+        };
+      } else {
+        // Fallback
+        console.warn("⚠️ Unexpected response structure in fetchProductsByUrl:", responseData);
+        products = [];
+        paginationData = {
+          current_page: 1,
+          last_page: 1,
+          per_page: get().perPage,
+          total: 0,
+          next_page_url: null,
+          prev_page_url: null,
+          first_page_url: null,
+          last_page_url: null,
+          path: null,
+          from: null,
+          to: null,
+        };
       }
-
-      // Check if paginationData has the required fields (data array or current_page)
-      // Handle both cached and non-cached responses
-      if (!paginationData.data && !paginationData.current_page) {
-        console.error("❌ Pagination data missing required fields:", paginationData);
-        throw new Error("Pagination data missing required fields");
-      }
-
-      const products = paginationData?.data || [];
 
       console.log(`📦 Extracted ${products.length} products from URL`);
       console.log("📄 Pagination from URL:", {

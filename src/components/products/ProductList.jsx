@@ -254,8 +254,14 @@ const ProductList = ({
     const minStock = safeNumber(item.minimum_stock_quantity || item.reorder_level || 10);
     const sellingPrice = safeNumber(item.selling_price);
     const purchasePrice = safeNumber(item.purchase_price);
+    const mrp = safeNumber(item.mrp);
     const discount = safeNumber(item.discount_percentage);
     const gst = safeNumber(item.gst_percentage);
+    const variants = item.variants || [];
+    const attributes = item.attributes;
+    const expiryDate = item.expiry_date;
+    const batchNumber = item.batch_number;
+    const isFeatured = item.is_featured;
     
     const isLowStock = totalStock <= minStock && totalStock > 0;
     const isOutOfStock = totalStock === 0;
@@ -301,8 +307,13 @@ const ProductList = ({
             </LinearGradient>
           )}
           
+          {isFeatured && (
+            <View className="absolute -top-2 -left-2 bg-yellow-500 rounded-full px-2 py-1 shadow-md z-10">
+              <Text className="text-white text-xs font-bold">⭐</Text>
+            </View>
+          )}
           {discount > 0 && (
-            <View className="absolute -top-2 -left-2 bg-red-500 rounded-full px-2 py-1 shadow-md">
+            <View className="absolute -top-2 -left-2 bg-red-500 rounded-full px-2 py-1 shadow-md" style={{ left: isFeatured ? 28 : -8 }}>
               <Text className="text-white text-xs font-bold">-{discount}%</Text>
             </View>
           )}
@@ -344,6 +355,36 @@ const ProductList = ({
                 </Text>
               </View>
             )}
+            {/* Variants in list view */}
+            {variants && Array.isArray(variants) && variants.length > 0 && (
+              variants.slice(0, 2).map((variant, idx) => {
+                const variantValues = [];
+                if (variant.size) variantValues.push(String(variant.size));
+                if (variant.color) variantValues.push(String(variant.color));
+                return variantValues.slice(0, 1).map((val, valIdx) => (
+                  <View key={`${idx}-${valIdx}`} className={`flex-row items-center px-2 py-1 rounded-md ${isDarkMode ? 'bg-green-900/30' : 'bg-green-100'}`}>
+                    <Text className={`text-xs ${isDarkMode ? 'text-green-400' : 'text-green-700'}`}>{val}</Text>
+                  </View>
+                ));
+              })
+            )}
+            {/* Medicine fields in list view */}
+            {expiryDate && (
+              <View className={`flex-row items-center px-2 py-1 rounded-md ${isDarkMode ? 'bg-purple-900/30' : 'bg-purple-100'}`}>
+                <Icon name="calendar" size={10} color={isDarkMode ? "#A78BFA" : "#9333EA"} />
+                <Text className={`text-xs ml-1 ${isDarkMode ? 'text-purple-400' : 'text-purple-700'}`}>
+                  Exp: {new Date(expiryDate).toLocaleDateString()}
+                </Text>
+              </View>
+            )}
+            {batchNumber && (
+              <View className={`flex-row items-center px-2 py-1 rounded-md ${isDarkMode ? 'bg-orange-900/30' : 'bg-orange-100'}`}>
+                <Icon name="barcode" size={10} color={isDarkMode ? "#FB923C" : "#EA580C"} />
+                <Text className={`text-xs ml-1 ${isDarkMode ? 'text-orange-400' : 'text-orange-700'}`}>
+                  {batchNumber}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Price & Stock */}
@@ -353,7 +394,12 @@ const ProductList = ({
                 <Text className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{formatCurrency(sellingPrice)}
                 </Text>
-                {purchasePrice > 0 && purchasePrice !== sellingPrice && (
+                {mrp && mrp > sellingPrice && (
+                  <Text className={`text-xs line-through ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                    MRP: ₹{formatCurrency(mrp)}
+                  </Text>
+                )}
+                {purchasePrice > 0 && purchasePrice !== sellingPrice && !mrp && (
                   <Text className={`text-xs line-through ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                     ₹{formatCurrency(purchasePrice)}
                   </Text>

@@ -61,6 +61,13 @@ const ProductCard = ({
     gst_percentage,
     discount_percentage,
     stocks = [],
+    variants = [],
+    attributes,
+    mrp,
+    expiry_date,
+    batch_number,
+    is_featured,
+    images = [],
   } = product;
 
   console.log(id);
@@ -326,9 +333,18 @@ const ProductCard = ({
               </LinearGradient>
             )}
 
+            {/* Featured Badge */}
+            {is_featured && (
+              <View className="absolute top-3 left-3 bg-yellow-500 rounded-lg px-2 py-1 shadow-md z-20">
+                <Text className="text-white text-xs font-bold">
+                  ⭐ Featured
+                </Text>
+              </View>
+            )}
+
             {/* Discount Badge */}
             {discount > 0 && (
-              <View className="absolute top-3 left-3 bg-red-500 rounded-lg px-2 py-1 shadow-md z-20">
+              <View className="absolute top-3 left-3 bg-red-500 rounded-lg px-2 py-1 shadow-md z-20" style={{ left: is_featured ? 70 : 12 }}>
                 <Text className="text-white text-xs font-bold">
                   -{discount}%
                 </Text>
@@ -337,7 +353,7 @@ const ProductCard = ({
 
             {/* Inactive Badge */}
             {!is_active && (
-              <View className="absolute top-3 left-3 bg-gray-600 rounded-lg px-2 py-1 shadow-md z-20">
+              <View className="absolute top-3 left-3 bg-gray-600 rounded-lg px-2 py-1 shadow-md z-20" style={{ left: (is_featured || discount > 0) ? (is_featured && discount > 0 ? 130 : 70) : 12 }}>
                 <Text className="text-white text-xs font-bold">Inactive</Text>
               </View>
             )}
@@ -459,19 +475,195 @@ const ProductCard = ({
               </View>
             )}
 
+            {/* Variants Display */}
+            {variants && Array.isArray(variants) && variants.length > 0 && (
+              <View className="flex-row flex-wrap gap-1 mb-3">
+                {variants.slice(0, 3).map((variant, index) => {
+                  const variantValues = [];
+                  if (variant.size) variantValues.push(String(variant.size));
+                  if (variant.color) variantValues.push(String(variant.color));
+                  if (variant.material) variantValues.push(String(variant.material));
+                  if (variant.gender) variantValues.push(String(variant.gender));
+
+                  return variantValues.map((val, valIndex) => (
+                    <View
+                      key={`${index}-${valIndex}`}
+                      className={`px-2 py-0.5 rounded-md ${
+                        isDarkMode ? "bg-green-900/30" : "bg-green-100"
+                      }`}
+                    >
+                      <Text
+                        className={`text-xs ${
+                          isDarkMode ? "text-green-400" : "text-green-700"
+                        }`}
+                      >
+                        {val}
+                      </Text>
+                    </View>
+                  ));
+                })}
+                {variants.length > 3 && (
+                  <View
+                    className={`px-2 py-0.5 rounded-md ${
+                      isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                    }`}
+                  >
+                    <Text
+                      className={`text-xs ${
+                        isDarkMode ? "text-gray-400" : "text-gray-600"
+                      }`}
+                    >
+                      +{variants.length - 3}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Attributes Display */}
+            {attributes && (
+              <View className="flex-row flex-wrap gap-1 mb-3">
+                {(() => {
+                  let attrs = attributes;
+                  if (typeof attrs === 'string') {
+                    try {
+                      attrs = JSON.parse(attrs);
+                    } catch (e) {
+                      return null;
+                    }
+                  }
+                  if (!attrs || typeof attrs !== 'object') return null;
+
+                  let values = [];
+                  if (Array.isArray(attrs)) {
+                    attrs.forEach((item) => {
+                      if (typeof item === 'object' && item !== null) {
+                    values.push(...Object.values(item));
+                  } else {
+                    values.push(item);
+                  }
+                });
+              } else {
+                values = Object.values(attrs);
+              }
+
+                  values = values
+                    .filter((val) => val !== null && val !== undefined && val !== '')
+                    .map((val) => {
+                      if (typeof val === 'object') return JSON.stringify(val);
+                      return String(val);
+                    });
+
+                  if (values.length === 0) return null;
+
+                  const displayValues = values.slice(0, 2);
+                  return (
+                    <>
+                      {displayValues.map((val, idx) => (
+                        <View
+                          key={idx}
+                          className={`px-2 py-0.5 rounded-md ${
+                            isDarkMode ? "bg-blue-900/30" : "bg-blue-100"
+                          }`}
+                        >
+                          <Text
+                            className={`text-xs ${
+                              isDarkMode ? "text-blue-400" : "text-blue-700"
+                            }`}
+                          >
+                            {val}
+                          </Text>
+                        </View>
+                      ))}
+                      {values.length > 2 && (
+                        <View
+                          className={`px-2 py-0.5 rounded-md ${
+                            isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                          }`}
+                        >
+                          <Text
+                            className={`text-xs ${
+                              isDarkMode ? "text-gray-400" : "text-gray-600"
+                            }`}
+                          >
+                            +{values.length - 2}
+                          </Text>
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
+              </View>
+            )}
+
+            {/* Medicine-specific fields */}
+            {(expiry_date || batch_number) && (
+              <View className="flex-row flex-wrap gap-2 mb-3">
+                {expiry_date && (
+                  <View
+                    className={`flex-row items-center px-2 py-1 rounded-md ${
+                      isDarkMode ? "bg-purple-900/30" : "bg-purple-100"
+                    }`}
+                  >
+                    <Icon
+                      name="calendar"
+                      size={12}
+                      color={isDarkMode ? "#A78BFA" : "#9333EA"}
+                    />
+                    <Text
+                      className={`text-xs ml-1 ${
+                        isDarkMode ? "text-purple-400" : "text-purple-700"
+                      }`}
+                    >
+                      Exp: {new Date(expiry_date).toLocaleDateString()}
+                    </Text>
+                  </View>
+                )}
+                {batch_number && (
+                  <View
+                    className={`flex-row items-center px-2 py-1 rounded-md ${
+                      isDarkMode ? "bg-orange-900/30" : "bg-orange-100"
+                    }`}
+                  >
+                    <Icon
+                      name="barcode"
+                      size={12}
+                      color={isDarkMode ? "#FB923C" : "#EA580C"}
+                    />
+                    <Text
+                      className={`text-xs ml-1 ${
+                        isDarkMode ? "text-orange-400" : "text-orange-700"
+                      }`}
+                    >
+                      Batch: {batch_number}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
             {/* GST and Price Row */}
             <View className="flex-row items-center justify-between mb-3">
               <View>
                 <Text className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                   ₹{formatCurrency(price)}
                 </Text>
-                {cost > 0 && cost !== price && (
+                {mrp && mrp > price && (
                   <Text
                     className={`text-xs line-through ${
                       isDarkMode ? "text-gray-500" : "text-gray-400"
                     }`}
                   >
-                    MRP: ₹{formatCurrency(cost)}
+                    MRP: ₹{formatCurrency(mrp)}
+                  </Text>
+                )}
+                {cost > 0 && cost !== price && !mrp && (
+                  <Text
+                    className={`text-xs line-through ${
+                      isDarkMode ? "text-gray-500" : "text-gray-400"
+                    }`}
+                  >
+                    Cost: ₹{formatCurrency(cost)}
                   </Text>
                 )}
               </View>
