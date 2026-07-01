@@ -373,18 +373,22 @@ const SellerForm = ({
         {/* Due Amount */}
         <View className="mb-6">
           <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Due Amount (₹)
+            Due Amount (₹) {isEdit && <Text className="text-gray-500 text-xs">(Read-only)</Text>}
           </Text>
-          <View className={`flex-row items-center rounded-xl border ${errors.due_amount ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
+          <View className={`flex-row items-center rounded-xl border ${errors.due_amount ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"} ${isEdit ? "bg-gray-100 dark:bg-gray-700" : ""}`}>
             <Icon name="currency-inr" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
             <TextInput
-              className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"} ${isEdit ? "text-gray-500" : ""}`}
               placeholder="Enter initial due amount"
               placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
               value={formData.due_amount}
               keyboardType="numeric"
               onChangeText={(value) => handleChange("due_amount", value)}
+              editable={!isEdit}
             />
+            {isEdit && (
+              <Icon name="lock" size={16} color="#9ca3af" style={{ marginRight: 12 }} />
+            )}
           </View>
           {errors.due_amount && (
             <View className="flex-row items-center mt-1">
@@ -393,7 +397,7 @@ const SellerForm = ({
             </View>
           )}
           <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
-            Initial outstanding amount for this seller
+            {isEdit ? "Due amount can only be updated through payment" : "Initial outstanding amount for this seller"}
           </Text>
         </View>
 
