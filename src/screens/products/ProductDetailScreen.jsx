@@ -1,4 +1,4 @@
-// screens/ProductDetailScreen.js - FIXED QR Display with reliable loading
+// screens/ProductDetailScreen.js - FIXED QR Code with SVG support
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { WebView } from 'react-native-webview';
 import { useProductStore } from '../../store/productStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -63,10 +64,11 @@ const ProductDetailScreen = ({ navigation, route }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [stockHistory, setStockHistory] = useState([]);
   
-  // QR/Barcode image states - FIXED: Start with false
-  const [qrImageLoading, setQrImageLoading] = useState(false);
+  // QR/Barcode image states
+  const [qrImageLoading, setQrImageLoading] = useState(true);
   const [qrImageError, setQrImageError] = useState(false);
   const [qrImageLoaded, setQrImageLoaded] = useState(false);
+  const [qrSvgContent, setQrSvgContent] = useState(null);
   
   const [barcodeImageLoading, setBarcodeImageLoading] = useState(false);
   const [barcodeImageError, setBarcodeImageError] = useState(false);
@@ -92,33 +94,59 @@ const ProductDetailScreen = ({ navigation, route }) => {
     }));
   }, [getFilteredMenuItems]);
 
+  // Fetch SVG content for QR code
+  const fetchSvgContent = async (url) => {
+    try {
+      const response = await fetch(url);
+      const svgText = await response.text();
+      setQrSvgContent(svgText);
+      setQrImageLoading(false);
+      setQrImageLoaded(true);
+    } catch (error) {
+      console.error('Error fetching SVG:', error);
+      setQrImageLoading(false);
+      setQrImageError(true);
+    }
+  };
+
+  // Check if URL is SVG
+  const isSvgUrl = (url) => {
+    if (!url) return false;
+    return url.endsWith('.svg') || url.includes('.svg?') || url.includes('image/svg');
+  };
+
   // Reset states when modal opens or tab changes
   useEffect(() => {
     if (showQRModal) {
       if (activeQrTab === 'qr') {
-        // Reset QR states
         setQrImageLoading(true);
         setQrImageError(false);
         setQrImageLoaded(false);
-        // Preload QR image
+        setQrSvgContent(null);
+        
         if (product?.qr_code) {
-          Image.prefetch(product.qr_code).then(() => {
-            setQrImageLoading(false);
-            setQrImageLoaded(true);
-          }).catch(() => {
-            setQrImageLoading(false);
-            setQrImageError(true);
-          });
+          // Check if it's an SVG
+          if (isSvgUrl(product.qr_code)) {
+            fetchSvgContent(product.qr_code);
+          } else {
+            // For PNG/JPG, use Image component
+            Image.prefetch(product.qr_code).then(() => {
+              setQrImageLoading(false);
+              setQrImageLoaded(true);
+            }).catch(() => {
+              setQrImageLoading(false);
+              setQrImageError(true);
+            });
+          }
         } else {
           setQrImageLoading(false);
           setQrImageError(true);
         }
       } else {
-        // Reset Barcode states
+        // Barcode tab
         setBarcodeImageLoading(true);
         setBarcodeImageError(false);
         setBarcodeImageLoaded(false);
-        // Preload Barcode image
         if (product?.barcode) {
           Image.prefetch(product.barcode).then(() => {
             setBarcodeImageLoading(false);
@@ -188,12 +216,6 @@ const ProductDetailScreen = ({ navigation, route }) => {
     return { label: 'In Stock', bg: 'bg-green-100 dark:bg-green-900/20', textColor: 'text-green-700 dark:text-green-400', icon: 'checkmark-circle' };
   };
 
-  const getStockPercentage = () => {
-    const totalStock = getProductTotalStock(product);
-    const maxStock = parseFloat(product?.maximum_stock_quantity) || 100;
-    return Math.min((totalStock / maxStock) * 100, 100);
-  };
-
   const parseAttributes = (attributes) => {
     if (!attributes) return null;
     try {
@@ -249,11 +271,9 @@ const ProductDetailScreen = ({ navigation, route }) => {
       }
       setProduct(productData);
       
-      // Set print quantity to current stock
       const totalStock = getProductTotalStock(productData);
       setPrintSettings(prev => ({ ...prev, quantity: totalStock || 1 }));
       
-      // Mock stock history (replace with actual API call when available)
       setStockHistory([]);
     } catch (error) {
       console.error('Error fetching product details:', error);
@@ -653,7 +673,6 @@ const ProductDetailScreen = ({ navigation, route }) => {
   }
 
   const totalStock = getProductTotalStock(product);
-  const stockRecords = getProductStocks(product);
   const category = product.category || null;
   const brand = product.brand || null;
   const unit = product.unit || null;
@@ -668,6 +687,9 @@ const ProductDetailScreen = ({ navigation, route }) => {
         userName={user?.name || 'User'}
         userEmail={user?.email || 'guest@example.com'}
         activeScreen="Products"
+       
+        showBackButton={true}
+        showSidebar={false}
         navigationItems={menuItems}
         rightComponent={
           <View className="flex-row items-center">
@@ -758,7 +780,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* Stats Cards - Keep existing */}
+        {/* Stats Cards */}
         <View className="px-4 pt-4">
           <View className="flex-row flex-wrap">
             <View className="w-[48%] mr-[2%] mb-3">
@@ -1053,7 +1075,7 @@ const ProductDetailScreen = ({ navigation, route }) => {
         </View>
       </ScrollView>
 
-      {/* QR Code & Barcode Modal - FIXED with proper loading */}
+      {/* QR Code & Barcode Modal - FIXED with SVG support */}
       <Modal
         visible={showQRModal}
         transparent={true}
@@ -1168,14 +1190,19 @@ const ProductDetailScreen = ({ navigation, route }) => {
                     setQrImageLoading(true);
                     setQrImageError(false);
                     setQrImageLoaded(false);
+                    setQrSvgContent(null);
                     if (product?.qr_code) {
-                      Image.prefetch(product.qr_code).then(() => {
-                        setQrImageLoading(false);
-                        setQrImageLoaded(true);
-                      }).catch(() => {
-                        setQrImageLoading(false);
-                        setQrImageError(true);
-                      });
+                      if (isSvgUrl(product.qr_code)) {
+                        fetchSvgContent(product.qr_code);
+                      } else {
+                        Image.prefetch(product.qr_code).then(() => {
+                          setQrImageLoading(false);
+                          setQrImageLoaded(true);
+                        }).catch(() => {
+                          setQrImageLoading(false);
+                          setQrImageError(true);
+                        });
+                      }
                     } else {
                       setQrImageLoading(false);
                       setQrImageError(true);
@@ -1230,10 +1257,10 @@ const ProductDetailScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
               </View>
 
-              {/* Content - FIXED with reliable image display */}
+              {/* Content - FIXED with SVG support for QR code */}
               <View className="items-center py-4">
                 {activeQrTab === 'qr' ? (
-                  // QR Code Section
+                  // QR Code Section - with SVG support
                   product.qr_code ? (
                     <View className="items-center w-full">
                       {/* Show loading only when loading and not loaded */}
@@ -1246,8 +1273,33 @@ const ProductDetailScreen = ({ navigation, route }) => {
                         </View>
                       )}
                       
-                      {/* Show image when loaded */}
-                      {!qrImageLoading && qrImageLoaded && !qrImageError && (
+                      {/* For SVG QR Codes - use WebView */}
+                      {!qrImageLoading && qrImageLoaded && !qrImageError && qrSvgContent && (
+                        <View style={{ width: 256, height: 256 }}>
+                          <WebView
+                            originWhitelist={['*']}
+                            source={{ html: `
+                              <html>
+                                <head>
+                                  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+                                  <style>
+                                    body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: transparent; }
+                                    svg { width: 100%; height: 100%; }
+                                  </style>
+                                </head>
+                                <body>
+                                  ${qrSvgContent}
+                                </body>
+                              </html>
+                            `}}
+                            style={{ width: 256, height: 256 }}
+                            scrollEnabled={false}
+                          />
+                        </View>
+                      )}
+                      
+                      {/* For PNG/JPG QR Codes - use Image */}
+                      {!qrImageLoading && qrImageLoaded && !qrImageError && !qrSvgContent && (
                         <Image
                           source={{ uri: product.qr_code }}
                           className="w-64 h-64"
@@ -1267,14 +1319,19 @@ const ProductDetailScreen = ({ navigation, route }) => {
                               setQrImageError(false);
                               setQrImageLoading(true);
                               setQrImageLoaded(false);
+                              setQrSvgContent(null);
                               if (product?.qr_code) {
-                                Image.prefetch(product.qr_code).then(() => {
-                                  setQrImageLoading(false);
-                                  setQrImageLoaded(true);
-                                }).catch(() => {
-                                  setQrImageLoading(false);
-                                  setQrImageError(true);
-                                });
+                                if (isSvgUrl(product.qr_code)) {
+                                  fetchSvgContent(product.qr_code);
+                                } else {
+                                  Image.prefetch(product.qr_code).then(() => {
+                                    setQrImageLoading(false);
+                                    setQrImageLoaded(true);
+                                  }).catch(() => {
+                                    setQrImageLoading(false);
+                                    setQrImageError(true);
+                                  });
+                                }
                               }
                             }}
                             className="mt-3 px-4 py-2 bg-blue-500 rounded-lg"
