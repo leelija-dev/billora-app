@@ -1,4 +1,4 @@
-// components/stores/StoreForm.js
+// components/sellers/SellerForm.js
 import { LinearGradient } from "expo-linear-gradient";
 import { useState, useEffect } from "react";
 import {
@@ -8,16 +8,13 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
-  Image,
-  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import * as ImagePicker from 'expo-image-picker';
 import Toast from "react-native-toast-message";
 import { useThemeStore } from "../../store/themeStore";
 
-const StoreForm = ({ 
-  store = null, 
+const SellerForm = ({ 
+  seller = null, 
   onSubmit, 
   onCancel, 
   isSubmitting = false,
@@ -27,100 +24,51 @@ const StoreForm = ({
   
   const [formData, setFormData] = useState({
     name: "",
-    gst: "",
     email: "",
-    mobile: "",
+    phone: "",
+    gst_number: "",
     address: "",
     city: "",
     state: "",
     pincode: "",
-    status: "active",
+    due_amount: "0",
   });
   
   const [errors, setErrors] = useState({});
-  const [logoUri, setLogoUri] = useState(null);
-  const [bankQrUri, setBankQrUri] = useState(null);
-  const [logoUploading, setLogoUploading] = useState(false);
-  const [bankQrUploading, setBankQrUploading] = useState(false);
-  const [deletedLogo, setDeletedLogo] = useState(false);
-  const [deletedBankQr, setDeletedBankQr] = useState(false);
-  const [logoPublicId, setLogoPublicId] = useState(null);
-  const [bankQrPublicId, setBankQrPublicId] = useState(null);
 
   // Pre-fill form if editing
   useEffect(() => {
-    if (store && isEdit) {
+    if (seller && isEdit) {
       setFormData({
-        name: store.name || "",
-        gst: store.gst || "",
-        email: store.email || "",
-        mobile: store.mobile || "",
-        address: store.address || "",
-        city: store.city || "",
-        state: store.state || "",
-        pincode: store.pincode || "",
-        status: store.status === true || store.status === "active" ? "active" : "inactive",
+        name: seller.name || "",
+        email: seller.email || "",
+        phone: seller.phone || "",
+        gst_number: seller.gst_number || "",
+        address: seller.address || "",
+        city: seller.city || "",
+        state: seller.state || "",
+        pincode: seller.pincode || "",
+        due_amount: seller.due_amount ? seller.due_amount.toString() : "0",
       });
-      setLogoUri(store.logo || null);
-      setBankQrUri(store.bank_qr || null);
-      setLogoPublicId(store.logo_public_id || null);
-      setBankQrPublicId(store.bank_qr_public_id || null);
-      setDeletedLogo(false);
-      setDeletedBankQr(false);
     }
-  }, [store, isEdit]);
-
-  const pickLogo = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setLogoUri(result.assets[0].uri);
-    }
-  };
-
-  const pickBankQr = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setBankQrUri(result.assets[0].uri);
-    }
-  };
+  }, [seller, isEdit]);
 
   const handleChange = (field, value) => {
     // Apply input masks
-    if (field === "mobile") {
+    if (field === "phone") {
       value = value.replace(/[^0-9]/g, "").slice(0, 10);
     }
     if (field === "pincode") {
       value = value.replace(/[^0-9]/g, "").slice(0, 6);
     }
-    if (field === "gst") {
+    if (field === "gst_number") {
       value = value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15);
     }
     if (field === "city" || field === "state") {
       value = value.replace(/[^A-Za-z\s\-]/g, "");
+    }
+    if (field === "due_amount") {
+      value = value.replace(/[^0-9.]/g, "");
     }
     
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -135,22 +83,17 @@ const StoreForm = ({
     const newErrors = {};
     
     if (!formData.name.trim()) {
-      newErrors.name = "Store name is required";
+      newErrors.name = "Seller name is required";
     } else if (formData.name.length < 2) {
-      newErrors.name = "Store name must be at least 2 characters";
+      newErrors.name = "Seller name must be at least 2 characters";
     }
     
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email)) {
-        newErrors.email = "Please enter a valid email address";
-      }
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
     }
     
-    if (formData.mobile && !/^\d{10}$/.test(formData.mobile)) {
-      newErrors.mobile = "Mobile number must be exactly 10 digits";
+    if (formData.phone && !/^\d{10}$/.test(formData.phone)) {
+      newErrors.phone = "Phone number must be exactly 10 digits";
     }
     
     if (!formData.address.trim()) {
@@ -171,22 +114,16 @@ const StoreForm = ({
       newErrors.pincode = "Pincode must be exactly 6 digits";
     }
     
-    if (formData.gst && !/^[0-9A-Z]{15}$/.test(formData.gst)) {
-      newErrors.gst = "GST number must be 15 characters (alphanumeric)";
+    if (formData.gst_number && !/^[0-9A-Z]{15}$/.test(formData.gst_number)) {
+      newErrors.gst_number = "GST number must be 15 characters (alphanumeric)";
+    }
+    
+    if (formData.due_amount && parseFloat(formData.due_amount) < 0) {
+      newErrors.due_amount = "Due amount cannot be negative";
     }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  const handleDeleteLogo = () => {
-    setLogoUri(null);
-    setDeletedLogo(true);
-  };
-
-  const handleDeleteBankQr = () => {
-    setBankQrUri(null);
-    setDeletedBankQr(true);
   };
 
   const handleSubmit = async () => {
@@ -201,11 +138,7 @@ const StoreForm = ({
     
     const submitData = {
       ...formData,
-      status: formData.status === "active",
-      logo: logoUri,
-      bank_qr: bankQrUri,
-      deleted_logo: deletedLogo,
-      deleted_bank_qr: deletedBankQr,
+      due_amount: parseFloat(formData.due_amount) || 0,
     };
     
     await onSubmit(submitData);
@@ -223,10 +156,10 @@ const StoreForm = ({
         <View className="flex-row items-center justify-between">
           <View className="flex-1">
             <Text className="text-white text-2xl font-bold">
-              {isEdit ? "Edit Store" : "Add New Store"}
+              {isEdit ? "Edit Seller" : "Add New Seller"}
             </Text>
             <Text className="text-white/80 text-sm mt-1">
-              {isEdit ? "Update store information" : "Enter store details to register new shop"}
+              {isEdit ? "Update seller information" : "Enter seller details to register new supplier"}
             </Text>
           </View>
           <TouchableOpacity
@@ -240,16 +173,16 @@ const StoreForm = ({
 
       {/* Form Body */}
       <View className="p-4">
-        {/* Store Name */}
+        {/* Seller Name */}
         <View className="mb-4">
           <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Store Name <Text className="text-red-500">*</Text>
+            Seller Name <Text className="text-red-500">*</Text>
           </Text>
           <View className={`flex-row items-center rounded-xl border ${errors.name ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
-            <Icon name="store" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
+            <Icon name="account" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
             <TextInput
               className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
-              placeholder="Enter store name"
+              placeholder="Enter seller name"
               placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
               value={formData.name}
               onChangeText={(value) => handleChange("name", value)}
@@ -266,7 +199,7 @@ const StoreForm = ({
         {/* Email */}
         <View className="mb-4">
           <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Email <Text className="text-red-500">*</Text>
+            Email
           </Text>
           <View className={`flex-row items-center rounded-xl border ${errors.email ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
             <Icon name="email" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
@@ -288,26 +221,26 @@ const StoreForm = ({
           )}
         </View>
 
-        {/* Mobile Number */}
+        {/* Phone Number */}
         <View className="mb-4">
           <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Mobile Number
+            Phone Number
           </Text>
-          <View className={`flex-row items-center rounded-xl border ${errors.mobile ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
+          <View className={`flex-row items-center rounded-xl border ${errors.phone ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
             <Icon name="phone" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
             <TextInput
               className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
-              placeholder="Enter 10-digit mobile number"
+              placeholder="Enter 10-digit phone number"
               placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
-              value={formData.mobile}
-              onChangeText={(value) => handleChange("mobile", value)}
+              value={formData.phone}
+              onChangeText={(value) => handleChange("phone", value)}
               keyboardType="phone-pad"
             />
           </View>
-          {errors.mobile && (
+          {errors.phone && (
             <View className="flex-row items-center mt-1">
               <Icon name="alert-circle" size={14} color="#ef4444" />
-              <Text className="text-red-500 text-xs ml-1">{errors.mobile}</Text>
+              <Text className="text-red-500 text-xs ml-1">{errors.phone}</Text>
             </View>
           )}
         </View>
@@ -321,7 +254,7 @@ const StoreForm = ({
             <Icon name="map-marker" size={20} color="#9ca3af" style={{ marginLeft: 12, marginTop: 12 }} />
             <TextInput
               className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
-              placeholder="Enter store address"
+              placeholder="Enter seller address"
               placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
               value={formData.address}
               onChangeText={(value) => handleChange("address", value)}
@@ -414,21 +347,21 @@ const StoreForm = ({
             <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
               GST Number
             </Text>
-            <View className={`flex-row items-center rounded-xl border ${errors.gst ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
+            <View className={`flex-row items-center rounded-xl border ${errors.gst_number ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
               <Icon name="barcode" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
               <TextInput
                 className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
                 placeholder="Enter GST number"
                 placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
-                value={formData.gst}
-                onChangeText={(value) => handleChange("gst", value)}
+                value={formData.gst_number}
+                onChangeText={(value) => handleChange("gst_number", value)}
                 autoCapitalize="characters"
               />
             </View>
-            {errors.gst && (
+            {errors.gst_number && (
               <View className="flex-row items-center mt-1">
                 <Icon name="alert-circle" size={14} color="#ef4444" />
-                <Text className="text-red-500 text-xs ml-1">{errors.gst}</Text>
+                <Text className="text-red-500 text-xs ml-1">{errors.gst_number}</Text>
               </View>
             )}
             <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
@@ -437,147 +370,31 @@ const StoreForm = ({
           </View>
         </View>
 
-        {/* Logo Upload */}
-        <View className="mb-4">
-          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Store Logo
-          </Text>
-          <TouchableOpacity
-            onPress={pickLogo}
-            className={`border-2 border-dashed rounded-xl p-4 items-center justify-center ${
-              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-gray-50"
-            }`}
-          >
-            {logoUri ? (
-              <View className="items-center">
-                <Image
-                  source={{ uri: logoUri }}
-                  className="w-20 h-20 rounded-lg mb-2"
-                  resizeMode="cover"
-                />
-                <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-                  Tap to change logo
-                </Text>
-              </View>
-            ) : (
-              <View className="items-center">
-                <Icon name="image" size={40} color="#9ca3af" />
-                <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-                  Tap to upload logo
-                </Text>
-                <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
-                  Recommended: Square image (1:1)
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          {isEdit && logoUri && (
-            <TouchableOpacity
-              onPress={handleDeleteLogo}
-              className="mt-2 flex-row items-center justify-center py-2 px-4 rounded-lg bg-red-100"
-            >
-              <Icon name="delete" size={16} color="#ef4444" />
-              <Text className="text-red-500 text-sm ml-2">Remove Logo</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Bank QR Code Upload */}
-        <View className="mb-4">
-          <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Bank QR Code
-          </Text>
-          <TouchableOpacity
-            onPress={pickBankQr}
-            className={`border-2 border-dashed rounded-xl p-4 items-center justify-center ${
-              isDarkMode ? "border-gray-700 bg-gray-800" : "border-gray-300 bg-gray-50"
-            }`}
-          >
-            {bankQrUri ? (
-              <View className="items-center">
-                <Image
-                  source={{ uri: bankQrUri }}
-                  className="w-20 h-20 rounded-lg mb-2"
-                  resizeMode="cover"
-                />
-                <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-                  Tap to change QR code
-                </Text>
-              </View>
-            ) : (
-              <View className="items-center">
-                <Icon name="qrcode" size={40} color="#9ca3af" />
-                <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-                  Tap to upload bank QR code
-                </Text>
-                <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
-                  Recommended: Square image (1:1)
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          {isEdit && bankQrUri && (
-            <TouchableOpacity
-              onPress={handleDeleteBankQr}
-              className="mt-2 flex-row items-center justify-center py-2 px-4 rounded-lg bg-red-100"
-            >
-              <Icon name="delete" size={16} color="#ef4444" />
-              <Text className="text-red-500 text-sm ml-2">Remove QR Code</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Status Field */}
+        {/* Due Amount */}
         <View className="mb-6">
           <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-            Status <Text className="text-red-500">*</Text>
+            Due Amount (₹)
           </Text>
-          <View className="flex-row gap-3">
-            <TouchableOpacity
-              onPress={() => handleChange("status", "active")}
-              className={`flex-1 py-3 rounded-xl items-center ${
-                formData.status === "active"
-                  ? "bg-green-500"
-                  : isDarkMode
-                  ? "bg-gray-800"
-                  : "bg-gray-200"
-              }`}
-            >
-              <Text
-                className={`font-medium ${
-                  formData.status === "active"
-                    ? "text-white"
-                    : isDarkMode
-                    ? "text-gray-400"
-                    : "text-gray-600"
-                }`}
-              >
-                Active
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => handleChange("status", "inactive")}
-              className={`flex-1 py-3 rounded-xl items-center ${
-                formData.status === "inactive"
-                  ? "bg-gray-500"
-                  : isDarkMode
-                  ? "bg-gray-800"
-                  : "bg-gray-200"
-              }`}
-            >
-              <Text
-                className={`font-medium ${
-                  formData.status === "inactive"
-                    ? "text-white"
-                    : isDarkMode
-                    ? "text-gray-400"
-                    : "text-gray-600"
-                }`}
-              >
-                Inactive
-              </Text>
-            </TouchableOpacity>
+          <View className={`flex-row items-center rounded-xl border ${errors.due_amount ? "border-red-500" : "border-gray-300 dark:border-gray-600"} ${isDarkMode ? "bg-gray-800" : "bg-gray-50"}`}>
+            <Icon name="currency-inr" size={20} color="#9ca3af" style={{ marginLeft: 12 }} />
+            <TextInput
+              className={`flex-1 p-3 ml-2 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              placeholder="Enter initial due amount"
+              placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
+              value={formData.due_amount}
+              keyboardType="numeric"
+              onChangeText={(value) => handleChange("due_amount", value)}
+            />
           </View>
+          {errors.due_amount && (
+            <View className="flex-row items-center mt-1">
+              <Icon name="alert-circle" size={14} color="#ef4444" />
+              <Text className="text-red-500 text-xs ml-1">{errors.due_amount}</Text>
+            </View>
+          )}
+          <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
+            Initial outstanding amount for this seller
+          </Text>
         </View>
 
         {/* Action Buttons */}
@@ -605,7 +422,7 @@ const StoreForm = ({
               <>
                 <Icon name="content-save" size={20} color="#ffffff" />
                 <Text className="text-white font-semibold ml-2">
-                  {isEdit ? "Update Store" : "Register Store"}
+                  {isEdit ? "Update Seller" : "Register Seller"}
                 </Text>
               </>
             )}
@@ -616,4 +433,4 @@ const StoreForm = ({
   );
 };
 
-export default StoreForm;
+export default SellerForm;

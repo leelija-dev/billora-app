@@ -1,8 +1,8 @@
 // components/navigation/MainNavigator.js
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useMemo } from "react";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { usePermissionStore } from "../../store/permissionStore";
-import ModernTabBar from "./ModernTabBar";
 
 // Import all screen components
 import DashboardScreen from "../../screens/dashboard/DashboardScreen";
@@ -13,6 +13,7 @@ import CustomersStackNavigator from "./stacks/CustomersStack";
 import ProductsStackNavigator from "./stacks/ProductsStack";
 import ReportsStackNavigator from "./stacks/ReportsStack";
 import SettingsStackNavigator from "./stacks/SettingsStack";
+import SellersStackNavigator from "./stacks/SellersStack";
 import StocksStackNavigator from "./stacks/StocksStack";
 import StoresStackNavigator from "./stacks/StoresStack";
 import UnitsStackNavigator from "./stacks/UnitsStack";
@@ -32,6 +33,7 @@ const COMPONENT_MAP = {
   Brands: BrandsStackNavigator,
   Units: UnitsStackNavigator,
   Stores: StoresStackNavigator,
+  Sellers: SellersStackNavigator,
   Settings: SettingsStackNavigator,
 };
 
@@ -62,13 +64,23 @@ const MainNavigator = () => {
 
   return (
     <Tab.Navigator
-      tabBar={(props) => <ModernTabBar tabs={visibleTabs} {...props} />}
       screenOptions={{
         headerShown: false,
+        tabBarStyle: { display: 'none' },
       }}
     >
       {visibleTabs.map((tab) => (
-        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
+        <Tab.Screen
+          key={tab.name}
+          name={tab.name}
+          component={tab.component}
+          options={{
+            tabBarLabel: tab.label,
+            tabBarIcon: ({ focused, color, size }) => (
+              <Icon name={focused ? tab.iconActive : tab.icon} size={size} color={color} />
+            ),
+          }}
+        />
       ))}
     </Tab.Navigator>
   );

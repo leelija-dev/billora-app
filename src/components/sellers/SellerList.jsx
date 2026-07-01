@@ -11,18 +11,17 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
-import StoreCard from "./StoreCard";
+import SellerCard from "./SellerCard";
 
-const StoreList = ({
+const SellerList = ({
   viewMode = "grid",
   searchQuery = "",
   sortBy = "name",
-  stores = [],
+  sellers = [],
   loading = false,
   onRefresh = () => {},
   onDelete = () => {},
   onEdit = () => {},
-  filters = {},
 }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
@@ -37,10 +36,10 @@ const StoreList = ({
     }).start();
   }, []);
 
-  // Filter and sort stores
-  const filteredStores = useMemo(() => {
-    if (!Array.isArray(stores)) return [];
-    let filtered = [...stores];
+  // Filter and sort sellers
+  const filteredSellers = useMemo(() => {
+    if (!Array.isArray(sellers)) return [];
+    let filtered = [...sellers];
     
     // Search filter
     if (searchQuery) {
@@ -49,31 +48,10 @@ const StoreList = ({
         (s) =>
           s.name?.toLowerCase().includes(query) ||
           s.email?.toLowerCase().includes(query) ||
-          s.mobile?.includes(query) ||
-          s.gst?.toLowerCase().includes(query) ||
+          s.phone?.includes(query) ||
+          s.gst_number?.toLowerCase().includes(query) ||
           s.address?.toLowerCase().includes(query) ||
           s.city?.toLowerCase().includes(query)
-      );
-    }
-    
-    // Status filter
-    if (filters.status && filters.status !== 'all') {
-      filtered = filtered.filter(s => 
-        filters.status === 'active' ? s.status : !s.status
-      );
-    }
-    
-    // City filter
-    if (filters.city) {
-      filtered = filtered.filter(s => 
-        s.city?.toLowerCase() === filters.city.toLowerCase()
-      );
-    }
-    
-    // GST presence filter
-    if (filters.hasGst !== undefined && filters.hasGst !== null) {
-      filtered = filtered.filter(s => 
-        filters.hasGst ? s.gst : !s.gst
       );
     }
     
@@ -82,56 +60,52 @@ const StoreList = ({
       switch (sortBy) {
         case 'name':
           return (a.name || '').localeCompare(b.name || '');
-        case 'date':
-          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
         case 'city':
           return (a.city || '').localeCompare(b.city || '');
-        case 'status':
-          return (b.status ? 1 : 0) - (a.status ? 1 : 0);
+        case 'due':
+          return (parseFloat(b.due_amount) || 0) - (parseFloat(a.due_amount) || 0);
         default:
           return 0;
       }
     });
     
     return filtered;
-  }, [stores, searchQuery, sortBy, filters]);
+  }, [sellers, searchQuery, sortBy]);
 
   // Statistics
   const stats = useMemo(() => {
-    if (!Array.isArray(stores)) return {
+    if (!Array.isArray(sellers)) return {
       total: 0,
-      active: 0,
-      inactive: 0,
+      totalDue: 0,
       cities: 0,
     };
     
-    const activeCount = stores.filter(s => s.status).length;
-    const uniqueCities = new Set(stores.map(s => s.city).filter(Boolean)).size;
+    const totalDue = sellers.reduce((sum, s) => sum + (parseFloat(s.due_amount) || 0), 0);
+    const uniqueCities = new Set(sellers.map(s => s.city).filter(Boolean)).size;
     
     return {
-      total: stores.length,
-      active: activeCount,
-      inactive: stores.length - activeCount,
+      total: sellers.length,
+      totalDue,
       cities: uniqueCities,
     };
-  }, [stores]);
+  }, [sellers]);
 
-  const handleStorePress = (store) => {
-    navigation.navigate("StoreDetail", { storeId: store.id });
+  const handleSellerPress = (seller) => {
+    navigation.navigate("SellerDetail", { sellerId: seller.id });
   };
 
-  const handleDeleteStore = async (storeId) => {
-    console.log('StoreList: Deleting store:', storeId);
+  const handleDeleteSeller = async (sellerId) => {
+    console.log('SellerList: Deleting seller:', sellerId);
     if (onDelete) {
-      const result = await onDelete(storeId);
-      console.log('StoreList: Delete result:', result);
+      const result = await onDelete(sellerId);
+      console.log('SellerList: Delete result:', result);
       return result;
     }
     return { success: false };
   };
 
   const onRefreshLocal = async () => {
-    console.log('StoreList: Refreshing...');
+    console.log('SellerList: Refreshing...');
     setRefreshing(true);
     if (onRefresh) {
       await onRefresh();
@@ -145,39 +119,26 @@ const StoreList = ({
         <View className={`flex-row items-center px-3 py-1.5 rounded-full ${
           isDarkMode ? 'bg-gray-800' : 'bg-white'
         }`}>
-          <Icon name="store" size={16} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+          <Icon name="account-group" size={16} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
           <Text className={`text-sm ml-1 font-medium ${
             isDarkMode ? 'text-gray-300' : 'text-gray-600'
           }`}>
-            {filteredStores.length} {filteredStores.length === 1 ? 'store' : 'stores'}
+            {filteredSellers.length} {filteredSellers.length === 1 ? 'seller' : 'sellers'}
           </Text>
         </View>
         
-        <View className="flex-row">
-          <View className={`flex-row items-center mr-2 px-2 py-1 rounded-full ${
-            isDarkMode ? 'bg-green-900/30' : 'bg-green-50'
+        {stats.totalDue > 0 && (
+          <View className={`flex-row items-center px-2 py-1 rounded-full ${
+            isDarkMode ? 'bg-orange-900/30' : 'bg-orange-50'
           }`}>
-            <View className="w-2 h-2 rounded-full bg-green-500 mr-1" />
-            <Text className={`text-xs ${
-              isDarkMode ? 'text-green-400' : 'text-green-600'
+            <Icon name="currency-inr" size={12} color="#f97316" />
+            <Text className={`text-xs ml-1 ${
+              isDarkMode ? 'text-orange-400' : 'text-orange-600'
             }`}>
-              {stats.active} active
+              ₹{stats.totalDue.toLocaleString()} due
             </Text>
           </View>
-          
-          {stats.inactive > 0 && (
-            <View className={`flex-row items-center px-2 py-1 rounded-full ${
-              isDarkMode ? 'bg-red-900/30' : 'bg-red-50'
-            }`}>
-              <View className="w-2 h-2 rounded-full bg-red-500 mr-1" />
-              <Text className={`text-xs ${
-                isDarkMode ? 'text-red-400' : 'text-red-600'
-              }`}>
-                {stats.inactive} inactive
-              </Text>
-            </View>
-          )}
-        </View>
+        )}
       </View>
       
       {/* City stats */}
@@ -200,10 +161,10 @@ const StoreList = ({
 
   const renderGridItem = (item) => (
     <View key={item.id} className="w-[48%] mx-[1%] mb-3">
-      <StoreCard 
-        store={item} 
+      <SellerCard 
+        seller={item} 
         onEdit={onEdit}
-        onDelete={handleDeleteStore}
+        onDelete={handleDeleteSeller}
       />
     </View>
   );
@@ -211,17 +172,17 @@ const StoreList = ({
   const renderListItem = (item) => (
     <TouchableOpacity
       key={item.id}
-      onPress={() => handleStorePress(item)}
+      onPress={() => handleSellerPress(item)}
       className={`flex-row rounded-xl mb-3 p-4 shadow-sm ${
         isDarkMode ? 'bg-gray-800' : 'bg-white'
       }`}
     >
-      {/* Store Icon/Logo */}
+      {/* Seller Icon */}
       <View className="mr-3">
         <View className={`w-12 h-12 rounded-xl items-center justify-center ${
           isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
         }`}>
-          <Icon name="store" size={24} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+          <Icon name="account" size={24} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
         </View>
       </View>
 
@@ -236,16 +197,6 @@ const StoreList = ({
             >
               {item.name}
             </Text>
-            <View className="flex-row items-center mt-1">
-              <View className={`w-2 h-2 rounded-full mr-1 ${
-                item.status ? 'bg-green-500' : 'bg-red-500'
-              }`} />
-              <Text className={`text-xs ${
-                isDarkMode ? 'text-gray-500' : 'text-gray-400'
-              }`}>
-                {item.status ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
           </View>
           <Text className={`text-xs ${
             isDarkMode ? 'text-gray-500' : 'text-gray-400'
@@ -256,11 +207,11 @@ const StoreList = ({
 
         <View className="mt-2">
           <View className="flex-row items-center">
-            <Icon name="email" size={12} color="#9ca3af" />
+            <Icon name="phone" size={12} color="#9ca3af" />
             <Text className={`text-xs ml-1 flex-1 ${
               isDarkMode ? 'text-gray-400' : 'text-gray-500'
             }`} numberOfLines={1}>
-              {item.email}
+              {item.phone || 'N/A'}
             </Text>
           </View>
           
@@ -278,11 +229,11 @@ const StoreList = ({
 
         <View className="flex-row justify-between items-center mt-2">
           <View className="flex-row items-center">
-            <Icon name="account" size={12} color="#9ca3af" />
-            <Text className={`text-xs ml-1 ${
-              isDarkMode ? 'text-gray-500' : 'text-gray-400'
+            <Icon name="currency-inr" size={12} color="#f97316" />
+            <Text className={`text-xs ml-1 font-medium ${
+              parseFloat(item.due_amount) > 0 ? 'text-orange-500' : isDarkMode ? 'text-gray-500' : 'text-gray-400'
             }`}>
-              ID: {item.user_id}
+              ₹{parseFloat(item.due_amount || 0).toLocaleString()}
             </Text>
           </View>
           
@@ -298,8 +249,8 @@ const StoreList = ({
 
   const renderGridItems = () => {
     const rows = [];
-    for (let i = 0; i < filteredStores.length; i += 2) {
-      const rowItems = filteredStores.slice(i, i + 2);
+    for (let i = 0; i < filteredSellers.length; i += 2) {
+      const rowItems = filteredSellers.slice(i, i + 2);
       rows.push(
         <View key={`row-${i}`} className="flex-row justify-between mb-2">
           {rowItems.map(item => renderGridItem(item))}
@@ -309,18 +260,18 @@ const StoreList = ({
     return rows;
   };
 
-  if (loading && !refreshing && filteredStores.length === 0) {
+  if (loading && !refreshing && filteredSellers.length === 0) {
     return (
       <View className="flex-1 items-center justify-center py-8">
         <ActivityIndicator size="large" color="#3b82f6" />
         <Text className={`mt-3 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          Loading stores...
+          Loading sellers...
         </Text>
       </View>
     );
   }
 
-  if (!filteredStores || filteredStores.length === 0) {
+  if (!filteredSellers || filteredSellers.length === 0) {
     return (
       <ScrollView
         className="flex-1"
@@ -339,19 +290,19 @@ const StoreList = ({
             <View className={`w-24 h-24 rounded-3xl items-center justify-center mb-4 ${
               isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
             }`}>
-              <Icon name="store-off" size={48} color="#9ca3af" />
+              <Icon name="account-group-outline" size={48} color="#9ca3af" />
             </View>
             <Text className={`text-lg font-semibold ${
               isDarkMode ? 'text-gray-300' : 'text-gray-700'
             }`}>
-              No Stores Found
+              No Sellers Found
             </Text>
             <Text className={`text-sm text-center mt-2 px-8 ${
               isDarkMode ? 'text-gray-500' : 'text-gray-400'
             }`}>
               {searchQuery
                 ? `No results for "${searchQuery}"`
-                : "Tap the + button to add your first store"}
+                : "Tap the + button to add your first seller"}
             </Text>
           </View>
         </View>
@@ -376,11 +327,11 @@ const StoreList = ({
         <View className="pb-4">
           {viewMode === "grid"
             ? renderGridItems()
-            : filteredStores.map(item => renderListItem(item))}
+            : filteredSellers.map(item => renderListItem(item))}
         </View>
       </ScrollView>
     </View>
   );
 };
 
-export default StoreList;
+export default SellerList;

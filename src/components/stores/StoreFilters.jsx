@@ -7,6 +7,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
+  DatePickerIOS,
+  DatePickerAndroid,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
@@ -27,8 +30,12 @@ const StoreFilters = ({
       sortBy: "name",
       sortOrder: "asc",
       dateRange: "all",
+      startDate: "",
+      endDate: "",
     }
   );
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   useEffect(() => {
     if (initialFilters) {
@@ -73,9 +80,63 @@ const StoreFilters = ({
       sortBy: "name",
       sortOrder: "asc",
       dateRange: "all",
+      startDate: "",
+      endDate: "",
     };
     setFilters(resetFilters);
     onReset();
+  };
+
+  const handleStartDateChange = (event, selectedDate) => {
+    setShowStartDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      handleFilterChange("startDate", formattedDate);
+    }
+  };
+
+  const handleEndDateChange = (event, selectedDate) => {
+    setShowEndDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      handleFilterChange("endDate", formattedDate);
+    }
+  };
+
+  const showStartDatePickerAsync = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const { action, year, month, day } = await DatePickerAndroid.open({
+          mode: 'calendar',
+        });
+        if (action !== DatePickerAndroid.dismissedAction) {
+          const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          handleFilterChange("startDate", formattedDate);
+        }
+      } catch ({ code, message }) {
+        console.warn('Cannot open date picker', message);
+      }
+    } else {
+      setShowStartDatePicker(true);
+    }
+  };
+
+  const showEndDatePickerAsync = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const { action, year, month, day } = await DatePickerAndroid.open({
+          mode: 'calendar',
+        });
+        if (action !== DatePickerAndroid.dismissedAction) {
+          const formattedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          handleFilterChange("endDate", formattedDate);
+        }
+      } catch ({ code, message }) {
+        console.warn('Cannot open date picker', message);
+      }
+    } else {
+      setShowEndDatePicker(true);
+    }
   };
 
   const activeFilterCount = Object.values(filters).filter(
@@ -377,28 +438,55 @@ const StoreFilters = ({
               }`}>
                 Date Range
               </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {dateRangeOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    onPress={() => handleFilterChange("dateRange", option.value)}
-                    className={`flex-1 py-2 px-2 rounded-lg ${
-                      filters.dateRange === option.value
-                        ? "bg-blue-500"
-                        : isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-medium text-center ${
-                        filters.dateRange === option.value
-                          ? "text-white"
-                          : isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              
+              {/* Start Date */}
+              <View className="mb-3">
+                <Text className={`text-sm mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Start Date
+                </Text>
+                <TouchableOpacity
+                  onPress={showStartDatePickerAsync}
+                  className={`flex-row items-center justify-between px-4 py-3 rounded-xl border ${
+                    isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-200 border-gray-100'
+                  }`}
+                >
+                  <Text className={isDarkMode ? 'text-white' : 'text-gray-800'}>
+                    {filters.startDate || 'Select start date'}
+                  </Text>
+                  <Icon name="calendar" size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </TouchableOpacity>
+                {Platform.OS === 'ios' && showStartDatePicker && (
+                  <DatePickerIOS
+                    date={filters.startDate ? new Date(filters.startDate) : new Date()}
+                    onDateChange={handleStartDateChange}
+                    mode="date"
+                  />
+                )}
+              </View>
+
+              {/* End Date */}
+              <View>
+                <Text className={`text-sm mb-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  End Date
+                </Text>
+                <TouchableOpacity
+                  onPress={showEndDatePickerAsync}
+                  className={`flex-row items-center justify-between px-4 py-3 rounded-xl border ${
+                    isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-200 border-gray-100'
+                  }`}
+                >
+                  <Text className={isDarkMode ? 'text-white' : 'text-gray-800'}>
+                    {filters.endDate || 'Select end date'}
+                  </Text>
+                  <Icon name="calendar" size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
+                </TouchableOpacity>
+                {Platform.OS === 'ios' && showEndDatePicker && (
+                  <DatePickerIOS
+                    date={filters.endDate ? new Date(filters.endDate) : new Date()}
+                    onDateChange={handleEndDateChange}
+                    mode="date"
+                  />
+                )}
               </View>
             </View>
           </ScrollView>

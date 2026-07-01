@@ -14,18 +14,18 @@ const useStoreStore = create((set, get) => ({
     search: "",
   },
 
-  // Fetch stores by user ID
+  // Fetch stores by user ID with pagination
   fetchStores: async (userId, page = 1, filters = {}) => {
     if (!userId) {
       console.error("No user ID provided");
       return;
     }
 
-    console.log("🏪 fetchStores called with userId:", userId, "page:", page);
+    console.log("🏪 fetchStores called with userId:", userId, "page:", page, "filters:", filters);
     set({ loading: true, error: null });
 
     try {
-      const response = await storesAPI.getByUserId(userId, filters.search);
+      const response = await storesAPI.getByUserId(userId, page, filters);
       console.log("📦 Stores API Response:", response);
 
       let storesArray = [];
@@ -53,6 +53,10 @@ const useStoreStore = create((set, get) => ({
         last_page: paginationData.last_page || 1,
         per_page: paginationData.per_page || get().perPage,
         total: paginationData.total || storesArray.length,
+        next_page_url: paginationData.next_page_url || null,
+        prev_page_url: paginationData.prev_page_url || null,
+        first_page_url: paginationData.first_page_url || null,
+        last_page_url: paginationData.last_page_url || null,
       };
 
       set({
@@ -60,16 +64,20 @@ const useStoreStore = create((set, get) => ({
         totalStores: pageData.total,
         currentPage: pageData.current_page,
         lastPage: pageData.last_page,
+        pagination: pageData,
         loading: false,
       });
 
-      console.log("✅ Stores loaded:", storesArray.length);
+      console.log("✅ Stores loaded:", storesArray.length, "Page:", pageData.current_page, "of", pageData.last_page);
       return response.data;
     } catch (error) {
       console.error("❌ Failed to fetch stores:", error);
       set({
         stores: [],
         totalStores: 0,
+        currentPage: 1,
+        lastPage: 1,
+        pagination: null,
         loading: false,
         error: error.message || "Failed to fetch stores",
       });
