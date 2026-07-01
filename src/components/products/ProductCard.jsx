@@ -25,8 +25,10 @@ const ProductCard = ({
   onEdit,
   onDelete,
   onAddStock,
+  onPress,
+  navigation: navigationProp,
 }) => {
-  const navigation = useNavigation();
+  const navigation = navigationProp || useNavigation();
   const { isDarkMode } = useThemeStore();
   const { user } = useAuthStore();
   const { getProductTotalStock, fetchProducts, currentPage } =
@@ -89,7 +91,11 @@ const ProductCard = ({
   const isOutOfStock = totalStock <= 0;
 
   const handlePress = () => {
-    navigation.navigate("ProductDetail", { productId: id });
+    if (onPress) {
+      onPress(product);
+    } else {
+      navigation.navigate("ProductDetail", { productId: id });
+    }
   };
 
   const handleEdit = () => {

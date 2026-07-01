@@ -5,6 +5,7 @@ import StackHeader from "../StackHeader";
 import ProductsScreen from "../../../screens/products/ProductsScreen";
 import AddProductScreen from "../../../screens/products/AddProductScreen";
 import DeletedProductsScreen from "../../../screens/products/DeletedProductsScreen";
+import ProductDetailScreen from "../../../screens/products/ProductDetailScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -32,11 +33,18 @@ const ProductsStackNavigator = () => {
           header: () => <StackHeader title="Add Product" navigation={navigation} />,
         })}
       />
-      <Stack.Screen 
-        name="DeletedProduct" 
-        component={DeletedProductsScreen} 
+      <Stack.Screen
+        name="DeletedProduct"
+        component={DeletedProductsScreen}
         options={({ navigation }) => ({
           header: () => <StackHeader title="Deleted Products" navigation={navigation} />,
+        })}
+      />
+      <Stack.Screen
+        name="ProductDetail"
+        component={ProductDetailScreen}
+        options={({ navigation }) => ({
+          header: () => <StackHeader title="Product Details" navigation={navigation} />,
         })}
       />
     </Stack.Navigator>

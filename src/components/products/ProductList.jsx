@@ -34,6 +34,7 @@ const ProductList = ({
   onDelete,
   onStockUpdate,
   isPaginating = false,
+  navigation,
 }) => {
   
   const { isDarkMode } = useThemeStore();
@@ -235,13 +236,14 @@ const ProductList = ({
 
   const renderGridItem = (item) => (
     <View key={item.id} className="w-[48%] mx-[1%] mb-4">
-      <ProductCard 
-        product={item} 
+      <ProductCard
+        product={item}
         onPress={handleProductPress}
         onEdit={() => handleEditProduct(item)}
         onDelete={() => handleDeleteProduct(item.id)}
         onAddStock={() => handleAddStock(item)}
         isPaginating={isPaginating}
+        navigation={navigation}
       />
     </View>
   );

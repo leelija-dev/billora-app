@@ -62,6 +62,7 @@ const ProductScreen = ({ navigation }) => {
   const [viewMode, setViewMode] = useState("grid");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [showStats, setShowStats] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // Modal states
   const [successModalVisible, setSuccessModalVisible] = useState(false);
@@ -89,7 +90,10 @@ const ProductScreen = ({ navigation }) => {
   // Load products on mount
   useFocusEffect(
     useCallback(() => {
-      fetchProducts(1);
+      setInitialLoading(true);
+      fetchProducts(1).finally(() => {
+        setInitialLoading(false);
+      });
       return () => {};
     }, []),
   );
@@ -170,7 +174,7 @@ const ProductScreen = ({ navigation }) => {
     setRefreshing(true);
     await fetchProducts(1, true);
     setRefreshing(false);
-  }, [fetchProducts]);
+  }, [fetchProducts, setInitialLoading]);
 
   // Navigate to create product
   const handleCreateProduct = () => {
@@ -883,7 +887,7 @@ const ProductScreen = ({ navigation }) => {
   );
 
   // Show loading state
-  if (loading && products.length === 0) {
+  if (initialLoading || (loading && products.length === 0)) {
     return (
       <View
         className={`flex-1 items-center justify-center ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
@@ -1093,6 +1097,7 @@ const ProductScreen = ({ navigation }) => {
           onDelete={handleDeleteProduct}
           onStockUpdate={handleStockUpdate}
           isPaginating={loading && products.length > 0}
+          navigation={navigation}
         />
       </ScrollView>
 
