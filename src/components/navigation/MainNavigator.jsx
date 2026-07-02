@@ -10,14 +10,15 @@ import BrandsStackNavigator from "./stacks/BrandsStack";
 import CategoriesStackNavigator from "./stacks/CategoriesStack";
 import CustomersStackNavigator from "./stacks/CustomersStack";
 
+import InvoicesStackNavigator from "./stacks/InvoicesStack";
+import OrdersStackNavigator from "./stacks/OrdersStack";
 import ProductsStackNavigator from "./stacks/ProductsStack";
 import ReportsStackNavigator from "./stacks/ReportsStack";
-import SettingsStackNavigator from "./stacks/SettingsStack";
 import SellersStackNavigator from "./stacks/SellersStack";
+import SettingsStackNavigator from "./stacks/SettingsStack";
 import StocksStackNavigator from "./stacks/StocksStack";
 import StoresStackNavigator from "./stacks/StoresStack";
 import UnitsStackNavigator from "./stacks/UnitsStack";
-import InvoicesStackNavigator from "./stacks/InvoicesStack";
 
 const Tab = createBottomTabNavigator();
 
@@ -26,6 +27,7 @@ const COMPONENT_MAP = {
   Dashboard: DashboardScreen,
   Products: ProductsStackNavigator,
   Stocks: StocksStackNavigator,
+  Orders: OrdersStackNavigator,
   Invoices: InvoicesStackNavigator,
   Reports: ReportsStackNavigator,
   Customers: CustomersStackNavigator,
@@ -66,7 +68,7 @@ const MainNavigator = () => {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { display: 'none' },
+        tabBarStyle: { display: "none" },
       }}
     >
       {visibleTabs.map((tab) => (
@@ -77,7 +79,11 @@ const MainNavigator = () => {
           options={{
             tabBarLabel: tab.label,
             tabBarIcon: ({ focused, color, size }) => (
-              <Icon name={focused ? tab.iconActive : tab.icon} size={size} color={color} />
+              <Icon
+                name={focused ? tab.iconActive : tab.icon}
+                size={size}
+                color={color}
+              />
             ),
           }}
         />

@@ -5,30 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f4f602c7-85e4-45b1-adc0-a611405c7b28" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/auth.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/auth.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/client.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/client.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/products.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/products.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/products/ProductCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/products/ProductCard.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/products/ProductList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/products/ProductList.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/hooks/useProductDetail.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/hooks/useProductForm.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/hooks/useProducts.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/customers/CustomersScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/customers/CustomersScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/products/DeletedProductsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/products/DeletedProductsScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/products/ProductsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/products/ProductsScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/reports/ReportsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/reports/ReportsScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/sellers/SellersScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/sellers/SellersScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/stores/StoresScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/stores/StoresScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/units/UnitsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/units/UnitsScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/authStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/authStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/customerStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/customerStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/deletedProductStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/deletedProductStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/productStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/productStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/sellerStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/sellerStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/storeStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/storeStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/unitStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/unitStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/App.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/orderStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/orderStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/permissionStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/permissionStore.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test.json" beforeDir="false" afterPath="$PROJECT_DIR$/test.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

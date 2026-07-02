@@ -131,12 +131,12 @@ export const MENU_ITEMS = {
   orders: {
     id: 'orders',
     name: 'Orders',
-    icon: 'shopping',
-    iconActive: 'shopping',
+    icon: 'cart',
+    iconActive: 'cart',
     label: 'Orders',
     order: 9,
-    screen: 'Bills',
-    stack: 'BillsStack',
+    screen: 'Orders',
+    stack: 'OrdersStack',
     slug: 'orders',
   },
   customers: {

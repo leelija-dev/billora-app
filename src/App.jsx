@@ -22,6 +22,7 @@ import BrandsStackNavigator from "./components/navigation/stacks/BrandsStack";
 import CategoriesStackNavigator from "./components/navigation/stacks/CategoriesStack";
 import CustomersStackNavigator from "./components/navigation/stacks/CustomersStack";
 import BillsStackNavigator from "./components/navigation/stacks/InvoicesStack.jsx";
+import OrdersStackNavigator from "./components/navigation/stacks/OrdersStack";
 import ProductsStackNavigator from "./components/navigation/stacks/ProductsStack";
 import ReportsStackNavigator from "./components/navigation/stacks/ReportsStack";
 import SettingsStackNavigator from "./components/navigation/stacks/SettingsStack";
@@ -220,10 +221,16 @@ const ALL_SCREENS = [
     permission: "inventory",
   },
   {
+    name: "Orders",
+    component: OrdersStackNavigator,
+    icon: "cart",
+    permission: "orders",
+  },
+  {
     name: "Bills",
     component: BillsStackNavigator,
     icon: "file-document",
-    permission: "orders",
+    permission: "invoices",
   },
   {
     name: "Reports",
