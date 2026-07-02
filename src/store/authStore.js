@@ -31,41 +31,54 @@ export const useAuthStore = create(
       },
 
       login: async (email, password) => {
-        set({ isLoading: true });
+        set({ isLoading: true, error: null });
         try {
           console.log('🔐 Login attempt for:', email);
-          const response = await authAPI.login(email, password);
           
-          if (!response.data || !response.data.status) {
-            throw new Error(response.data?.message || 'Login failed');
+          // Call the authAPI login
+          const result = await authAPI.login(email, password);
+          
+          console.log('📦 Login result:', {
+            success: result.success,
+            hasUser: !!result.user,
+            hasToken: !!result.token,
+          });
+          
+          // Check if login was successful
+          if (!result.success) {
+            throw new Error(result.message || 'Login failed');
           }
 
-          const data = response.data;
-          const user = data.user;
+          const user = result.user;
+          const token = result.token;
           
-          if (user.is_active !== 1) {
+          // Check if user is active
+          if (user && user.is_active !== undefined && user.is_active !== 1) {
             throw new Error('Your account is inactive. Please contact support.');
           }
 
-          // Store token
-          if (data.token) {
-            await AsyncStorage.setItem('auth_token', data.token);
-          }
-
+          // Update state
           set({
             user: user,
             isAuthenticated: true,
             isLoading: false,
-            token: data.token || null,
+            token: token,
+            error: null,
           });
 
           // Fetch permissions after successful login
-          if (user.plan_id) {
-            const permissionStore = usePermissionStore.getState();
-            await permissionStore.fetchUserPermissions(user.id, user.plan_id);
+          if (user && user.plan_id) {
+            try {
+              const permissionStore = usePermissionStore.getState();
+              await permissionStore.fetchUserPermissions(user.id, user.plan_id);
+              console.log('✅ Permissions fetched successfully');
+            } catch (permError) {
+              console.warn('⚠️ Failed to fetch permissions:', permError);
+              // Continue even if permissions fail - user can still use the app
+            }
           }
 
-          console.log('✅ Login successful for:', user.email);
+          console.log('✅ Login successful for:', user?.email || user?.username || 'user');
           return { success: true, user };
         } catch (error) {
           console.error('❌ Login error:', error);
@@ -74,6 +87,7 @@ export const useAuthStore = create(
             isAuthenticated: false,
             isLoading: false,
             token: null,
+            error: error.message || 'Login failed',
           });
           return { 
             success: false, 
@@ -95,6 +109,7 @@ export const useAuthStore = create(
         }
         
         await AsyncStorage.removeItem('auth_token');
+        await AsyncStorage.removeItem('auth_user');
         get().clearLocalAuthState();
         set({ isLoading: false });
         return { success: true };
@@ -108,6 +123,11 @@ export const useAuthStore = create(
       hasActivePlan: () => {
         const { user, isAuthenticated } = get();
         return isAuthenticated && user && user.plan_id && user.is_active === 1;
+      },
+      
+      // Get the current token
+      getToken: () => {
+        return get().token;
       },
     }),
     {

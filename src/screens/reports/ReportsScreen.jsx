@@ -32,6 +32,7 @@ import { useThemeStore } from "../../store/themeStore";
 import { formatDate } from "../../utils/dateFormatter";
 import { generateReportHTML } from "../../utils/reportPrintHelper";
 import { generateWordReport } from "../../utils/wordExportHelper";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -118,7 +119,7 @@ const ReportsScreen = () => {
 
   // Fetch reports with pagination and date filtering
   const fetchReports = useCallback(
-    async (page = 1, start = startDate, end = endDate) => {
+    async (page = 1, start = startDate, end = endDate, append = false) => {
       setLoading(true);
       setError(null);
 
@@ -157,8 +158,13 @@ const ReportsScreen = () => {
             store_name: report.store?.name || "Deleted",
           }));
 
-          setReports(formattedReports);
-          setFilteredReports(formattedReports);
+          // If append is true and page > 1, append to existing reports
+          const finalReports = append && page > 1 
+            ? [...reports, ...formattedReports]
+            : formattedReports;
+
+          setReports(finalReports);
+          setFilteredReports(finalReports);
         } else if (Array.isArray(responseData)) {
           const formattedReports = responseData.map((report) => ({
             ...report,
@@ -182,7 +188,7 @@ const ReportsScreen = () => {
         setLoading(false);
       }
     },
-    [startDate, endDate],
+    [startDate, endDate, reports],
   );
 
   // Apply search filter locally
@@ -812,9 +818,24 @@ const ReportsScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchReports(pagination.currentPage, startDate, endDate);
+    await fetchReports(1, startDate, endDate);
     setRefreshing(false);
   };
+
+  // Load more reports for infinite scroll
+  const loadMoreReports = useCallback(async () => {
+    if (pagination.currentPage < pagination.lastPage && !loading) {
+      const nextPage = pagination.currentPage + 1;
+      await fetchReports(nextPage, startDate, endDate, true);
+    }
+  }, [pagination.currentPage, pagination.lastPage, loading, startDate, endDate, fetchReports]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreReports, {
+    threshold: 500,
+    hasMore: pagination.currentPage < pagination.lastPage,
+    loading: loading,
+  });
 
   const handleFilterPress = () => {
     setShowFilters(true);
@@ -917,6 +938,8 @@ const ReportsScreen = () => {
           colors={["#3b82f6"]}
         />
       }
+      onScroll={handleScroll}
+      scrollEventThrottle={400}
     >
       {filteredReports.length === 0 ? (
         <View
@@ -1067,43 +1090,22 @@ const ReportsScreen = () => {
         })
       )}
 
-      {filteredReports.length > 0 && pagination.total > pagination.perPage && (
-        <View className="flex-row items-center justify-center py-4 space-x-2">
-          <TouchableOpacity
-            onPress={() => handlePageChange(pagination.currentPage - 1)}
-            disabled={pagination.currentPage === 1}
-            className={`p-2 rounded-lg border ${
-              pagination.currentPage === 1
-                ? "border-gray-200 dark:border-gray-700 opacity-40"
-                : "border-gray-300 dark:border-gray-600"
-            }`}
-          >
-            <Icon
-              name="chevron-left"
-              size={18}
-              color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-            />
-          </TouchableOpacity>
-          <Text
-            className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
-          >
-            Page {pagination.currentPage} of {pagination.lastPage}
+      {/* Loading indicator for infinite scroll */}
+      {isFetchingMore && pagination.currentPage < pagination.lastPage && (
+        <View className="py-4 items-center">
+          <ActivityIndicator size="small" color="#3B82F6" />
+          <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+            Loading more reports...
           </Text>
-          <TouchableOpacity
-            onPress={() => handlePageChange(pagination.currentPage + 1)}
-            disabled={pagination.currentPage === pagination.lastPage}
-            className={`p-2 rounded-lg border ${
-              pagination.currentPage === pagination.lastPage
-                ? "border-gray-200 dark:border-gray-700 opacity-40"
-                : "border-gray-300 dark:border-gray-600"
-            }`}
-          >
-            <Icon
-              name="chevron-right"
-              size={18}
-              color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-            />
-          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* End of list indicator */}
+      {pagination.currentPage >= pagination.lastPage && filteredReports.length > 0 && (
+        <View className="py-4 items-center">
+          <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+            Showing all {filteredReports.length} reports
+          </Text>
         </View>
       )}
     </ScrollView>
@@ -1199,6 +1201,8 @@ const ReportsScreen = () => {
               colors={["#3b82f6"]}
             />
           }
+          onScroll={handleScroll}
+          scrollEventThrottle={400}
         >
           {filteredReports.length === 0 ? (
             <View
@@ -1323,53 +1327,27 @@ const ReportsScreen = () => {
               })}
             </View>
           )}
+
+          {/* Loading indicator for infinite scroll */}
+          {isFetchingMore && pagination.currentPage < pagination.lastPage && (
+            <View className="py-4 items-center">
+              <ActivityIndicator size="small" color="#3B82F6" />
+              <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Loading more reports...
+              </Text>
+            </View>
+          )}
+
+          {/* End of list indicator */}
+          {pagination.currentPage >= pagination.lastPage && filteredReports.length > 0 && (
+            <View className="py-4 items-center">
+              <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Showing all {filteredReports.length} reports
+              </Text>
+            </View>
+          )}
         </ScrollView>
 
-        {filteredReports.length > 0 && (
-          <View className="flex-row items-center justify-between px-4 py-4 mt-2 border-t border-gray-200 dark:border-gray-700">
-            <Text className="text-xs text-gray-500 dark:text-gray-400">
-              Showing {pagination.from || 0} to {pagination.to || 0} of{" "}
-              {pagination.total} results
-            </Text>
-            <View className="flex-row items-center space-x-1">
-              <TouchableOpacity
-                onPress={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={pagination.currentPage === 1}
-                className={`p-2 rounded-lg border ${
-                  pagination.currentPage === 1
-                    ? "border-gray-200 dark:border-gray-700 opacity-40"
-                    : "border-gray-300 dark:border-gray-600"
-                }`}
-              >
-                <Icon
-                  name="chevron-left"
-                  size={18}
-                  color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-                />
-              </TouchableOpacity>
-              <Text
-                className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
-              >
-                {pagination.currentPage} / {pagination.lastPage}
-              </Text>
-              <TouchableOpacity
-                onPress={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={pagination.currentPage === pagination.lastPage}
-                className={`p-2 rounded-lg border ${
-                  pagination.currentPage === pagination.lastPage
-                    ? "border-gray-200 dark:border-gray-700 opacity-40"
-                    : "border-gray-300 dark:border-gray-600"
-                }`}
-              >
-                <Icon
-                  name="chevron-right"
-                  size={18}
-                  color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </View>
     </ScrollView>
   );

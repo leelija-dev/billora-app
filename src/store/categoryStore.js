@@ -6,9 +6,23 @@ const useCategoryStore = create((set, get) => ({
   categories: [],
   totalCategories: 0,
   currentPage: 1,
-  pageSize: 15,
+  lastPage: 1,
+  perPage: 8,
   loading: false,
   error: null,
+  pagination: {
+    current_page: 1,
+    last_page: 1,
+    per_page: 8,
+    total: 0,
+    next_page_url: null,
+    prev_page_url: null,
+    first_page_url: null,
+    last_page_url: null,
+    path: null,
+    from: null,
+    to: null,
+  },
   filters: {
     search: '',
     status: 'all',
@@ -16,66 +30,64 @@ const useCategoryStore = create((set, get) => ({
     sortOrder: 'asc',
   },
 
-  fetchCategories: async (page = 1, filters = {}) => {
-    console.log('fetchCategories called with:', page, filters);
+  fetchCategories: async (page = 1, forceRefresh = false, append = false) => {
+    console.log('fetchCategories called with page:', page, 'forceRefresh:', forceRefresh, 'append:', append);
     set({ loading: true, error: null });
 
     try {
-      const allFilters = { ...get().filters, ...filters };
+      const { filters, perPage, categories: existingCategories } = get();
       const params = {};
-      if (allFilters.search) params.search = allFilters.search;
+      if (filters.search) params.search = filters.search;
+      params.page = page;
+      params.per_page = perPage;
       
       const response = await categoriesAPI.getAll(page, params);
       console.log('API Response in store:', response);
 
       let categoriesArray = [];
-      if (response?.data?.data) {
-        categoriesArray = response.data.data;
-      } else if (response?.data) {
-        categoriesArray = Array.isArray(response.data) ? response.data : [response.data];
-      } else if (Array.isArray(response)) {
-        categoriesArray = response;
+      let paginatedData = response;
+      
+      // Handle paginated response
+      if (paginatedData?.data && Array.isArray(paginatedData.data)) {
+        categoriesArray = paginatedData.data;
+      } else if (Array.isArray(paginatedData)) {
+        categoriesArray = paginatedData;
+      } else if (paginatedData && typeof paginatedData === 'object') {
+        categoriesArray = [paginatedData];
       }
 
-      let filteredCategories = categoriesArray;
-      if (allFilters.status !== 'all') {
-        const isActive = allFilters.status === 'active';
-        filteredCategories = categoriesArray.filter(
-          (c) => (c.is_active === true || c.is_active === 1) === isActive
-        );
-      }
+      console.log(`📦 Extracted ${categoriesArray.length} categories`);
 
-      const { sortBy, sortOrder } = allFilters;
-      filteredCategories.sort((a, b) => {
-        let valA, valB;
-        if (sortBy === 'name') {
-          valA = (a.name || '').toLowerCase();
-          valB = (b.name || '').toLowerCase();
-        } else if (sortBy === 'date') {
-          valA = new Date(a.updated_at || a.created_at || 0).getTime();
-          valB = new Date(b.updated_at || b.created_at || 0).getTime();
-        } else if (sortBy === 'status') {
-          valA = (a.is_active === true || a.is_active === 1) ? 1 : 0;
-          valB = (b.is_active === true || b.is_active === 1) ? 1 : 0;
-        } else {
-          valA = a.id || 0;
-          valB = b.id || 0;
-        }
+      // Combine with existing categories if appending
+      const finalCategories = append && !forceRefresh && page > 1
+        ? [...existingCategories, ...categoriesArray]
+        : categoriesArray;
 
-        if (sortOrder === 'asc') {
-          return valA > valB ? 1 : -1;
-        } else {
-          return valA < valB ? 1 : -1;
-        }
-      });
+      // Extract pagination info
+      const paginationInfo = {
+        current_page: paginatedData?.current_page || page,
+        last_page: paginatedData?.last_page || 1,
+        per_page: paginatedData?.per_page || perPage,
+        total: paginatedData?.total || finalCategories.length,
+        next_page_url: paginatedData?.next_page_url || null,
+        prev_page_url: paginatedData?.prev_page_url || null,
+        first_page_url: paginatedData?.first_page_url || null,
+        last_page_url: paginatedData?.last_page_url || null,
+        path: paginatedData?.path || null,
+        from: paginatedData?.from || null,
+        to: paginatedData?.to || null,
+      };
 
       set({
-        categories: filteredCategories,
-        totalCategories: filteredCategories.length,
-        currentPage: page,
+        categories: finalCategories,
+        totalCategories: paginationInfo.total,
+        currentPage: paginationInfo.current_page,
+        lastPage: paginationInfo.last_page,
+        pagination: paginationInfo,
         loading: false,
       });
 
+      console.log(`✅ Categories loaded successfully: ${finalCategories.length} categories`);
       return response;
     } catch (error) {
       console.error('Failed to fetch categories:', error);
@@ -85,6 +97,7 @@ const useCategoryStore = create((set, get) => ({
         loading: false,
         error: error.message || 'Failed to fetch categories',
       });
+      // Don't throw error - let the UI handle the empty state
     }
   },
 
@@ -186,8 +199,33 @@ const useCategoryStore = create((set, get) => ({
     const updatedFilters = { ...currentFilters, ...newFilters };
     set({ filters: updatedFilters });
     setTimeout(() => {
-      get().fetchCategories(1, updatedFilters);
+      get().fetchCategories(1, true, false);
     }, 100);
+  },
+
+  reset: () => {
+    set({
+      categories: [],
+      totalCategories: 0,
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 8,
+      loading: false,
+      error: null,
+      pagination: {
+        current_page: 1,
+        last_page: 1,
+        per_page: 8,
+        total: 0,
+        next_page_url: null,
+        prev_page_url: null,
+        first_page_url: null,
+        last_page_url: null,
+        path: null,
+        from: null,
+        to: null,
+      },
+    });
   },
 
   clearError: () => set({ error: null }),

@@ -22,6 +22,7 @@ import { useAuthStore } from "../../store/authStore";
 import useCategoryStore from "../../store/categoryStore";
 import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const CategoriesScreen = () => {
   const navigation = useNavigation();
@@ -35,6 +36,8 @@ const CategoriesScreen = () => {
     totalCategories,
     loading,
     filters,
+    currentPage,
+    lastPage,
     fetchCategories,
     createCategory,
     updateCategory,
@@ -53,13 +56,24 @@ const CategoriesScreen = () => {
   const [deleting, setDeleting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [initialLoading, setInitialLoading] = useState(true);
-  
-  // Add/Edit Form Modal
   const [showFormModal, setShowFormModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Load more categories function for infinite scroll
+  const loadMoreCategories = useCallback(async () => {
+    if (currentPage < lastPage && !loading) {
+      await fetchCategories(currentPage + 1, false, true);
+    }
+  }, [currentPage, lastPage, loading, fetchCategories]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreCategories, {
+    threshold: 500,
+    hasMore: currentPage < lastPage,
+    loading: loading,
+  });
 
   const searchTimeoutRef = useRef(null);
   const isMounted = useRef(true);
@@ -128,22 +142,22 @@ const CategoriesScreen = () => {
   }, [categories, totalCategories]);
 
   // Initial data load
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        await fetchCategories();
-      } catch (error) {
-        console.error("Failed to fetch categories:", error);
-      } finally {
-        if (isMounted.current) setInitialLoading(false);
-      }
-    };
-    loadInitialData();
-    return () => { 
-      isMounted.current = false; 
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    };
-  }, [fetchCategories]);
+  useFocusEffect(
+    useCallback(() => {
+      const loadInitialData = async () => {
+        try {
+          await fetchCategories(1, false, false);
+        } catch (error) {
+          console.error("Failed to fetch categories:", error);
+        }
+      };
+      loadInitialData();
+      return () => {
+        isMounted.current = false;
+        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      };
+    }, [fetchCategories])
+  );
 
   // Handle search with debounce
   useEffect(() => {
@@ -152,12 +166,9 @@ const CategoriesScreen = () => {
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
   }, [searchQuery, setFilters]);
 
-  // Refresh on focus
-  useFocusEffect(useCallback(() => { handleRefresh(); return () => {}; }, []));
-
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchCategories();
+    await fetchCategories(1, true, false);
     setRefreshing(false);
   };
 
@@ -206,7 +217,7 @@ const CategoriesScreen = () => {
       }
 
       handleCancelForm();
-      await fetchCategories();
+      await fetchCategories(1, true, false);
     } catch (error) {
       console.error("Submit error:", error);
       setSuccessMessage(error.message || "An error occurred");
@@ -229,7 +240,7 @@ const CategoriesScreen = () => {
       await deleteCategory(categoryToDelete.id);
       setShowDeleteConfirm(false);
       setCategoryToDelete(null);
-      await fetchCategories();
+      await fetchCategories(1, true, false);
       setSuccessMessage("Category deleted successfully");
       setShowSuccessModal(true);
       setTimeout(() => setShowSuccessModal(false), 2000);
@@ -245,15 +256,6 @@ const CategoriesScreen = () => {
 
   const handleSearch = (query) => setSearchQuery(query);
   const toggleViewMode = () => setViewMode(viewMode === "grid" ? "list" : "grid");
-
-  if (initialLoading) {
-    return (
-      <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-        <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>Loading categories...</Text>
-      </View>
-    );
-  }
 
   return (
     <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
@@ -292,6 +294,8 @@ const CategoriesScreen = () => {
 
       <ScrollView 
         showsVerticalScrollIndicator={false} 
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -427,6 +431,15 @@ const CategoriesScreen = () => {
             onDelete={handleDeleteCategory} 
           />
         </View>
+
+        {/* End of list indicator */}
+        {currentPage >= lastPage && categories.length > 0 && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              Showing all {categories.length} categories
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Add/Edit Category Modal */}

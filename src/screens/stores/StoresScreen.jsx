@@ -24,6 +24,7 @@ import { useAuthStore } from "../../store/authStore";
 import useStoreStore from "../../store/storeStore";
 import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const StoresScreen = () => {
   const navigation = useNavigation();
@@ -136,13 +137,32 @@ const StoresScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    const result = await fetchStores(getUserId(), currentPage, { search: searchQuery, start_date: startDate, end_date: endDate, status: filters.status });
+    const result = await fetchStores(getUserId(), 1, { search: searchQuery, start_date: startDate, end_date: endDate, status: filters.status });
     if (result?.data) {
       setCurrentPage(result.data.current_page || 1);
       setLastPage(result.data.last_page || 1);
     }
     setRefreshing(false);
   };
+
+  // Load more stores for infinite scroll
+  const loadMoreStores = useCallback(async () => {
+    if (currentPage < lastPage && !loading) {
+      const nextPage = currentPage + 1;
+      const result = await fetchStores(getUserId(), nextPage, { search: searchQuery, start_date: startDate, end_date: endDate, status: filters.status }, true);
+      if (result?.data) {
+        setCurrentPage(result.data.current_page || nextPage);
+        setLastPage(result.data.last_page || lastPage);
+      }
+    }
+  }, [currentPage, lastPage, loading, getUserId, searchQuery, startDate, endDate, filters.status, fetchStores]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreStores, {
+    threshold: 500,
+    hasMore: currentPage < lastPage,
+    loading: loading,
+  });
 
   const handleAddStore = () => {
     setSelectedStore(null);
@@ -252,10 +272,6 @@ const StoresScreen = () => {
     fetchStores(getUserId(), 1, { search: "", start_date: "", end_date: "", status: "all" });
   };
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-    fetchStores(getUserId(), page, { search: searchQuery, start_date: startDate, end_date: endDate, status: filters.status });
-  };
 
   const toggleViewMode = () => {
     setViewMode(viewMode === "grid" ? "list" : "grid");
@@ -342,6 +358,8 @@ const StoresScreen = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
       >
         {/* Stats Cards */}
         <View className="flex-row flex-wrap px-4 py-3">
@@ -456,32 +474,26 @@ const StoresScreen = () => {
             onDelete={handleDeleteClick}
             onRefresh={handleRefresh}
           />
-        </View>
 
-        {/* Pagination */}
-        {lastPage > 1 && (
-          <View className={`flex-row items-center justify-between px-4 py-3 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              Page {currentPage} of {lastPage}
-            </Text>
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                onPress={() => handlePageChange(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className={`w-8 h-8 rounded-lg items-center justify-center mr-2 ${currentPage === 1 ? 'opacity-50' : ''} ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
-              >
-                <Icon name="chevron-left" size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handlePageChange(Math.min(lastPage, currentPage + 1))}
-                disabled={currentPage === lastPage}
-                className={`w-8 h-8 rounded-lg items-center justify-center ${currentPage === lastPage ? 'opacity-50' : ''} ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}
-              >
-                <Icon name="chevron-right" size={20} color={isDarkMode ? '#9CA3AF' : '#4B5563'} />
-              </TouchableOpacity>
+          {/* Loading indicator for infinite scroll */}
+          {isFetchingMore && currentPage < lastPage && (
+            <View className="py-4 items-center">
+              <ActivityIndicator size="small" color="#3B82F6" />
+              <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Loading more stores...
+              </Text>
             </View>
-          </View>
-        )}
+          )}
+
+          {/* End of list indicator */}
+          {currentPage >= lastPage && safeStores.length > 0 && (
+            <View className="py-4 items-center">
+              <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Showing all {safeStores.length} stores
+              </Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       {/* Add/Edit Store Modal */}

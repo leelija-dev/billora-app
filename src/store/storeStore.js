@@ -15,13 +15,13 @@ const useStoreStore = create((set, get) => ({
   },
 
   // Fetch stores by user ID with pagination
-  fetchStores: async (userId, page = 1, filters = {}) => {
+  fetchStores: async (userId, page = 1, filters = {}, append = false) => {
     if (!userId) {
       console.error("No user ID provided");
       return;
     }
 
-    console.log("🏪 fetchStores called with userId:", userId, "page:", page, "filters:", filters);
+    console.log("🏪 fetchStores called with userId:", userId, "page:", page, "filters:", filters, "append:", append);
     set({ loading: true, error: null });
 
     try {
@@ -59,8 +59,14 @@ const useStoreStore = create((set, get) => ({
         last_page_url: paginationData.last_page_url || null,
       };
 
+      // If append is true and page > 1, append to existing stores
+      const { stores: existingStores } = get();
+      const finalStores = append && page > 1 
+        ? [...existingStores, ...storesArray]
+        : storesArray;
+
       set({
-        stores: storesArray,
+        stores: finalStores,
         totalStores: pageData.total,
         currentPage: pageData.current_page,
         lastPage: pageData.last_page,
@@ -68,7 +74,7 @@ const useStoreStore = create((set, get) => ({
         loading: false,
       });
 
-      console.log("✅ Stores loaded:", storesArray.length, "Page:", pageData.current_page, "of", pageData.last_page);
+      console.log("✅ Stores loaded:", finalStores.length, "Page:", pageData.current_page, "of", pageData.last_page);
       return response.data;
     } catch (error) {
       console.error("❌ Failed to fetch stores:", error);

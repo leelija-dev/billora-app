@@ -33,12 +33,13 @@ const useCustomerStore = create((set, get) => ({
   selectedCity: "",
 
   // Fetch due customers (like web version)
-  fetchDueCustomers: async (search = "", page = 1) => {
-    console.log("💰 fetchDueCustomers called with search:", search, "page:", page);
+  fetchDueCustomers: async (search = "", page = 1, append = false) => {
+    console.log("💰 fetchDueCustomers called with search:", search, "page:", page, "append:", append);
     set({ loading: true, error: null, activeFilterType: "due" });
 
     try {
       const { user } = useAuthStore.getState();
+      const { customers: existingCustomers } = get();
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
@@ -79,9 +80,14 @@ const useCustomerStore = create((set, get) => ({
 
       console.log("💰 Due customers extracted:", customersArray.length);
 
+      // If append is true and page > 1, append to existing customers
+      const finalCustomers = append && page > 1 
+        ? [...existingCustomers, ...customersArray]
+        : customersArray;
+
       set({
-        customers: customersArray,
-        filteredCustomers: customersArray,
+        customers: finalCustomers,
+        filteredCustomers: finalCustomers,
         filteredTotal: total,
         totalCustomers: total,
         currentPage: paginationData.current_page || page,
@@ -89,7 +95,7 @@ const useCustomerStore = create((set, get) => ({
         loading: false,
       });
       
-      return { success: true, data: customersArray, total };
+      return { success: true, data: finalCustomers, total };
     } catch (error) {
       console.error("❌ Failed to fetch due customers:", error);
       set({
@@ -105,12 +111,13 @@ const useCustomerStore = create((set, get) => ({
   },
 
   // Fetch customers with city (like web version)
-  fetchCityCustomers: async (search = "", page = 1) => {
-    console.log("🏙️ fetchCityCustomers called with search:", search, "page:", page);
+  fetchCityCustomers: async (search = "", page = 1, append = false) => {
+    console.log("🏙️ fetchCityCustomers called with search:", search, "page:", page, "append:", append);
     set({ loading: true, error: null, activeFilterType: "city" });
 
     try {
       const { user } = useAuthStore.getState();
+      const { customers: existingCustomers } = get();
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
@@ -151,9 +158,14 @@ const useCustomerStore = create((set, get) => ({
 
       console.log("🏙️ City customers extracted:", customersArray.length);
 
+      // If append is true and page > 1, append to existing customers
+      const finalCustomers = append && page > 1 
+        ? [...existingCustomers, ...customersArray]
+        : customersArray;
+
       set({
-        customers: customersArray,
-        filteredCustomers: customersArray,
+        customers: finalCustomers,
+        filteredCustomers: finalCustomers,
         filteredTotal: total,
         totalCustomers: total,
         currentPage: paginationData.current_page || page,
@@ -161,7 +173,7 @@ const useCustomerStore = create((set, get) => ({
         loading: false,
       });
       
-      return { success: true, data: customersArray, total };
+      return { success: true, data: finalCustomers, total };
     } catch (error) {
       console.error("❌ Failed to fetch city customers:", error);
       set({
@@ -236,8 +248,8 @@ const useCustomerStore = create((set, get) => ({
   },
 
   // Fetch customers (updated to handle filter type)
-  fetchCustomers: async (page = 1, forceRefresh = false) => {
-    const { filters, perPage, activeFilterType } = get();
+  fetchCustomers: async (page = 1, forceRefresh = false, append = false) => {
+    const { filters, perPage, activeFilterType, customers: existingCustomers } = get();
     const { user } = useAuthStore.getState();
 
     if (!user?.id) {
@@ -245,13 +257,13 @@ const useCustomerStore = create((set, get) => ({
       return;
     }
 
-    console.log("🔄 fetchCustomers called with page:", page, "activeFilterType:", activeFilterType);
+    console.log("🔄 fetchCustomers called with page:", page, "activeFilterType:", activeFilterType, "append:", append);
     
     // If we're in a filtered mode, use the appropriate API
     if (activeFilterType === "due") {
-      return get().fetchDueCustomers(filters.search, page);
+      return get().fetchDueCustomers(filters.search, page, append);
     } else if (activeFilterType === "city") {
-      return get().fetchCityCustomers(filters.search, page);
+      return get().fetchCityCustomers(filters.search, page, append);
     }
 
     // Normal all customers fetch
@@ -318,9 +330,14 @@ const useCustomerStore = create((set, get) => ({
         total: paginationData.total || filteredCustomers.length,
       };
 
+      // If append is true and not force refresh and page > 1, append to existing customers
+      const finalCustomers = append && !forceRefresh && page > 1 
+        ? [...existingCustomers, ...filteredCustomers]
+        : filteredCustomers;
+
       set({
-        customers: filteredCustomers,
-        filteredCustomers: filteredCustomers,
+        customers: finalCustomers,
+        filteredCustomers: finalCustomers,
         filteredTotal: pageData.total,
         totalCustomers: pageData.total,
         currentPage: pageData.current_page,
@@ -329,7 +346,7 @@ const useCustomerStore = create((set, get) => ({
         loading: false,
       });
 
-      console.log("✅ Customers loaded:", filteredCustomers.length);
+      console.log("✅ Customers loaded:", finalCustomers.length);
       return response;
     } catch (error) {
       console.error("❌ Failed to fetch customers:", error);

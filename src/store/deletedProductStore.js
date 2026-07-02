@@ -17,8 +17,8 @@ const useDeletedProductStore = create((set, get) => ({
     total: 0,
   },
 
-  fetchDeletedProducts: async (userId, search = "", page = 1) => {
-    console.log("🔄 fetchDeletedProducts called with page:", page, "search:", search);
+  fetchDeletedProducts: async (userId, search = "", page = 1, append = false) => {
+    console.log("🔄 fetchDeletedProducts called with page:", page, "search:", search, "append:", append);
     set({ loading: true, error: null });
 
     try {
@@ -66,8 +66,14 @@ const useDeletedProductStore = create((set, get) => ({
       console.log("✅ Products array:", productsArray.length);
       console.log("✅ Pagination:", pageData);
 
+      // If append is true and page > 1, append to existing products
+      const { deletedProducts: existingProducts } = get();
+      const finalProducts = append && page > 1 
+        ? [...existingProducts, ...productsArray]
+        : productsArray;
+
       set({
-        deletedProducts: productsArray,
+        deletedProducts: finalProducts,
         totalDeletedProducts: pageData.total,
         currentPage: pageData.current_page,
         lastPage: pageData.last_page,

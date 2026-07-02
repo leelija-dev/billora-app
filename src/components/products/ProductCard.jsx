@@ -70,7 +70,7 @@ const ProductCard = ({
     images = [],
   } = product;
 
-  console.log(id);
+  // ✅ REMOVE: console.log(id); - This was causing the error
 
   // Get total stock using the store method
   const totalStock = getProductTotalStock(product);
@@ -117,7 +117,6 @@ const ProductCard = ({
   const handleDelete = () => {
     setShowActions(false);
     if (onDelete) {
-      
       onDelete(id); // ✅ Pass the product ID
     } else {
       Alert.alert(
@@ -497,7 +496,7 @@ const ProductCard = ({
                           isDarkMode ? "text-green-400" : "text-green-700"
                         }`}
                       >
-                        {val}
+                        {String(val)}
                       </Text>
                     </View>
                   ));
@@ -521,7 +520,7 @@ const ProductCard = ({
             )}
 
             {/* Attributes Display */}
-            {attributes && (
+            {attributes && typeof attributes === 'object' && (
               <View className="flex-row flex-wrap gap-1 mb-3">
                 {(() => {
                   let attrs = attributes;
@@ -538,21 +537,22 @@ const ProductCard = ({
                   if (Array.isArray(attrs)) {
                     attrs.forEach((item) => {
                       if (typeof item === 'object' && item !== null) {
-                    values.push(...Object.values(item));
-                  } else {
-                    values.push(item);
-                  }
-                });
-              } else {
-                values = Object.values(attrs);
-              }
-
-                  values = values
-                    .filter((val) => val !== null && val !== undefined && val !== '')
-                    .map((val) => {
-                      if (typeof val === 'object') return JSON.stringify(val);
-                      return String(val);
+                        Object.values(item).forEach(v => {
+                          if (v !== null && v !== undefined && v !== '') {
+                            values.push(typeof v === 'object' ? JSON.stringify(v) : String(v));
+                          }
+                        });
+                      } else if (item !== null && item !== undefined && item !== '') {
+                        values.push(String(item));
+                      }
                     });
+                  } else {
+                    Object.values(attrs).forEach(v => {
+                      if (v !== null && v !== undefined && v !== '') {
+                        values.push(typeof v === 'object' ? JSON.stringify(v) : String(v));
+                      }
+                    });
+                  }
 
                   if (values.length === 0) return null;
 
@@ -561,7 +561,7 @@ const ProductCard = ({
                     <>
                       {displayValues.map((val, idx) => (
                         <View
-                          key={idx}
+                          key={`attr-${idx}`}
                           className={`px-2 py-0.5 rounded-md ${
                             isDarkMode ? "bg-blue-900/30" : "bg-blue-100"
                           }`}
@@ -571,7 +571,7 @@ const ProductCard = ({
                               isDarkMode ? "text-blue-400" : "text-blue-700"
                             }`}
                           >
-                            {val}
+                            {String(val)}
                           </Text>
                         </View>
                       ))}

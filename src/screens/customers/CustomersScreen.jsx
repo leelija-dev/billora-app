@@ -29,6 +29,7 @@ import { useAuthStore } from "../../store/authStore";
 import useCustomerStore from "../../store/customerStore";
 import { usePermissionStore } from "../../store/permissionStore";
 import { useThemeStore } from "../../store/themeStore";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const { width } = Dimensions.get("window");
 
@@ -197,14 +198,35 @@ const CustomersScreen = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     if (activeFilterType === "due") {
-      await fetchDueCustomers(filters.search, currentPage);
+      await fetchDueCustomers(filters.search, 1);
     } else if (activeFilterType === "city") {
-      await fetchCityCustomers(filters.search, currentPage);
+      await fetchCityCustomers(filters.search, 1);
     } else {
-      await fetchCustomers(currentPage, true);
+      await fetchCustomers(1, true);
     }
     setRefreshing(false);
   };
+
+  // Load more customers for infinite scroll
+  const loadMoreCustomers = useCallback(async () => {
+    if (currentPage < lastPage && !loading) {
+      const nextPage = currentPage + 1;
+      if (activeFilterType === "due") {
+        await fetchDueCustomers(filters.search, nextPage, true);
+      } else if (activeFilterType === "city") {
+        await fetchCityCustomers(filters.search, nextPage, true);
+      } else {
+        await fetchCustomers(nextPage, false, true);
+      }
+    }
+  }, [currentPage, lastPage, loading, activeFilterType, filters.search, fetchDueCustomers, fetchCityCustomers, fetchCustomers]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreCustomers, {
+    threshold: 500,
+    hasMore: currentPage < lastPage,
+    loading: loading,
+  });
 
   // Filter handlers
   const handleDueFilter = async () => {
@@ -526,6 +548,7 @@ const CustomersScreen = () => {
             tintColor={isDarkMode ? "#ffffff" : "#3b82f6"}
           />
         }
+        onScroll={handleScroll}
       >
         {/* Search Bar */}
         <View className="px-4 pt-4 pb-2">
@@ -705,54 +728,26 @@ const CustomersScreen = () => {
             onDelete={handleDeleteCustomer}
             onPayment={handlePaymentClick}
           />
-        </View>
 
-        {/* Pagination */}
-        {lastPage > 1 && (
-          <View className="flex-row items-center justify-center py-4 mb-20 space-x-3">
-            <TouchableOpacity
-              onPress={() => setPage(currentPage - 1)}
-              disabled={currentPage === 1}
-              className={`w-10 h-10 rounded-xl items-center justify-center border ${
-                currentPage === 1
-                  ? "border-gray-200 dark:border-gray-700 opacity-40"
-                  : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm"
-              }`}
-            >
-              <Icon
-                name="chevron-left"
-                size={20}
-                color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-              />
-            </TouchableOpacity>
-
-            <View
-              className={`px-4 py-2 rounded-xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm`}
-            >
-              <Text
-                className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
-              >
-                {currentPage} / {lastPage}
+          {/* Loading indicator for infinite scroll */}
+          {isFetchingMore && currentPage < lastPage && (
+            <View className="py-4 items-center">
+              <ActivityIndicator size="small" color="#3B82F6" />
+              <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Loading more customers...
               </Text>
             </View>
+          )}
 
-            <TouchableOpacity
-              onPress={() => setPage(currentPage + 1)}
-              disabled={currentPage === lastPage}
-              className={`w-10 h-10 rounded-xl items-center justify-center border ${
-                currentPage === lastPage
-                  ? "border-gray-200 dark:border-gray-700 opacity-40"
-                  : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm"
-              }`}
-            >
-              <Icon
-                name="chevron-right"
-                size={20}
-                color={isDarkMode ? "#9CA3AF" : "#4b5563"}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
+          {/* End of list indicator */}
+          {currentPage >= lastPage && displayCustomers.length > 0 && (
+            <View className="py-4 items-center">
+              <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Showing all {displayCustomers.length} customers
+              </Text>
+            </View>
+          )}
+        </View>
       </Animated.ScrollView>
 
       {/* Add/Edit Customer Modal */}

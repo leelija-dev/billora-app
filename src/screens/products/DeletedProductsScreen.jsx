@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { ConfirmationModal, SuccessModal } from '../../components/common/CustomModal';
 import Header from '../../components/common/Header';
 import Toast from 'react-native-toast-message';
+import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 
 const DeletedProductsScreen = () => {
   const { user } = useAuthStore();
@@ -72,10 +73,27 @@ const DeletedProductsScreen = () => {
   const handleRefresh = async () => {
     setRefreshing(true);
     if (user?.id) {
-      await fetchDeletedProducts(user.id);
+      await fetchDeletedProducts(user.id, searchTerm, 1);
     }
     setRefreshing(false);
   };
+
+  // Load more deleted products for infinite scroll
+  const loadMoreProducts = useCallback(async () => {
+    if (pagination?.current_page < pagination?.last_page && !loading) {
+      const nextPage = pagination.current_page + 1;
+      if (user?.id) {
+        await fetchDeletedProducts(user.id, searchTerm, nextPage, true);
+      }
+    }
+  }, [pagination?.current_page, pagination?.last_page, loading, user?.id, searchTerm, fetchDeletedProducts]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreProducts, {
+    threshold: 500,
+    hasMore: pagination?.current_page < pagination?.last_page,
+    loading: loading,
+  });
 
   // Function to handle restore button click
   const handleRestorePress = (product) => {
@@ -338,6 +356,8 @@ const DeletedProductsScreen = () => {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} />
         }
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
       >
         {loading ? (
           <View className="py-12 items-center">
@@ -356,11 +376,25 @@ const DeletedProductsScreen = () => {
                 onForceDelete={handleForceDeletePress}
               />
             ))}
-            <View className="py-4 items-center">
-              <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Page {pagination.current_page} of {pagination.last_page}
-              </Text>
-            </View>
+
+            {/* Loading indicator for infinite scroll */}
+            {isFetchingMore && pagination?.current_page < pagination?.last_page && (
+              <View className="py-4 items-center">
+                <ActivityIndicator size="small" color="#3B82F6" />
+                <Text className={`text-sm mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Loading more products...
+                </Text>
+              </View>
+            )}
+
+            {/* End of list indicator */}
+            {pagination?.current_page >= pagination?.last_page && deletedProducts.length > 0 && (
+              <View className="py-4 items-center">
+                <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Showing all {deletedProducts.length} deleted products
+                </Text>
+              </View>
+            )}
           </>
         ) : (
           <View className="py-20 items-center">

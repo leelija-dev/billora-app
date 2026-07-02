@@ -15,13 +15,13 @@ const useSellerStore = create((set, get) => ({
   },
 
   // Fetch sellers by user ID with pagination
-  fetchSellers: async (userId, page = 1, search = "") => {
+  fetchSellers: async (userId, page = 1, search = "", append = false) => {
     if (!userId) {
       console.error("No user ID provided");
       return;
     }
 
-    console.log("👥 fetchSellers called with userId:", userId, "page:", page, "search:", search);
+    console.log("👥 fetchSellers called with userId:", userId, "page:", page, "search:", search, "append:", append);
     set({ loading: true, error: null });
 
     try {
@@ -62,8 +62,14 @@ const useSellerStore = create((set, get) => ({
         last_page_url: paginationData.last_page_url || null,
       };
 
+      // If append is true and page > 1, append to existing sellers
+      const { sellers: existingSellers } = get();
+      const finalSellers = append && page > 1 
+        ? [...existingSellers, ...sellersArray]
+        : sellersArray;
+
       set({
-        sellers: sellersArray,
+        sellers: finalSellers,
         totalSellers: pageData.total,
         currentPage: pageData.current_page,
         lastPage: pageData.last_page,
@@ -71,7 +77,7 @@ const useSellerStore = create((set, get) => ({
         loading: false,
       });
 
-      console.log("✅ Sellers loaded:", sellersArray.length, "Page:", pageData.current_page, "of", pageData.last_page);
+      console.log("✅ Sellers loaded:", finalSellers.length, "Page:", pageData.current_page, "of", pageData.last_page);
       return response.data;
     } catch (error) {
       console.error("❌ Failed to fetch sellers:", error);

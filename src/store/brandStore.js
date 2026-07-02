@@ -29,15 +29,18 @@ const useBrandStore = create((set, get) => ({
 
       // Extract brands array from response structure
       let brandsArray = [];
-      if (response?.data?.data) {
-        brandsArray = response.data.data;
-      } else if (response?.data) {
-        brandsArray = Array.isArray(response.data)
-          ? response.data
-          : [response.data];
-      } else if (Array.isArray(response)) {
-        brandsArray = response;
+      let paginatedData = response?.data || response;
+      
+      // Handle paginated response (after API client unwrapping)
+      if (paginatedData?.data && Array.isArray(paginatedData.data)) {
+        brandsArray = paginatedData.data;
+      } else if (Array.isArray(paginatedData)) {
+        brandsArray = paginatedData;
+      } else if (paginatedData && typeof paginatedData === 'object') {
+        brandsArray = [paginatedData];
       }
+
+      console.log(`📦 Extracted ${brandsArray.length} brands`);
 
       // Apply status filter locally if needed
       let filteredBrands = brandsArray;
@@ -59,7 +62,7 @@ const useBrandStore = create((set, get) => ({
           valA = new Date(a.updated_at || a.created_at || 0).getTime();
           valB = new Date(b.updated_at || b.created_at || 0).getTime();
         } else if (sortBy === "status") {
-          valA = a.is_active === true || a.is_active === 1 ? 1 : 0;
+          valA = a.is_active === true || b.is_active === 1 ? 1 : 0;
           valB = b.is_active === true || b.is_active === 1 ? 1 : 0;
         } else {
           valA = a.id || 0;
@@ -79,6 +82,7 @@ const useBrandStore = create((set, get) => ({
         loading: false,
       });
 
+      console.log(`✅ Brands loaded successfully: ${filteredBrands.length} brands`);
       return response;
     } catch (error) {
       console.error("Failed to fetch brands:", error);
@@ -88,6 +92,7 @@ const useBrandStore = create((set, get) => ({
         loading: false,
         error: error.message || "Failed to fetch brands",
       });
+      // Don't throw error - let the UI handle the empty state
     }
   },
   getBrand: async (id) => {

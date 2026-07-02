@@ -1,4 +1,4 @@
-// screens/ProductScreen.js
+// screens/ProductScreen.js - OPTIMIZED VERSION
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -27,6 +27,7 @@ import { useAuthStore } from "../../store/authStore";
 import { usePermissionStore } from "../../store/permissionStore";
 import { useProductStore } from "../../store/productStore";
 import { useThemeStore } from "../../store/themeStore";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const { width } = Dimensions.get("window");
 
@@ -107,7 +108,7 @@ const ProductScreen = ({ navigation }) => {
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchText]);
+  }, [searchText, filters.search, setFilters]);
 
   // Calculate product statistics
   const productStats = useMemo(() => {
@@ -174,7 +175,22 @@ const ProductScreen = ({ navigation }) => {
     setRefreshing(true);
     await fetchProducts(1, true);
     setRefreshing(false);
-  }, [fetchProducts, setInitialLoading]);
+  }, [fetchProducts]);
+
+  // Load more products for infinite scroll
+  const loadMoreProducts = useCallback(async () => {
+    if (currentPage < lastPage && !loading) {
+      const nextPage = currentPage + 1;
+      await fetchProducts(nextPage, false, true);
+    }
+  }, [currentPage, lastPage, loading, fetchProducts]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreProducts, {
+    threshold: 1500,
+    hasMore: currentPage < lastPage,
+    loading: loading,
+  });
 
   // Navigate to create product
   const handleCreateProduct = () => {
@@ -216,7 +232,7 @@ const ProductScreen = ({ navigation }) => {
         setErrorModalVisible(true);
       }
     } catch (err) {
-      setErrorMessage("An unexpected error occurred");
+      setErrorMessage(err.message || "An unexpected error occurred");
       setErrorModalVisible(true);
     } finally {
       setIsDeleting(false);
@@ -230,12 +246,6 @@ const ProductScreen = ({ navigation }) => {
     await fetchProducts(currentPage, true);
   };
 
-  // Handle page change using URL-based pagination
-  const handlePageChange = (url) => {
-    if (url) {
-      fetchProductsByUrl(url);
-    }
-  };
 
   // Handle view mode toggle
   const toggleViewMode = () => {
@@ -259,195 +269,6 @@ const ProductScreen = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  // Pagination Component - URL-based like admin version
-  const Pagination = () => {
-    if (!pagination || pagination.last_page <= 1) return null;
-
-    const {
-      current_page,
-      last_page,
-      per_page,
-      total,
-      next_page_url,
-      prev_page_url,
-      first_page_url,
-      last_page_url,
-    } = pagination;
-
-    // Get page numbers for display
-    const getPageNumbers = () => {
-      const pages = [];
-      const maxVisible = 5;
-
-      if (last_page <= maxVisible) {
-        for (let i = 1; i <= last_page; i++) {
-          pages.push({ number: i, url: getPageUrl(i) });
-        }
-      } else {
-        pages.push({ number: 1, url: first_page_url });
-
-        let start = Math.max(2, current_page - 1);
-        let end = Math.min(last_page - 1, current_page + 1);
-
-        if (current_page <= 3) {
-          end = 4;
-        }
-        if (current_page >= last_page - 2) {
-          start = last_page - 3;
-        }
-
-        if (start > 2) {
-          pages.push({ number: "...", url: null });
-        }
-
-        for (let i = start; i <= end; i++) {
-          pages.push({ number: i, url: getPageUrl(i) });
-        }
-
-        if (end < last_page - 1) {
-          pages.push({ number: "...", url: null });
-        }
-
-        if (last_page > 1) {
-          pages.push({ number: last_page, url: last_page_url });
-        }
-      }
-
-      return pages;
-    };
-
-    // Helper to get URL for a specific page number
-    const getPageUrl = (page) => {
-      if (page === 1) return first_page_url;
-      if (page === last_page) return last_page_url;
-      if (page === current_page + 1) return next_page_url;
-      if (page === current_page - 1) return prev_page_url;
-      
-      // Construct URL for other pages
-      const basePath = pagination.path || "/products";
-      return `${basePath}?page=${page}`;
-    };
-
-    const pageNumbers = getPageNumbers();
-
-    return (
-      <View
-        className={`px-4 pt-2 pb-5 border-t ${
-          isDarkMode
-            ? "bg-gray-900 border-gray-800"
-            : "bg-white border-gray-200"
-        }`}
-      >
-        {/* Info */}
-        <View className="flex-row justify-between items-center mb-3">
-          <Text
-            className={`text-xs ${
-              isDarkMode ? "text-gray-400" : "text-gray-500"
-            }`}
-          >
-            {pagination.from || 0}-{pagination.to || 0} of {total}
-          </Text>
-
-          <Text
-            className={`text-xs font-medium ${
-              isDarkMode ? "text-gray-300" : "text-gray-600"
-            }`}
-          >
-            {current_page} / {last_page}
-          </Text>
-        </View>
-
-        {/* Controls */}
-        <View className="flex-row items-center justify-center">
-          {/* Previous */}
-          <TouchableOpacity
-            disabled={!prev_page_url}
-            onPress={() => handlePageChange(prev_page_url)}
-            className={`w-11 h-11 rounded-full items-center justify-center ${
-              !prev_page_url
-                ? "opacity-40"
-                : isDarkMode
-                  ? "bg-gray-800"
-                  : "bg-gray-100"
-            }`}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={22}
-              color={isDarkMode ? "#fff" : "#374151"}
-            />
-          </TouchableOpacity>
-
-          {/* Pages */}
-          <View className="flex-row mx-3">
-            {pageNumbers.map((page, index) => {
-              if (page.number === "...") {
-                return (
-                  <View
-                    key={index}
-                    className="w-10 items-center justify-center"
-                  >
-                    <Text
-                      className={`${
-                        isDarkMode ? "text-gray-500" : "text-gray-400"
-                      }`}
-                    >
-                      •••
-                    </Text>
-                  </View>
-                );
-              }
-
-              return (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => handlePageChange(page.url)}
-                  className={`w-11 h-11 rounded-xl mx-1 items-center justify-center ${
-                    page.number === current_page
-                      ? "bg-blue-600"
-                      : isDarkMode
-                        ? "bg-gray-800"
-                        : "bg-gray-100"
-                  }`}
-                >
-                  <Text
-                    className={`font-semibold ${
-                      page.number === current_page
-                        ? "text-white"
-                        : isDarkMode
-                          ? "text-gray-300"
-                          : "text-gray-700"
-                    }`}
-                  >
-                    {page.number}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Next */}
-          <TouchableOpacity
-            disabled={!next_page_url}
-            onPress={() => handlePageChange(next_page_url)}
-            className={`w-11 h-11 rounded-full items-center justify-center ${
-              !next_page_url
-                ? "opacity-40"
-                : isDarkMode
-                  ? "bg-gray-800"
-                  : "bg-gray-100"
-            }`}
-          >
-            <Ionicons
-              name="chevron-forward"
-              size={22}
-              color={isDarkMode ? "#fff" : "#374151"}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
 
   // Updated Stats Section using StatsCard component
   const StatsSection = () => {
@@ -535,627 +356,6 @@ const ProductScreen = ({ navigation }) => {
       </View>
     );
   };
-
-  // Product Detail Modal
-  const ProductDetailModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={modalVisible}
-      onRequestClose={() => setModalVisible(false)}
-    >
-      <View className="flex-1 bg-black/50 justify-end">
-        <View
-          className={`rounded-t-3xl max-h-[80%] ${isDarkMode ? "bg-gray-800" : "bg-white"}`}
-        >
-          <View className="items-center pt-2">
-            <View
-              className={`w-12 h-1 rounded-full ${isDarkMode ? "bg-gray-600" : "bg-gray-300"}`}
-            />
-          </View>
-
-          <ScrollView className="p-6" showsVerticalScrollIndicator={false}>
-            {selectedProduct && (
-              <>
-                <View className="flex-row justify-between items-start mb-4">
-                  <Text
-                    className={`text-2xl font-bold flex-1 mr-2 ${isDarkMode ? "text-white" : "text-gray-900"}`}
-                  >
-                    {selectedProduct.name || "Unnamed Product"}
-                  </Text>
-                  <View
-                    className={`px-3 py-1 rounded-full ${selectedProduct.is_active ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"}`}
-                  >
-                    <Text
-                      className={`text-xs font-medium ${selectedProduct.is_active ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}
-                    >
-                      {selectedProduct.is_active ? "Active" : "Inactive"}
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                >
-                  <View className="flex-row justify-between mb-2">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      SKU
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      {selectedProduct.sku || "N/A"}
-                    </Text>
-                  </View>
-                  <View className="flex-row justify-between mb-2">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      Category
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      {selectedProduct.category?.name || "N/A"}
-                    </Text>
-                  </View>
-                  <View className="flex-row justify-between mb-2">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      Brand
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      {selectedProduct.brand?.name || "N/A"}
-                    </Text>
-                  </View>
-                  <View className="flex-row justify-between">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      Unit
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      {selectedProduct.unit?.name || "N/A"}
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                >
-                  <Text
-                    className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                  >
-                    Pricing
-                  </Text>
-                  <View className="flex-row justify-between mb-1.5">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      Selling Price
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      ₹{formatPrice(selectedProduct.selling_price)}
-                    </Text>
-                  </View>
-                  {selectedProduct.mrp && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        MRP
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        ₹{formatPrice(selectedProduct.mrp)}
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.purchase_price && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Purchase Price
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        ₹{formatPrice(selectedProduct.purchase_price)}
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.wholesale_price && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Wholesale Price
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        ₹{formatPrice(selectedProduct.wholesale_price)}
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.gst_percentage && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        GST %
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        {selectedProduct.gst_percentage}%
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.purchase_gst_percentage && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Purchase GST %
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        {selectedProduct.purchase_gst_percentage}%
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.discount_percentage && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Discount %
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        {selectedProduct.discount_percentage}%
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.gst_hsn_code && (
-                    <View className="flex-row justify-between">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        GST HSN Code
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        {selectedProduct.gst_hsn_code}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                <View
-                  className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                >
-                  <Text
-                    className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                  >
-                    Stock Information
-                  </Text>
-                  <View className="flex-row justify-between mb-1.5">
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      Total Stock
-                    </Text>
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                    >
-                      {getProductTotalStock(selectedProduct)}
-                    </Text>
-                  </View>
-                  {selectedProduct.minimum_stock_quantity && (
-                    <View className="flex-row justify-between mb-1.5">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Min Stock Level
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        {selectedProduct.minimum_stock_quantity}
-                      </Text>
-                    </View>
-                  )}
-                  {selectedProduct.maximum_stock_quantity && (
-                    <View className="flex-row justify-between">
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Max Stock Level
-                      </Text>
-                      <Text
-                        className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}
-                      >
-                        {selectedProduct.maximum_stock_quantity}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Variants */}
-                {selectedProduct.variants && Array.isArray(selectedProduct.variants) && selectedProduct.variants.length > 0 && (
-                  <View
-                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                  >
-                    <Text
-                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                    >
-                      Variants
-                    </Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {selectedProduct.variants.map((variant, idx) => (
-                        <View
-                          key={idx}
-                          className={`px-3 py-2 rounded-lg ${isDarkMode ? "bg-gray-600" : "bg-gray-100"}`}
-                        >
-                          {variant.size && (
-                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                              Size: {variant.size}
-                            </Text>
-                          )}
-                          {variant.color && (
-                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                              Color: {variant.color}
-                            </Text>
-                          )}
-                          {variant.material && (
-                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                              Material: {variant.material}
-                            </Text>
-                          )}
-                          {variant.gender && (
-                            <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                              Gender: {variant.gender}
-                            </Text>
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Attributes */}
-                {selectedProduct.attributes && (
-                  <View
-                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                  >
-                    <Text
-                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                    >
-                      Attributes
-                    </Text>
-                    {(() => {
-                      let attrs = selectedProduct.attributes;
-                      if (typeof attrs === 'string') {
-                        try {
-                          attrs = JSON.parse(attrs);
-                        } catch (e) {
-                          return (
-                            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-                              {attrs}
-                            </Text>
-                          );
-                        }
-                      }
-                      if (!attrs || typeof attrs !== 'object') return null;
-
-                      let values = [];
-                      if (Array.isArray(attrs)) {
-                        attrs.forEach((item) => {
-                          if (typeof item === 'object' && item !== null) {
-                            values.push(...Object.values(item));
-                          } else {
-                            values.push(item);
-                          }
-                        });
-                      } else {
-                        values = Object.entries(attrs).map(([key, val]) => `${key}: ${val}`);
-                      }
-
-                      return values.map((val, idx) => (
-                        <View key={idx} className={`px-2 py-1 rounded-md mb-1 ${isDarkMode ? "bg-gray-600" : "bg-gray-100"}`}>
-                          <Text className={`text-xs ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                            {val}
-                          </Text>
-                        </View>
-                      ));
-                    })()}
-                  </View>
-                )}
-
-                {/* Medicine-specific fields */}
-                {(selectedProduct.expiry_date || selectedProduct.batch_number || selectedProduct.manufacturer_name || selectedProduct.prescription_required || selectedProduct.schedule_type || selectedProduct.salt_composition) && (
-                  <View
-                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                  >
-                    <Text
-                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                    >
-                      Medicine Details
-                    </Text>
-                    {selectedProduct.expiry_date && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Expiry Date</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {new Date(selectedProduct.expiry_date).toLocaleDateString()}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.batch_number && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Batch Number</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.batch_number}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.manufacturer_name && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Manufacturer</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.manufacturer_name}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.prescription_required !== undefined && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Prescription Required</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.prescription_required ? "Yes" : "No"}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.schedule_type && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Schedule Type</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.schedule_type}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.salt_composition && (
-                      <View className="flex-row justify-between">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Salt Composition</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.salt_composition}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {/* Additional fields */}
-                {(selectedProduct.warehouse_location || selectedProduct.supplier_id || selectedProduct.warranty_months || selectedProduct.is_returnable !== undefined || selectedProduct.is_refundable !== undefined) && (
-                  <View
-                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                  >
-                    <Text
-                      className={`text-sm font-semibold mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                    >
-                      Additional Information
-                    </Text>
-                    {selectedProduct.warehouse_location && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Warehouse Location</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.warehouse_location}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.warranty_months && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Warranty</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.warranty_months} months
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.is_returnable !== undefined && (
-                      <View className="flex-row justify-between mb-1.5">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Returnable</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.is_returnable ? "Yes" : "No"}
-                        </Text>
-                      </View>
-                    )}
-                    {selectedProduct.is_refundable !== undefined && (
-                      <View className="flex-row justify-between">
-                        <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Refundable</Text>
-                        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-200" : "text-gray-800"}`}>
-                          {selectedProduct.is_refundable ? "Yes" : "No"}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {selectedProduct.description && (
-                  <View
-                    className={`rounded-xl p-4 mb-4 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"}`}
-                  >
-                    <Text
-                      className={`text-sm font-semibold mb-1 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-                    >
-                      Description
-                    </Text>
-                    <Text
-                      className={`text-sm leading-5 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-                    >
-                      {selectedProduct.description}
-                    </Text>
-                  </View>
-                )}
-
-                <View className="flex-row space-x-3 mt-2">
-                  <TouchableOpacity
-                    onPress={() => {
-                      setModalVisible(false);
-                      handleEditProduct(selectedProduct);
-                    }}
-                    className="flex-1 bg-blue-500 py-3 rounded-xl"
-                  >
-                    <Text className="text-white font-semibold text-center">
-                      Edit Product
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setModalVisible(false);
-                      handleDeleteProduct(selectedProduct.id);
-                    }}
-                    className="flex-1 bg-red-500 py-3 rounded-xl"
-                  >
-                    <Text className="text-white font-semibold text-center">
-                      Delete
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </ScrollView>
-
-          <TouchableOpacity
-            onPress={() => setModalVisible(false)}
-            className={`p-4 border-t ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
-          >
-            <Text
-              className={`text-center font-medium ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
-            >
-              Close
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Filter Modal
-  const FilterModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={filterModalVisible}
-      onRequestClose={() => setFilterModalVisible(false)}
-    >
-      <View className="flex-1 bg-black/50 justify-end">
-        <View
-          className={`rounded-t-3xl p-6 ${isDarkMode ? "bg-gray-800" : "bg-white"}`}
-        >
-          <View className="items-center mb-4">
-            <View
-              className={`w-12 h-1 rounded-full ${isDarkMode ? "bg-gray-600" : "bg-gray-300"}`}
-            />
-          </View>
-
-          <Text
-            className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-gray-900"}`}
-          >
-            Filter Products
-          </Text>
-
-          <View className="mb-6">
-            <Text
-              className={`text-sm font-medium mb-3 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
-            >
-              Status
-            </Text>
-            <View className="flex-row flex-wrap">
-              {["all", "active", "inactive"].map((status) => (
-                <TouchableOpacity
-                  key={status}
-                  onPress={() => setSelectedStatus(status)}
-                  className={`px-4 py-2 rounded-lg mr-2 mb-2 ${
-                    selectedStatus === status
-                      ? "bg-blue-500"
-                      : isDarkMode
-                        ? "bg-gray-700"
-                        : "bg-gray-100"
-                  }`}
-                >
-                  <Text
-                    className={`font-medium ${
-                      selectedStatus === status
-                        ? "text-white"
-                        : isDarkMode
-                          ? "text-gray-300"
-                          : "text-gray-600"
-                    }`}
-                  >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => {
-              setFilterModalVisible(false);
-              setSelectedStatus("all");
-              setFilters({});
-            }}
-            className={`py-3 rounded-xl mb-2 ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
-          >
-            <Text
-              className={`text-center font-medium ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
-            >
-              Reset Filters
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setFilterModalVisible(false)}
-            className="bg-blue-500 py-3 rounded-xl"
-          >
-            <Text className="text-center text-white font-semibold">
-              Apply Filters
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Show loading state
-  if (initialLoading || (loading && products.length === 0)) {
-    return (
-      <View
-        className={`flex-1 items-center justify-center ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
-      >
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text
-          className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-        >
-          Loading products...
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
@@ -1329,7 +529,7 @@ const ProductScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Product List with RefreshControl */}
+      {/* Product List with RefreshControl and Infinite Scroll */}
       <ScrollView
         className="flex-1 px-4"
         refreshControl={
@@ -1340,6 +540,8 @@ const ProductScreen = ({ navigation }) => {
             tintColor={isDarkMode ? "#F9FAFB" : "#3B82F6"}
           />
         }
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
       >
         <ProductList
           viewMode={viewMode}
@@ -1351,17 +553,34 @@ const ProductScreen = ({ navigation }) => {
           onEdit={handleEditProduct}
           onDelete={handleDeleteProduct}
           onStockUpdate={handleStockUpdate}
-          isPaginating={loading && products.length > 0}
           navigation={navigation}
         />
+
+
+        {/* End of list indicator */}
+        {currentPage >= lastPage && products.length > 0 && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              Showing all {products.length} products
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Pagination - Fixed at bottom */}
-      <Pagination />
-
       {/* Modals */}
-      <ProductDetailModal />
-      <FilterModal />
+      <FilterModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
+        selectedStatus={selectedStatus}
+        setSelectedStatus={setSelectedStatus}
+        isDarkMode={isDarkMode}
+        onApply={() => setFilterModalVisible(false)}
+        onReset={() => {
+          setSelectedStatus("all");
+          setFilters({});
+          setFilterModalVisible(false);
+        }}
+      />
 
       {/* Custom Modals for Feedback */}
       <SuccessModal
@@ -1395,5 +614,96 @@ const ProductScreen = ({ navigation }) => {
     </View>
   );
 };
+
+// Filter Modal Component - Extracted for cleaner code
+const FilterModal = ({
+  visible,
+  onClose,
+  selectedStatus,
+  setSelectedStatus,
+  isDarkMode,
+  onApply,
+  onReset,
+}) => (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View className="flex-1 bg-black/50 justify-end">
+      <View
+        className={`rounded-t-3xl p-6 ${isDarkMode ? "bg-gray-800" : "bg-white"}`}
+      >
+        <View className="items-center mb-4">
+          <View
+            className={`w-12 h-1 rounded-full ${isDarkMode ? "bg-gray-600" : "bg-gray-300"}`}
+          />
+        </View>
+
+        <Text
+          className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-gray-900"}`}
+        >
+          Filter Products
+        </Text>
+
+        <View className="mb-6">
+          <Text
+            className={`text-sm font-medium mb-3 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+          >
+            Status
+          </Text>
+          <View className="flex-row flex-wrap">
+            {["all", "active", "inactive"].map((status) => (
+              <TouchableOpacity
+                key={status}
+                onPress={() => setSelectedStatus(status)}
+                className={`px-4 py-2 rounded-lg mr-2 mb-2 ${
+                  selectedStatus === status
+                    ? "bg-blue-500"
+                    : isDarkMode
+                      ? "bg-gray-700"
+                      : "bg-gray-100"
+                }`}
+              >
+                <Text
+                  className={`font-medium ${
+                    selectedStatus === status
+                      ? "text-white"
+                      : isDarkMode
+                        ? "text-gray-300"
+                        : "text-gray-600"
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={onReset}
+          className={`py-3 rounded-xl mb-2 ${isDarkMode ? "bg-gray-700" : "bg-gray-100"}`}
+        >
+          <Text
+            className={`text-center font-medium ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+          >
+            Reset Filters
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={onApply}
+          className="bg-blue-500 py-3 rounded-xl"
+        >
+          <Text className="text-center text-white font-semibold">
+            Apply Filters
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default ProductScreen;

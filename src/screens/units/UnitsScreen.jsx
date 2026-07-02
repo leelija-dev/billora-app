@@ -22,6 +22,7 @@ import { useAuthStore } from "../../store/authStore";
 import useUnitStore from "../../store/unitStore";
 import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
+import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const UnitsScreen = () => {
   const navigation = useNavigation();
@@ -119,9 +120,24 @@ const UnitsScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchUnits();
+    await fetchUnits(1);
     setRefreshing(false);
   };
+
+  // Load more units for infinite scroll
+  const loadMoreUnits = useCallback(async () => {
+    if (currentPage < lastPage && !loading) {
+      const nextPage = currentPage + 1;
+      await fetchUnits(nextPage, true);
+    }
+  }, [currentPage, lastPage, loading, fetchUnits]);
+
+  // Infinite scroll hook
+  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreUnits, {
+    threshold: 500,
+    hasMore: currentPage < lastPage,
+    loading: loading,
+  });
 
   const handleAddUnit = () => {
     setSelectedUnit(null);
@@ -269,6 +285,8 @@ const UnitsScreen = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
       >
         {/* Stats Cards */}
         <View className="flex-row flex-wrap px-4 py-3">
@@ -331,26 +349,22 @@ const UnitsScreen = () => {
           onDelete={handleDeleteUnit}
         />
 
-        {/* Pagination */}
-        {lastPage > 1 && (
-          <View className="flex-row items-center justify-center py-4 space-x-2">
-            <TouchableOpacity
-              onPress={() => setPage(currentPage - 1)}
-              disabled={currentPage === 1}
-              className={`p-2 rounded-lg border ${currentPage === 1 ? "border-gray-200 dark:border-gray-700 opacity-40" : "border-gray-300 dark:border-gray-600"}`}
-            >
-              <Icon name="chevron-left" size={18} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
-            </TouchableOpacity>
-            <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-              Page {currentPage} of {lastPage}
+        {/* Loading indicator for infinite scroll */}
+        {isFetchingMore && currentPage < lastPage && (
+          <View className="py-4 items-center">
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              Loading more units...
             </Text>
-            <TouchableOpacity
-              onPress={() => setPage(currentPage + 1)}
-              disabled={currentPage === lastPage}
-              className={`p-2 rounded-lg border ${currentPage === lastPage ? "border-gray-200 dark:border-gray-700 opacity-40" : "border-gray-300 dark:border-gray-600"}`}
-            >
-              <Icon name="chevron-right" size={18} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
-            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* End of list indicator */}
+        {currentPage >= lastPage && units.length > 0 && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              Showing all {units.length} units
+            </Text>
           </View>
         )}
       </ScrollView>

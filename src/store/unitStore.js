@@ -17,9 +17,9 @@ const useUnitStore = create((set, get) => ({
   },
 
   // Fetch units with pagination
-  fetchUnits: async (page = 1) => {
-    const { filters, perPage } = get();
-    console.log('🔄 fetchUnits called with page:', page, 'filters:', filters);
+  fetchUnits: async (page = 1, append = false) => {
+    const { filters, perPage, units: existingUnits } = get();
+    console.log('🔄 fetchUnits called with page:', page, 'append:', append, 'filters:', filters);
     set({ loading: true, error: null });
 
     try {
@@ -75,8 +75,13 @@ const useUnitStore = create((set, get) => ({
         }
       });
 
+      // If append is true and page > 1, append to existing units
+      const finalUnits = append && page > 1 
+        ? [...existingUnits, ...sortedUnits]
+        : sortedUnits;
+
       set({
-        units: sortedUnits,
+        units: finalUnits,
         totalUnits: total,
         currentPage: currentPageNum,
         lastPage: lastPageNum,
