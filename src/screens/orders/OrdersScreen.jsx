@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
@@ -10,6 +9,7 @@ import {
   Modal,
   StatusBar,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -48,8 +48,14 @@ const OrdersScreen = ({ navigation }) => {
     orders,
     stats,
     loading,
+    loadingMore,
+    hasMore,
+    currentPage,
+    lastPage,
+    totalOrders,
     filters,
     fetchOrders,
+    loadMoreOrders,
     setFilters,
     clearFilters,
     setCurrentUserId,
@@ -76,6 +82,10 @@ const OrdersScreen = ({ navigation }) => {
   const [viewMode, setViewMode] = useState('list');
   const [showStats, setShowStats] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
+  
+  const scrollViewRef = useRef(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
 
   // Set current user ID in store
   useEffect(() => {
@@ -88,7 +98,8 @@ const OrdersScreen = ({ navigation }) => {
     useCallback(() => {
       setInitialLoading(true);
       if (user?.id) {
-        fetchOrders(1, user.id).finally(() => {
+        console.log('📱 Screen focused - fetching initial orders');
+        fetchOrders(1, user.id, false).finally(() => {
           setInitialLoading(false);
         });
       }
@@ -98,21 +109,112 @@ const OrdersScreen = ({ navigation }) => {
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
-      if (user?.id) {
+      if (user?.id && searchTerm !== filters.search) {
+        console.log('🔍 Searching for:', searchTerm);
         setFilters({ search: searchTerm }, user.id);
       }
     }, 500);
     return () => clearTimeout(debounceTimer);
   }, [searchTerm, setFilters, user?.id]);
 
+  // Reset trigger flag when new data is loaded or when conditions change
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
+    }
+  }, [isLoadingMore, loadingMore]);
+
+  // Filter orders
+  const getFilteredOrders = useCallback(() => {
+    let filtered = [...orders];
+
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(order =>
+        (order.order_id && order.order_id.toString().toLowerCase().includes(searchLower)) ||
+        (order.customer_name && order.customer_name.toLowerCase().includes(searchLower)) ||
+        (order.customer_phone && order.customer_phone.toLowerCase().includes(searchLower)) ||
+        (order.customer_email && order.customer_email.toLowerCase().includes(searchLower))
+      );
+    }
+
+    if (filters.status) {
+      filtered = filtered.filter(order => order.order_status === filters.status);
+    }
+
+    if (filters.paymentStatus) {
+      filtered = filtered.filter(order => order.payment_status === filters.paymentStatus);
+    }
+
+    return filtered;
+  }, [orders, filters]);
+
+  const filteredOrders = getFilteredOrders();
+
   // Handlers
   const handleRefresh = async () => {
     setRefreshing(true);
     if (user?.id) {
-      await fetchOrders(1, user.id);
+      console.log('🔄 Refreshing orders');
+      await fetchOrders(1, user.id, false);
     }
     setRefreshing(false);
   };
+
+  const handleLoadMore = useCallback(async () => {
+    // Check conditions properly
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
+    }
+    
+    if (!hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
+    
+    if (!user?.id) {
+      console.log('⏭️ Skipping - no user');
+      return;
+    }
+
+    if (currentPage >= lastPage) {
+      console.log('⏭️ Skipping - reached last page');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreOrders - currentPage: ${currentPage}, lastPage: ${lastPage}`);
+    setIsLoadingMore(true);
+    await loadMoreOrders(user.id);
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, hasMore, user?.id, currentPage, lastPage, loadMoreOrders]);
+
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Only log when percentage changes significantly
+    if (Math.floor(scrollPercentage) % 10 === 0) {
+      console.log(`📊 Scroll percentage: ${Math.floor(scrollPercentage)}%`);
+    }
+    
+    // Check if user has scrolled 50% of the screen height
+    const triggerThreshold = 50; // 50% scroll
+    const shouldLoadMore = scrollPercentage >= triggerThreshold;
+    
+    if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
+      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
 
   const handleClearFilters = () => {
     setSearchTerm('');
@@ -120,7 +222,7 @@ const OrdersScreen = ({ navigation }) => {
     setEndDate(null);
     clearFilters();
     if (user?.id) {
-      fetchOrders(1, user.id);
+      fetchOrders(1, user.id, false);
     }
   };
 
@@ -173,7 +275,7 @@ const OrdersScreen = ({ navigation }) => {
       setSelectedOrderForStatus(null);
       
       if (user?.id) {
-        await fetchOrders(1, user.id);
+        await fetchOrders(1, user.id, false);
       }
       
       Toast.show({
@@ -254,31 +356,6 @@ const OrdersScreen = ({ navigation }) => {
     setShowStats(!showStats);
   };
 
-  // Memoized filtered orders
-  const filteredOrders = useMemo(() => {
-    let filtered = [...orders];
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(order =>
-        (order.order_id && order.order_id.toString().toLowerCase().includes(searchLower)) ||
-        (order.customer_name && order.customer_name.toLowerCase().includes(searchLower)) ||
-        (order.customer_phone && order.customer_phone.toLowerCase().includes(searchLower)) ||
-        (order.customer_email && order.customer_email.toLowerCase().includes(searchLower))
-      );
-    }
-
-    if (filters.status) {
-      filtered = filtered.filter(order => order.order_status === filters.status);
-    }
-
-    if (filters.paymentStatus) {
-      filtered = filtered.filter(order => order.payment_status === filters.paymentStatus);
-    }
-
-    return filtered;
-  }, [orders, filters]);
-
   // Helper functions
   const getStatusColor = useCallback((status, isDark) => {
     const colors = {
@@ -322,7 +399,7 @@ const OrdersScreen = ({ navigation }) => {
       {
         id: 1,
         title: "Total Orders",
-        value: stats.total || 0,
+        value: totalOrders || stats.total || 0,
         icon: "cart",
         color: "#4F46E5",
         trend: 12,
@@ -399,15 +476,14 @@ const OrdersScreen = ({ navigation }) => {
         </View>
       </View>
     );
-  }, [stats, showStats, isDarkMode]);
+  }, [stats, showStats, isDarkMode, totalOrders]);
 
-  // Order Card Component with Price Breakdown
-  const OrderCard = useCallback(({ order, onView }) => {
+  // Order Card Component
+  const OrderCard = useCallback(({ order }) => {
     const remainingDue = parseFloat(order.total_amount || 0) - parseFloat(order.paid_amount || 0);
     const orderColor = getStatusColor(order.order_status, isDarkMode);
     const paymentColor = getStatusColor(order.payment_status, isDarkMode);
     
-    // Calculate price breakdown
     const subtotal = parseFloat(order.subtotal || order.total_amount || 0);
     const discount = parseFloat(order.discount_amount || order.discount || 0);
     const tax = parseFloat(order.tax_amount || order.tax || 0);
@@ -416,7 +492,8 @@ const OrdersScreen = ({ navigation }) => {
     
     return (
       <TouchableOpacity
-        onPress={() => onView(order)}
+        key={order.id || order.order_id}
+        onPress={() => handleViewOrder(order)}
         className={`rounded-2xl p-4 mb-3 border ${
           isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
         }`}
@@ -573,15 +650,16 @@ const OrdersScreen = ({ navigation }) => {
     );
   }, [isDarkMode, getStatusColor, getStatusLabel, getStatusIcon, formatDate]);
 
-  // Grid Order Card Component (simplified for grid view)
-  const GridOrderCard = useCallback(({ order, onView }) => {
+  // Grid Order Card Component
+  const GridOrderCard = useCallback(({ order }) => {
     const remainingDue = parseFloat(order.total_amount || 0) - parseFloat(order.paid_amount || 0);
     const orderColor = getStatusColor(order.order_status, isDarkMode);
     const total = parseFloat(order.total_amount || 0);
     
     return (
       <TouchableOpacity
-        onPress={() => onView(order)}
+        key={order.id || order.order_id}
+        onPress={() => handleViewOrder(order)}
         className={`rounded-2xl p-4 mb-3 border ${
           isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
         }`}
@@ -655,6 +733,45 @@ const OrdersScreen = ({ navigation }) => {
     );
   }, [isDarkMode, getStatusColor, getStatusLabel, getStatusIcon]);
 
+  // Render orders
+  const renderOrders = useCallback(() => {
+    if (filteredOrders.length === 0) {
+      return (
+        <View className="py-20 items-center">
+          <Icon name="cart" size={80} color={isDarkMode ? '#334155' : '#D1D5DB'} />
+          <Text className={`text-lg mt-4 text-center ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            No orders found
+          </Text>
+          <Text className={`text-sm mt-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {searchTerm || filters.status || filters.paymentStatus
+              ? 'Try adjusting your filters'
+              : 'Orders will appear here'}
+          </Text>
+        </View>
+      );
+    }
+
+    if (viewMode === 'list') {
+      return filteredOrders.map((order) => (
+        <OrderCard key={order.id || order.order_id} order={order} />
+      ));
+    } else {
+      // Grid view - render in rows of 2
+      const rows = [];
+      for (let i = 0; i < filteredOrders.length; i += 2) {
+        rows.push(filteredOrders.slice(i, i + 2));
+      }
+      
+      return rows.map((row, index) => (
+        <View key={`row-${index}`} className="flex-row justify-between">
+          {row.map((order) => (
+            <GridOrderCard key={order.id || order.order_id} order={order} />
+          ))}
+        </View>
+      ));
+    }
+  }, [filteredOrders, viewMode, isDarkMode, searchTerm, filters, OrderCard, GridOrderCard]);
+
   // Loading state
   if (initialLoading) {
     return (
@@ -708,7 +825,7 @@ const OrdersScreen = ({ navigation }) => {
             {/* View Mode Toggle */}
             <TouchableOpacity
               onPress={toggleViewMode}
-              className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${
+              className={`w-10 h-10 rounded-full items-center justify-center ${
                 isDarkMode ? "bg-gray-800" : "bg-gray-100"
               }`}
             >
@@ -722,227 +839,8 @@ const OrdersScreen = ({ navigation }) => {
         }
       />
 
-      {/* Stats Toggle Button */}
-      <TouchableOpacity
-        onPress={toggleStats}
-        className={`px-4 py-3 flex-row items-center justify-between ${
-          isDarkMode ? "bg-gray-800" : "bg-white"
-        } border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
-      >
-        <View className="flex-row items-center">
-          <Icon
-            name="chart-bar"
-            size={20}
-            color={isDarkMode ? "#9CA3AF" : "#6B7280"}
-          />
-          <Text
-            className={`text-sm font-medium ml-2 ${
-              isDarkMode ? "text-gray-300" : "text-gray-600"
-            }`}
-          >
-            {showStats ? "Hide Statistics" : "Show Statistics"}
-          </Text>
-        </View>
-        <Icon
-          name={showStats ? "chevron-up" : "chevron-down"}
-          size={22}
-          color={isDarkMode ? "#9CA3AF" : "#6B7280"}
-        />
-      </TouchableOpacity>
-
-      {/* Stats Section */}
-      <StatsSection />
-
-      {/* Search Bar */}
-      <View className={`px-4 py-3 border-b ${
-        isDarkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"
-      }`}>
-        <View className="flex-row items-center">
-          <View
-            className={`flex-1 flex-row items-center h-12 rounded-2xl px-4 mr-3 border ${
-              isDarkMode
-                ? "bg-gray-800 border-gray-700"
-                : "bg-gray-50 border-gray-200"
-            }`}
-          >
-            <Icon name="magnify" size={20} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
-
-            <TextInput
-              className={`flex-1 ml-3 text-[15px] ${
-                isDarkMode ? "text-white" : "text-gray-800"
-              }`}
-              placeholder="Search orders..."
-              placeholderTextColor={isDarkMode ? "#6B7280" : "#9CA3AF"}
-              value={searchTerm}
-              onChangeText={setSearchTerm}
-              selectionColor="#3B82F6"
-            />
-
-            {searchTerm.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchTerm("")}>
-                <Icon
-                  name="close-circle"
-                  size={18}
-                  color={isDarkMode ? "#6B7280" : "#9CA3AF"}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <TouchableOpacity
-            onPress={() => setShowFilters(!showFilters)}
-            className={`w-12 h-12 rounded-2xl items-center justify-center ${
-              isDarkMode
-                ? "bg-gray-800 border border-gray-700"
-                : "bg-gray-50 border border-gray-200"
-            }`}
-          >
-            <Icon
-              name="filter-variant"
-              size={22}
-              color={(filters.status || filters.paymentStatus) ? "#3B82F6" : (isDarkMode ? "#F9FAFB" : "#374151")}
-            />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Filters */}
-      {showFilters && (
-        <View className={`px-4 py-3 border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
-          <View className="flex-row flex-wrap gap-2">
-            <TouchableOpacity
-              onPress={() => setFilters({ status: '' }, user.id)}
-              className={`px-3 py-1.5 rounded-full ${
-                !filters.status 
-                  ? 'bg-blue-500' 
-                  : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-              }`}
-              activeOpacity={0.7}
-            >
-              <Text className={`text-xs ${
-                !filters.status 
-                  ? 'text-white' 
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                All Status
-              </Text>
-            </TouchableOpacity>
-            {ORDER_STATUSES.map((status) => (
-              <TouchableOpacity
-                key={status.value}
-                onPress={() => setFilters({ status: status.value }, user.id)}
-                className={`px-3 py-1.5 rounded-full ${
-                  filters.status === status.value 
-                    ? 'bg-blue-500' 
-                    : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                }`}
-                activeOpacity={0.7}
-              >
-                <Text className={`text-xs ${
-                  filters.status === status.value 
-                    ? 'text-white' 
-                    : isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}>
-                  {status.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View className="flex-row flex-wrap gap-2 mt-2">
-            <TouchableOpacity
-              onPress={() => setFilters({ paymentStatus: '' }, user.id)}
-              className={`px-3 py-1.5 rounded-full ${
-                !filters.paymentStatus 
-                  ? 'bg-blue-500' 
-                  : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-              }`}
-              activeOpacity={0.7}
-            >
-              <Text className={`text-xs ${
-                !filters.paymentStatus 
-                  ? 'text-white' 
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                All Payment
-              </Text>
-            </TouchableOpacity>
-            {PAYMENT_STATUSES.map((status) => (
-              <TouchableOpacity
-                key={status.value}
-                onPress={() => setFilters({ paymentStatus: status.value }, user.id)}
-                className={`px-3 py-1.5 rounded-full ${
-                  filters.paymentStatus === status.value 
-                    ? 'bg-blue-500' 
-                    : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                }`}
-                activeOpacity={0.7}
-              >
-                <Text className={`text-xs ${
-                  filters.paymentStatus === status.value 
-                    ? 'text-white' 
-                    : isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}>
-                  {status.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View className="flex-row gap-2 mt-3">
-            <TouchableOpacity
-              onPress={() => setShowStartDatePicker(true)}
-              className={`flex-1 px-3 py-2 rounded-lg border ${
-                isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
-              }`}
-              activeOpacity={0.7}
-            >
-              <Text className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                {startDate ? startDate.toLocaleDateString() : 'Start Date'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowEndDatePicker(true)}
-              className={`flex-1 px-3 py-2 rounded-lg border ${
-                isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
-              }`}
-              activeOpacity={0.7}
-            >
-              <Text className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                {endDate ? endDate.toLocaleDateString() : 'End Date'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {(filters.status || filters.paymentStatus || filters.dateFrom || filters.dateTo) && (
-            <TouchableOpacity onPress={handleClearFilters} className="mt-3" activeOpacity={0.7}>
-              <Text className="text-sm text-blue-600 dark:text-blue-400">Clear Filters</Text>
-            </TouchableOpacity>
-          )}
-
-          {showStartDatePicker && (
-            <DateTimePicker
-              value={startDate || new Date()}
-              mode="date"
-              display="default"
-              onChange={handleStartDateChange}
-            />
-          )}
-
-          {showEndDatePicker && (
-            <DateTimePicker
-              value={endDate || new Date()}
-              mode="date"
-              display="default"
-              onChange={handleEndDateChange}
-            />
-          )}
-        </View>
-      )}
-
-      {/* Orders List */}
       <ScrollView
-        className="flex-1 px-4"
+        ref={scrollViewRef}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -952,57 +850,278 @@ const OrdersScreen = ({ navigation }) => {
           />
         }
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingBottom: 20,
+          flexGrow: 1,
+        }}
       >
-        {loading ? (
-          <View className="py-12 items-center">
-            <ActivityIndicator size="large" color="#3B82F6" />
-            <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              Loading orders...
+        {/* Stats Toggle Button */}
+        <TouchableOpacity
+          onPress={toggleStats}
+          className={`px-4 py-3 flex-row items-center justify-between ${
+            isDarkMode ? "bg-gray-800" : "bg-white"
+          } border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
+        >
+          <View className="flex-row items-center">
+            <Icon
+              name="chart-bar"
+              size={20}
+              color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+            />
+            <Text
+              className={`text-sm font-medium ml-2 ${
+                isDarkMode ? "text-gray-300" : "text-gray-600"
+              }`}
+            >
+              {showStats ? "Hide Statistics" : "Show Statistics"}
             </Text>
           </View>
-        ) : filteredOrders.length > 0 ? (
-          <>
-            {viewMode === 'list' ? (
-              filteredOrders.map((order) => (
-                <OrderCard
-                  key={order.id}
-                  order={order}
-                  onView={handleViewOrder}
-                />
-              ))
-            ) : (
-              <View className="flex-row flex-wrap justify-between">
-                {filteredOrders.map((order) => (
-                  <GridOrderCard
-                    key={order.id}
-                    order={order}
-                    onView={handleViewOrder}
+          <Icon
+            name={showStats ? "chevron-up" : "chevron-down"}
+            size={22}
+            color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+          />
+        </TouchableOpacity>
+
+        {/* Stats Section */}
+        <StatsSection />
+
+        {/* Search Bar */}
+        <View className={`px-4 py-3 border-b ${
+          isDarkMode ? "bg-gray-900 border-gray-800" : "bg-white border-gray-100"
+        }`}>
+          <View className="flex-row items-center">
+            <View
+              className={`flex-1 flex-row items-center h-12 rounded-2xl px-4 mr-3 border ${
+                isDarkMode
+                  ? "bg-gray-800 border-gray-700"
+                  : "bg-gray-50 border-gray-200"
+              }`}
+            >
+              <Icon name="magnify" size={20} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
+
+              <TextInput
+                className={`flex-1 ml-3 text-[15px] ${
+                  isDarkMode ? "text-white" : "text-gray-800"
+                }`}
+                placeholder="Search orders..."
+                placeholderTextColor={isDarkMode ? "#6B7280" : "#9CA3AF"}
+                value={searchTerm}
+                onChangeText={setSearchTerm}
+                selectionColor="#3B82F6"
+              />
+
+              {searchTerm.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchTerm("")}>
+                  <Icon
+                    name="close-circle"
+                    size={18}
+                    color={isDarkMode ? "#6B7280" : "#9CA3AF"}
                   />
-                ))}
-              </View>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setShowFilters(!showFilters)}
+              className={`w-12 h-12 rounded-2xl items-center justify-center ${
+                isDarkMode
+                  ? "bg-gray-800 border border-gray-700"
+                  : "bg-gray-50 border border-gray-200"
+              }`}
+            >
+              <Icon
+                name="filter-variant"
+                size={22}
+                color={(filters.status || filters.paymentStatus) ? "#3B82F6" : (isDarkMode ? "#F9FAFB" : "#374151")}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Filters */}
+        {showFilters && (
+          <View className={`px-4 py-3 border-b ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+            <View className="flex-row flex-wrap gap-2">
+              <TouchableOpacity
+                onPress={() => setFilters({ status: '' }, user.id)}
+                className={`px-3 py-1.5 rounded-full ${
+                  !filters.status 
+                    ? 'bg-blue-500' 
+                    : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                }`}
+                activeOpacity={0.7}
+              >
+                <Text className={`text-xs ${
+                  !filters.status 
+                    ? 'text-white' 
+                    : isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  All Status
+                </Text>
+              </TouchableOpacity>
+              {ORDER_STATUSES.map((status) => (
+                <TouchableOpacity
+                  key={status.value}
+                  onPress={() => setFilters({ status: status.value }, user.id)}
+                  className={`px-3 py-1.5 rounded-full ${
+                    filters.status === status.value 
+                      ? 'bg-blue-500' 
+                      : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                  }`}
+                  activeOpacity={0.7}
+                >
+                  <Text className={`text-xs ${
+                    filters.status === status.value 
+                      ? 'text-white' 
+                      : isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    {status.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View className="flex-row flex-wrap gap-2 mt-2">
+              <TouchableOpacity
+                onPress={() => setFilters({ paymentStatus: '' }, user.id)}
+                className={`px-3 py-1.5 rounded-full ${
+                  !filters.paymentStatus 
+                    ? 'bg-blue-500' 
+                    : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                }`}
+                activeOpacity={0.7}
+              >
+                <Text className={`text-xs ${
+                  !filters.paymentStatus 
+                    ? 'text-white' 
+                    : isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  All Payment
+                </Text>
+              </TouchableOpacity>
+              {PAYMENT_STATUSES.map((status) => (
+                <TouchableOpacity
+                  key={status.value}
+                  onPress={() => setFilters({ paymentStatus: status.value }, user.id)}
+                  className={`px-3 py-1.5 rounded-full ${
+                    filters.paymentStatus === status.value 
+                      ? 'bg-blue-500' 
+                      : isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                  }`}
+                  activeOpacity={0.7}
+                >
+                  <Text className={`text-xs ${
+                    filters.paymentStatus === status.value 
+                      ? 'text-white' 
+                      : isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    {status.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View className="flex-row gap-2 mt-3">
+              <TouchableOpacity
+                onPress={() => setShowStartDatePicker(true)}
+                className={`flex-1 px-3 py-2 rounded-lg border ${
+                  isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
+                }`}
+                activeOpacity={0.7}
+              >
+                <Text className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {startDate ? startDate.toLocaleDateString() : 'Start Date'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowEndDatePicker(true)}
+                className={`flex-1 px-3 py-2 rounded-lg border ${
+                  isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
+                }`}
+                activeOpacity={0.7}
+              >
+                <Text className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {endDate ? endDate.toLocaleDateString() : 'End Date'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {(filters.status || filters.paymentStatus || filters.dateFrom || filters.dateTo) && (
+              <TouchableOpacity onPress={handleClearFilters} className="mt-3" activeOpacity={0.7}>
+                <Text className="text-sm text-blue-600 dark:text-blue-400">Clear Filters</Text>
+              </TouchableOpacity>
             )}
-            <View className="py-4 items-center">
-              <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Showing {filteredOrders.length} orders
+
+            {showStartDatePicker && (
+              <DateTimePicker
+                value={startDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={handleStartDateChange}
+              />
+            )}
+
+            {showEndDatePicker && (
+              <DateTimePicker
+                value={endDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={handleEndDateChange}
+              />
+            )}
+          </View>
+        )}
+
+        {/* View Mode and Page Indicator */}
+        <View className={`px-4 py-2 flex-row justify-between items-center border-b ${
+          isDarkMode ? 'border-gray-800' : 'border-gray-100'
+        }`}>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {totalOrders > 0 ? `Showing ${filteredOrders.length} of ${totalOrders} orders` : `${filteredOrders.length} orders`}
+          </Text>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Page {currentPage}/{lastPage}
+          </Text>
+        </View>
+
+        {/* Orders */}
+        <View className="px-4">
+          {loading && filteredOrders.length === 0 ? (
+            <View className="py-12 items-center">
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                Loading orders...
               </Text>
             </View>
-          </>
-        ) : (
-          <View className="py-20 items-center">
-            <Icon name="cart" size={80} color={isDarkMode ? '#334155' : '#D1D5DB'} />
-            <Text className={`text-lg mt-4 text-center ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-              No orders found
+          ) : (
+            renderOrders()
+          )}
+        </View>
+
+        {/* Loading More Indicator */}
+        {(isLoadingMore || loadingMore) && (
+          <View className="py-6 items-center">
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading more orders...
             </Text>
-            <Text className={`text-sm mt-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              {searchTerm || filters.status || filters.paymentStatus
-                ? 'Try adjusting your filters'
-                : 'Orders will appear here'}
+          </View>
+        )}
+
+        {/* No More Orders */}
+        {!hasMore && filteredOrders.length > 0 && filteredOrders.length === totalOrders && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              No more orders to load
             </Text>
           </View>
         )}
       </ScrollView>
 
-      {/* Print Options Modal */}
+        {/* Print Options Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -1013,58 +1132,70 @@ const OrdersScreen = ({ navigation }) => {
         }}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View 
+          <View
             className={`rounded-t-3xl p-6 ${
-              isDarkMode ? 'bg-gray-800' : 'bg-white'
+              isDarkMode ? "bg-gray-800" : "bg-white"
             }`}
           >
             <View className="items-center mb-4">
-              <View 
+              <View
                 className={`w-12 h-1 rounded-full ${
-                  isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+                  isDarkMode ? "bg-gray-600" : "bg-gray-300"
                 }`}
               />
             </View>
 
-            <Text className={`text-xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <Text
+              className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-gray-900"}`}
+            >
               Print Options
             </Text>
-            <Text className={`text-sm mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            <Text
+              className={`text-sm mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+            >
               Order #{selectedOrderForPrint?.order_id}
             </Text>
 
             <View className="space-y-3">
               <TouchableOpacity
-                onPress={() => handlePrintInvoice('a4')}
+                onPress={() => handlePrintInvoice("a4")}
                 className={`py-3 px-4 rounded-xl flex-row items-center ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                  isDarkMode ? "bg-gray-700" : "bg-gray-100"
                 }`}
                 activeOpacity={0.7}
               >
                 <Icon name="file-document" size={24} color="#3B82F6" />
                 <View className="ml-3">
-                  <Text className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  <Text
+                    className={`font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
                     Print A4 Invoice
                   </Text>
-                  <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     Standard A4 paper format
                   </Text>
                 </View>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => handlePrintInvoice('thermal')}
+                onPress={() => handlePrintInvoice("thermal")}
                 className={`py-3 px-4 rounded-xl flex-row items-center ${
-                  isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
+                  isDarkMode ? "bg-gray-700" : "bg-gray-100"
                 }`}
                 activeOpacity={0.7}
               >
                 <Icon name="printer" size={24} color="#10B981" />
                 <View className="ml-3">
-                  <Text className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  <Text
+                    className={`font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
                     Print Thermal Receipt
                   </Text>
-                  <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Text
+                    className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
                     80mm thermal printer format
                   </Text>
                 </View>
@@ -1076,11 +1207,13 @@ const OrdersScreen = ({ navigation }) => {
                   setSelectedOrderForPrint(null);
                 }}
                 className={`mt-2 py-3 px-4 rounded-xl border ${
-                  isDarkMode ? 'border-gray-600' : 'border-gray-200'
+                  isDarkMode ? "border-gray-600" : "border-gray-200"
                 }`}
                 activeOpacity={0.7}
               >
-                <Text className={`text-center font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <Text
+                  className={`text-center font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                >
                   Cancel
                 </Text>
               </TouchableOpacity>
@@ -1100,61 +1233,83 @@ const OrdersScreen = ({ navigation }) => {
         }}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View 
+          <View
             className={`rounded-t-3xl p-6 ${
-              isDarkMode ? 'bg-gray-800' : 'bg-white'
+              isDarkMode ? "bg-gray-800" : "bg-white"
             }`}
           >
             <View className="items-center mb-4">
-              <View 
+              <View
                 className={`w-12 h-1 rounded-full ${
-                  isDarkMode ? 'bg-gray-600' : 'bg-gray-300'
+                  isDarkMode ? "bg-gray-600" : "bg-gray-300"
                 }`}
               />
             </View>
 
-            <Text className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <Text
+              className={`text-xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-gray-900"}`}
+            >
               Update Status
             </Text>
-            <Text className={`text-sm mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            <Text
+              className={`text-sm mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+            >
               Order #{selectedOrderForStatus?.order_id}
             </Text>
 
             <View className="space-y-4">
               <View>
-                <Text className={`text-sm font-semibold mb-3 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                <Text
+                  className={`text-sm font-semibold mb-3 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+                >
                   Order Status
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {ORDER_STATUSES.map((option) => {
                     const isSelected = editOrderStatus === option.value;
                     const color = getStatusColor(option.value, isDarkMode);
-                    
+
                     return (
                       <TouchableOpacity
                         key={option.value}
                         onPress={() => setEditOrderStatus(option.value)}
                         className={`px-4 py-2 rounded-xl flex-row items-center border-2 ${
-                          isSelected 
-                            ? 'border-blue-500' 
-                            : isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                          isSelected
+                            ? "border-blue-500"
+                            : isDarkMode
+                              ? "border-gray-700"
+                              : "border-gray-200"
                         }`}
                         style={{
-                          backgroundColor: isSelected 
-                            ? isDarkMode ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF'
-                            : isDarkMode ? 'bg-gray-700' : 'bg-gray-100',
+                          backgroundColor: isSelected
+                            ? isDarkMode
+                              ? "rgba(59, 130, 246, 0.15)"
+                              : "#EFF6FF"
+                            : isDarkMode
+                              ? "bg-gray-700"
+                              : "bg-gray-100",
                         }}
                         activeOpacity={0.7}
                       >
-                        <Icon 
-                          name={option.icon} 
-                          size={16} 
-                          color={isSelected ? color : isDarkMode ? '#94A3B8' : '#6B7280'} 
+                        <Icon
+                          name={option.icon}
+                          size={16}
+                          color={
+                            isSelected
+                              ? color
+                              : isDarkMode
+                                ? "#94A3B8"
+                                : "#6B7280"
+                          }
                         />
-                        <Text 
+                        <Text
                           className="ml-1.5 text-xs font-medium"
                           style={{
-                            color: isSelected ? color : isDarkMode ? '#D1D5DB' : '#374151',
+                            color: isSelected
+                              ? color
+                              : isDarkMode
+                                ? "#D1D5DB"
+                                : "#374151",
                           }}
                         >
                           {option.label}
@@ -1166,39 +1321,57 @@ const OrdersScreen = ({ navigation }) => {
               </View>
 
               <View>
-                <Text className={`text-sm font-semibold mb-3 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                <Text
+                  className={`text-sm font-semibold mb-3 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}
+                >
                   Payment Status
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {PAYMENT_STATUSES.map((option) => {
                     const isSelected = editPaymentStatus === option.value;
                     const color = getStatusColor(option.value, isDarkMode);
-                    
+
                     return (
                       <TouchableOpacity
                         key={option.value}
                         onPress={() => setEditPaymentStatus(option.value)}
                         className={`px-4 py-2 rounded-xl flex-row items-center border-2 ${
-                          isSelected 
-                            ? 'border-blue-500' 
-                            : isDarkMode ? 'border-gray-700' : 'border-gray-200'
+                          isSelected
+                            ? "border-blue-500"
+                            : isDarkMode
+                              ? "border-gray-700"
+                              : "border-gray-200"
                         }`}
                         style={{
-                          backgroundColor: isSelected 
-                            ? isDarkMode ? 'rgba(59, 130, 246, 0.15)' : '#EFF6FF'
-                            : isDarkMode ? 'bg-gray-700' : 'bg-gray-100',
+                          backgroundColor: isSelected
+                            ? isDarkMode
+                              ? "rgba(59, 130, 246, 0.15)"
+                              : "#EFF6FF"
+                            : isDarkMode
+                              ? "bg-gray-700"
+                              : "bg-gray-100",
                         }}
                         activeOpacity={0.7}
                       >
-                        <Icon 
-                          name={option.icon} 
-                          size={16} 
-                          color={isSelected ? color : isDarkMode ? '#94A3B8' : '#6B7280'} 
+                        <Icon
+                          name={option.icon}
+                          size={16}
+                          color={
+                            isSelected
+                              ? color
+                              : isDarkMode
+                                ? "#94A3B8"
+                                : "#6B7280"
+                          }
                         />
-                        <Text 
+                        <Text
                           className="ml-1.5 text-xs font-medium"
                           style={{
-                            color: isSelected ? color : isDarkMode ? '#D1D5DB' : '#374151',
+                            color: isSelected
+                              ? color
+                              : isDarkMode
+                                ? "#D1D5DB"
+                                : "#374151",
                           }}
                         >
                           {option.label}
@@ -1219,15 +1392,17 @@ const OrdersScreen = ({ navigation }) => {
                   className={`flex-1 rounded-xl py-3.5 items-center justify-center ${
                     editOrderStatus === selectedOrderForStatus?.order_status &&
                     editPaymentStatus === selectedOrderForStatus?.payment_status
-                      ? 'bg-gray-400 dark:bg-gray-600'
-                      : 'bg-blue-500'
+                      ? "bg-gray-400 dark:bg-gray-600"
+                      : "bg-blue-500"
                   }`}
                   activeOpacity={0.7}
                 >
                   {updating ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text className="text-white text-sm font-semibold">Save Changes</Text>
+                    <Text className="text-white text-sm font-semibold">
+                      Save Changes
+                    </Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1236,11 +1411,15 @@ const OrdersScreen = ({ navigation }) => {
                     setSelectedOrderForStatus(null);
                   }}
                   className={`flex-1 rounded-xl py-3.5 items-center justify-center border ${
-                    isDarkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-white'
+                    isDarkMode
+                      ? "border-gray-600 bg-gray-700"
+                      : "border-gray-200 bg-white"
                   }`}
                   activeOpacity={0.7}
                 >
-                  <Text className={`text-sm font-semibold ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>
+                  <Text
+                    className={`text-sm font-semibold ${isDarkMode ? "text-white" : "text-gray-700"}`}
+                  >
                     Cancel
                   </Text>
                 </TouchableOpacity>

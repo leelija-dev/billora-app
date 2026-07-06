@@ -5,11 +5,18 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f4f602c7-85e4-45b1-adc0-a611405c7b28" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" afterPath="$PROJECT_DIR$/.env" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/App.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/client.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/client.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/api/orders.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/orders.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/products/ProductCard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/products/ProductCard.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/products/ProductList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/products/ProductList.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/orders/OrdersScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/orders/OrdersScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/products/ProductsScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/products/ProductsScreen.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/screens/sellers/SellersScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/sellers/SellersScreen.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/store/orderStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/orderStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/permissionStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/permissionStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/productStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/productStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/store/sellerStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/sellerStore.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test.json" beforeDir="false" afterPath="$PROJECT_DIR$/test.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

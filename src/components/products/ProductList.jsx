@@ -1,4 +1,4 @@
-// components/products/ProductList.js
+// components/products/ProductList.js - FIXED
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -187,7 +187,6 @@ const ProductList = ({
 
     setAddingStock(true);
     try {
-      // Use the correct API method - adjust based on your API
       await stocksAPI.addStock(selectedStock.id, user?.id, quantity);
 
       Toast.show({
@@ -201,7 +200,6 @@ const ProductList = ({
       setSelectedProduct(null);
       setSelectedStock(null);
 
-      // Refresh products to get updated stock data
       await fetchProducts(currentPage, true);
 
       if (onStockUpdate) {
@@ -228,9 +226,8 @@ const ProductList = ({
           {filteredProducts.length} of {stats.total} products
         </Text>
         <View
-          className={`flex-row items-center px-3 py-1.5 rounded-full shadow-sm ${
-            isDarkMode ? "bg-gray-800" : "bg-white"
-          }`}
+          className={`flex-row items-center px-3 py-1.5 rounded-full shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"
+            }`}
         >
           <Icon
             name="package-variant"
@@ -272,7 +269,6 @@ const ProductList = ({
     const discount = safeNumber(item.discount_percentage);
     const gst = safeNumber(item.gst_percentage);
     const variants = item.variants || [];
-    const attributes = item.attributes;
     const expiryDate = item.expiry_date;
     const batchNumber = item.batch_number;
     const isFeatured = item.is_featured;
@@ -310,9 +306,8 @@ const ProductList = ({
         key={item.id}
         onPress={() => handleProductPress(item)}
         activeOpacity={0.7}
-        className={`flex-row rounded-2xl mb-4 p-4 shadow-lg ${
-          isDarkMode ? "bg-gray-800" : "bg-white"
-        }`}
+        className={`flex-row rounded-2xl mb-4 p-4 shadow-lg ${isDarkMode ? "bg-gray-800" : "bg-white"
+          }`}
         style={{
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 2 },
@@ -366,12 +361,11 @@ const ProductList = ({
               <Text
                 className={`text-[10px] font-mono mb-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
               >
-                {item.sku || "N/A"}
+                SKU: {item.sku || "N/A"}
               </Text>
               <Text
-                className={`text-base font-bold leading-5 ${
-                  isDarkMode ? "text-white" : "text-gray-800"
-                }`}
+                className={`text-base font-bold leading-5 ${isDarkMode ? "text-white" : "text-gray-800"
+                  }`}
                 numberOfLines={2}
               >
                 {item.name}
@@ -413,27 +407,55 @@ const ProductList = ({
                 </Text>
               </View>
             )}
-            {/* Variants in list view */}
-            {variants &&
-              Array.isArray(variants) &&
-              variants.length > 0 &&
-              variants.slice(0, 2).map((variant, idx) => {
-                const variantValues = [];
-                if (variant.size) variantValues.push(String(variant.size));
-                if (variant.color) variantValues.push(String(variant.color));
-                return variantValues.slice(0, 1).map((val, valIdx) => (
-                  <View
-                    key={`${idx}-${valIdx}`}
-                    className={`flex-row items-center px-2 py-1 rounded-md ${isDarkMode ? "bg-green-900/30" : "bg-green-100"}`}
-                  >
-                    <Text
-                      className={`text-xs ${isDarkMode ? "text-green-400" : "text-green-700"}`}
-                    >
-                      {String(val)}
-                    </Text>
-                  </View>
-                ));
-              })}
+           {/* Variants in list view - COMPLETE FIX */}
+{variants && Array.isArray(variants) && variants.length > 0 && (
+  <View className="flex-row flex-wrap gap-1">
+    {variants.slice(0, 2).map((variant, idx) => {
+      const variantValues = [];
+      if (variant.size) variantValues.push(String(variant.size));
+      if (variant.color) variantValues.push(String(variant.color));
+      if (variant.material) variantValues.push(String(variant.material));
+      if (variant.gender) variantValues.push(String(variant.gender));
+      
+      // Skip if no values
+      if (variantValues.length === 0) return null;
+      
+      const key = `variant-${variant.id || idx}-${variant.size || ''}-${variant.color || ''}`;
+      
+      return (
+        <View
+          key={key}
+          className={`flex-row items-center px-2 py-1 rounded-md ${
+            isDarkMode ? "bg-green-900/30" : "bg-green-100"
+          }`}
+        >
+          <Text
+            className={`text-xs ${
+              isDarkMode ? "text-green-400" : "text-green-700"
+            }`}
+          >
+            {variantValues.join(', ')}
+          </Text>
+        </View>
+      );
+    })}
+    {variants.length > 2 && (
+      <View
+        className={`flex-row items-center px-2 py-1 rounded-md ${
+          isDarkMode ? "bg-gray-700" : "bg-gray-100"
+        }`}
+      >
+        <Text
+          className={`text-xs ${
+            isDarkMode ? "text-gray-400" : "text-gray-600"
+          }`}
+        >
+          +{variants.length - 2}
+        </Text>
+      </View>
+    )}
+  </View>
+)}
             {/* Medicine fields in list view */}
             {expiryDate && (
               <View
@@ -558,7 +580,7 @@ const ProductList = ({
         </View>,
       );
     }
-    return rows;
+    return <>{rows}</>;
   };
 
   const renderStockModal = () => (
@@ -602,11 +624,10 @@ const ProductList = ({
             </Text>
             <TouchableOpacity
               onPress={() => setShowStockDropdown(!showStockDropdown)}
-              className={`border rounded-xl px-4 py-3 flex-row justify-between items-center ${
-                isDarkMode
+              className={`border rounded-xl px-4 py-3 flex-row justify-between items-center ${isDarkMode
                   ? "border-gray-600 text-white bg-gray-700"
                   : "border-gray-300 text-gray-800 bg-gray-50"
-              }`}
+                }`}
             >
               <Text
                 className={`text-base ${selectedStock ? (isDarkMode ? "text-white" : "text-gray-800") : "text-gray-500"}`}
@@ -624,11 +645,10 @@ const ProductList = ({
 
             {showStockDropdown && (
               <View
-                className={`mt-2 border rounded-xl overflow-hidden ${
-                  isDarkMode
+                className={`mt-2 border rounded-xl overflow-hidden ${isDarkMode
                     ? "border-gray-600 bg-gray-700"
                     : "border-gray-300 bg-white"
-                }`}
+                  }`}
               >
                 <ScrollView
                   nestedScrollEnabled={true}
@@ -641,9 +661,8 @@ const ProductList = ({
                         setSelectedStock(stock);
                         setShowStockDropdown(false);
                       }}
-                      className={`px-4 py-3 border-b ${
-                        isDarkMode ? "border-gray-600" : "border-gray-200"
-                      } ${selectedStock?.id === stock.id ? (isDarkMode ? "bg-blue-900/30" : "bg-blue-50") : ""}`}
+                      className={`px-4 py-3 border-b ${isDarkMode ? "border-gray-600" : "border-gray-200"
+                        } ${selectedStock?.id === stock.id ? (isDarkMode ? "bg-blue-900/30" : "bg-blue-50") : ""}`}
                     >
                       <Text
                         className={`text-base ${isDarkMode ? "text-gray-100" : "text-gray-800"}`}
@@ -704,11 +723,10 @@ const ProductList = ({
               Quantity to Add *
             </Text>
             <TextInput
-              className={`border rounded-xl px-4 py-3 text-base ${
-                isDarkMode
+              className={`border rounded-xl px-4 py-3 text-base ${isDarkMode
                   ? "border-gray-600 text-white bg-gray-700"
                   : "border-gray-300 text-gray-800 bg-gray-50"
-              }`}
+                }`}
               placeholder="Enter quantity"
               placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9ca3af"}
               keyboardType="numeric"
@@ -720,9 +738,8 @@ const ProductList = ({
             <View className="flex-row justify-end gap-3 mt-6">
               <TouchableOpacity
                 onPress={() => setShowStockModal(false)}
-                className={`px-4 py-2 rounded-lg border ${
-                  isDarkMode ? "border-gray-600" : "border-gray-300"
-                }`}
+                className={`px-4 py-2 rounded-lg border ${isDarkMode ? "border-gray-600" : "border-gray-300"
+                  }`}
               >
                 <Text
                   className={isDarkMode ? "text-gray-200" : "text-gray-700"}

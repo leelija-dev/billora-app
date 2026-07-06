@@ -1,7 +1,7 @@
-// screens/ProductScreen.js - OPTIMIZED VERSION
+// screens/ProductScreen.js - PAGINATION IMPLEMENTATION
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -27,7 +27,6 @@ import { useAuthStore } from "../../store/authStore";
 import { usePermissionStore } from "../../store/permissionStore";
 import { useProductStore } from "../../store/productStore";
 import { useThemeStore } from "../../store/themeStore";
-import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const { width } = Dimensions.get("window");
 
@@ -39,17 +38,18 @@ const ProductScreen = ({ navigation }) => {
   const {
     products,
     loading,
+    loadingMore,
     error,
     totalProducts,
     currentPage,
     lastPage,
     perPage,
     pagination,
+    hasMore,
     filters,
     fetchProducts,
-    fetchProductsByUrl,
+    loadMoreProducts,
     setFilters,
-    setPage,
     deleteProduct,
     getProductTotalStock,
   } = useProductStore();
@@ -61,9 +61,10 @@ const ProductScreen = ({ navigation }) => {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [viewMode, setViewMode] = useState("grid");
-  const [selectedCategory, setSelectedCategory] = useState("all");
   const [showStats, setShowStats] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
 
   // Modal states
   const [successModalVisible, setSuccessModalVisible] = useState(false);
@@ -74,6 +75,8 @@ const ProductScreen = ({ navigation }) => {
     useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const scrollViewRef = useRef(null);
 
   // Get filtered menu items from permission store
   const menuItems = useMemo(() => {
@@ -92,34 +95,45 @@ const ProductScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       setInitialLoading(true);
-      fetchProducts(1).finally(() => {
+      // Reset pagination state on focus
+      fetchProducts(1, false, false).finally(() => {
         setInitialLoading(false);
       });
       return () => {};
-    }, []),
+    }, [fetchProducts]),
   );
+
+  // Reset trigger flag when loading more is complete
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
+    }
+  }, [isLoadingMore, loadingMore]);
 
   // Handle search with debounce
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (searchText !== filters.search) {
         setFilters({ search: searchText });
+        // Reset to page 1 on search
+        fetchProducts(1, true, false);
       }
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchText, filters.search, setFilters]);
+  }, [searchText, filters.search, setFilters, fetchProducts]);
 
   // Calculate product statistics
   const productStats = useMemo(() => {
-    const total = products.length;
+    const allProducts = products;
+    const total = allProducts.length;
     let totalStock = 0;
     let lowStock = 0;
     let outOfStock = 0;
     let active = 0;
     let inactive = 0;
 
-    products.forEach((product) => {
+    allProducts.forEach((product) => {
       const stock = getProductTotalStock(product);
       totalStock += stock;
 
@@ -142,7 +156,7 @@ const ProductScreen = ({ navigation }) => {
     });
 
     return {
-      totalProducts: total,
+      totalProducts: totalProducts || total,
       totalStock,
       lowStock,
       outOfStock,
@@ -150,7 +164,7 @@ const ProductScreen = ({ navigation }) => {
       inactiveProducts: inactive,
       inStock: total - lowStock - outOfStock,
     };
-  }, [products, getProductTotalStock]);
+  }, [products, totalProducts, getProductTotalStock]);
 
   // Get filtered products based on status
   const getFilteredProducts = useMemo(() => {
@@ -162,35 +176,60 @@ const ProductScreen = ({ navigation }) => {
     return products;
   }, [products, selectedStatus]);
 
-  // Helper function to format price
-  const formatPrice = (price) => {
-    if (price === null || price === undefined) return "0.00";
-    const num = typeof price === "string" ? parseFloat(price) : price;
-    if (isNaN(num)) return "0.00";
-    return num.toFixed(2);
-  };
-
   // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchProducts(1, true);
+    await fetchProducts(1, true, false);
     setRefreshing(false);
   }, [fetchProducts]);
 
-  // Load more products for infinite scroll
-  const loadMoreProducts = useCallback(async () => {
-    if (currentPage < lastPage && !loading) {
-      const nextPage = currentPage + 1;
-      await fetchProducts(nextPage, false, true);
+  // Handle load more with proper conditions
+  const handleLoadMore = useCallback(async () => {
+    // Check conditions properly
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
     }
-  }, [currentPage, lastPage, loading, fetchProducts]);
+    
+    if (!hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
 
-  // Infinite scroll hook
-  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreProducts, {
-    threshold: 1500,
-    hasMore: currentPage < lastPage,
-    loading: loading,
-  });
+    if (currentPage >= lastPage) {
+      console.log('⏭️ Skipping - reached last page');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreProducts - currentPage: ${currentPage}, lastPage: ${lastPage}`);
+    setIsLoadingMore(true);
+    const nextPage = currentPage + 1;
+    await loadMoreProducts(nextPage);
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, hasMore, currentPage, lastPage, loadMoreProducts]);
+
+  // Handle scroll for pagination
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Check if user has scrolled 50% of the screen height
+    const triggerThreshold = 50;
+    const shouldLoadMore = scrollPercentage >= triggerThreshold;
+    
+    if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
+      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
 
   // Navigate to create product
   const handleCreateProduct = () => {
@@ -226,7 +265,7 @@ const ProductScreen = ({ navigation }) => {
       if (result.success) {
         setSuccessMessage("Product deleted successfully");
         setSuccessModalVisible(true);
-        await fetchProducts(currentPage, true);
+        await fetchProducts(currentPage, true, false);
       } else {
         setErrorMessage(result.error || "Failed to delete product");
         setErrorModalVisible(true);
@@ -243,9 +282,8 @@ const ProductScreen = ({ navigation }) => {
 
   // Handle stock update
   const handleStockUpdate = async () => {
-    await fetchProducts(currentPage, true);
+    await fetchProducts(currentPage, true, false);
   };
-
 
   // Handle view mode toggle
   const toggleViewMode = () => {
@@ -265,10 +303,9 @@ const ProductScreen = ({ navigation }) => {
   // Handle manual refresh
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchProducts(1, true);
+    await fetchProducts(1, true, false);
     setRefreshing(false);
   };
-
 
   // Updated Stats Section using StatsCard component
   const StatsSection = () => {
@@ -281,7 +318,6 @@ const ProductScreen = ({ navigation }) => {
         value: productStats.totalProducts,
         icon: "package-variant",
         color: "#4F46E5",
-        trend: 12,
         onPress: () => console.log("Total Products clicked"),
       },
       {
@@ -290,7 +326,6 @@ const ProductScreen = ({ navigation }) => {
         value: productStats.totalStock,
         icon: "warehouse",
         color: "#10B981",
-        trend: 8,
         onPress: () => console.log("Total Stock clicked"),
       },
       {
@@ -299,7 +334,6 @@ const ProductScreen = ({ navigation }) => {
         value: productStats.inStock,
         icon: "check-circle",
         color: "#2563EB",
-        trend: 5,
         onPress: () => console.log("In Stock clicked"),
       },
       {
@@ -308,7 +342,6 @@ const ProductScreen = ({ navigation }) => {
         value: productStats.lowStock,
         icon: "alert",
         color: "#F59E0B",
-        trend: -3,
         onPress: () => console.log("Low Stock clicked"),
       },
       {
@@ -317,7 +350,6 @@ const ProductScreen = ({ navigation }) => {
         value: productStats.outOfStock,
         icon: "close-circle",
         color: "#EF4444",
-        trend: 2,
         onPress: () => console.log("Out of Stock clicked"),
       },
       {
@@ -326,7 +358,6 @@ const ProductScreen = ({ navigation }) => {
         value: productStats.activeProducts,
         icon: "check-decagram",
         color: "#8B5CF6",
-        trend: 10,
         onPress: () => console.log("Active Products clicked"),
       },
     ];
@@ -347,7 +378,6 @@ const ProductScreen = ({ navigation }) => {
                 value={item.value}
                 icon={item.icon}
                 color={item.color}
-                trend={item.trend}
                 onPress={item.onPress}
               />
             </View>
@@ -356,6 +386,25 @@ const ProductScreen = ({ navigation }) => {
       </View>
     );
   };
+
+  // Loading state
+  if (initialLoading) {
+    return (
+      <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+        <StatusBar
+          barStyle={isDarkMode ? "light-content" : "dark-content"}
+          backgroundColor={isDarkMode ? "#111827" : "#F9FAFB"}
+        />
+        <Header title="Products" showBack={false} />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+            Loading products...
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
@@ -529,9 +578,23 @@ const ProductScreen = ({ navigation }) => {
         </View>
       </View>
 
+      {/* Page Indicator */}
+      <View className={`px-4 py-2 flex-row justify-between items-center border-b ${
+        isDarkMode ? 'border-gray-800' : 'border-gray-100'
+      }`}>
+        <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          {totalProducts > 0 ? `Showing ${products.length} of ${totalProducts} products` : `${products.length} products`}
+        </Text>
+        <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          Page {currentPage}/{lastPage}
+        </Text>
+      </View>
+
       {/* Product List with RefreshControl and Infinite Scroll */}
       <ScrollView
-        className="flex-1 px-4"
+        ref={scrollViewRef}
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -541,27 +604,58 @@ const ProductScreen = ({ navigation }) => {
           />
         }
         onScroll={handleScroll}
-        scrollEventThrottle={400}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
       >
-        <ProductList
-          viewMode={viewMode}
-          searchQuery={searchText}
-          category="all"
-          products={getFilteredProducts}
-          loading={loading}
-          onView={handleProductView}
-          onEdit={handleEditProduct}
-          onDelete={handleDeleteProduct}
-          onStockUpdate={handleStockUpdate}
-          navigation={navigation}
-        />
+        {loading && products.length === 0 ? (
+          <View className="py-12 items-center">
+            <ActivityIndicator size="large" color="#3B82F6" />
+            <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Loading products...
+            </Text>
+          </View>
+        ) : getFilteredProducts.length === 0 ? (
+          <View className="py-20 items-center">
+            <Icon name="package-variant" size={80} color={isDarkMode ? '#334155' : '#D1D5DB'} />
+            <Text className={`text-lg mt-4 text-center ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              No products found
+            </Text>
+            <Text className={`text-sm mt-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              {searchText || filters.status !== 'all'
+                ? 'Try adjusting your filters'
+                : 'Add your first product'}
+            </Text>
+          </View>
+        ) : (
+          <ProductList
+            viewMode={viewMode}
+            searchQuery={searchText}
+            category="all"
+            products={getFilteredProducts}
+            loading={loading}
+            onView={handleProductView}
+            onEdit={handleEditProduct}
+            onDelete={handleDeleteProduct}
+            onStockUpdate={handleStockUpdate}
+            navigation={navigation}
+          />
+        )}
 
+        {/* Loading More Indicator */}
+        {(isLoadingMore || loadingMore) && (
+          <View className="py-6 items-center">
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading more products...
+            </Text>
+          </View>
+        )}
 
-        {/* End of list indicator */}
-        {currentPage >= lastPage && products.length > 0 && (
+        {/* No More Products */}
+        {!hasMore && products.length > 0 && products.length === totalProducts && (
           <View className="py-4 items-center">
-            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-              Showing all {products.length} products
+            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              No more products to load
             </Text>
           </View>
         )}
@@ -574,11 +668,20 @@ const ProductScreen = ({ navigation }) => {
         selectedStatus={selectedStatus}
         setSelectedStatus={setSelectedStatus}
         isDarkMode={isDarkMode}
-        onApply={() => setFilterModalVisible(false)}
+        onApply={() => {
+          if (selectedStatus !== "all") {
+            setFilters({ status: selectedStatus });
+          } else {
+            setFilters({ status: "all" });
+          }
+          setFilterModalVisible(false);
+          fetchProducts(1, true, false);
+        }}
         onReset={() => {
           setSelectedStatus("all");
-          setFilters({});
+          setFilters({ status: "all" });
           setFilterModalVisible(false);
+          fetchProducts(1, true, false);
         }}
       />
 

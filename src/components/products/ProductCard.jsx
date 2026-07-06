@@ -1,4 +1,4 @@
-// components/products/ProductCard.js
+// components/products/ProductCard.js - COMPLETE FIXED VERSION
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
@@ -70,8 +70,6 @@ const ProductCard = ({
     images = [],
   } = product;
 
-  // ✅ REMOVE: console.log(id); - This was causing the error
-
   // Get total stock using the store method
   const totalStock = getProductTotalStock(product);
   const stocksList = product.stocks || [];
@@ -117,7 +115,7 @@ const ProductCard = ({
   const handleDelete = () => {
     setShowActions(false);
     if (onDelete) {
-      onDelete(id); // ✅ Pass the product ID
+      onDelete(id);
     } else {
       Alert.alert(
         "Delete Product",
@@ -231,22 +229,16 @@ const ProductCard = ({
   const getImageUrl = () => {
     if (!image || imageError) return null;
 
-    // Handle different image formats
     if (typeof image === "string") {
-      // Check if it's a full URL or relative path
       if (image.startsWith("http://") || image.startsWith("https://")) {
         return image;
       }
-      // If it's a local file URI
       if (image.startsWith("file://")) {
         return image;
       }
-      // If it's a base64 image
       if (image.startsWith("data:image")) {
         return image;
       }
-      // If it's just a filename or path, you might need to prepend your API base URL
-      // For now, return as is
       return image;
     }
     if (image.uri) return image.uri;
@@ -264,6 +256,13 @@ const ProductCard = ({
 
   const getInitial = () => {
     return name?.charAt(0)?.toUpperCase() || "P";
+  };
+
+  // Helper function to safely render variant values
+  const renderVariantValue = (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
   };
 
   return (
@@ -474,53 +473,61 @@ const ProductCard = ({
               </View>
             )}
 
-            {/* Variants Display */}
-            {variants && Array.isArray(variants) && variants.length > 0 && (
-              <View className="flex-row flex-wrap gap-1 mb-3">
-                {variants.slice(0, 3).map((variant, index) => {
-                  const variantValues = [];
-                  if (variant.size) variantValues.push(String(variant.size));
-                  if (variant.color) variantValues.push(String(variant.color));
-                  if (variant.material) variantValues.push(String(variant.material));
-                  if (variant.gender) variantValues.push(String(variant.gender));
+            {/* // In ProductCard.js - COMPLETE FIXED VARIANTS SECTION */}
 
-                  return variantValues.map((val, valIndex) => (
-                    <View
-                      key={`${index}-${valIndex}`}
-                      className={`px-2 py-0.5 rounded-md ${
-                        isDarkMode ? "bg-green-900/30" : "bg-green-100"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs ${
-                          isDarkMode ? "text-green-400" : "text-green-700"
-                        }`}
-                      >
-                        {String(val)}
-                      </Text>
-                    </View>
-                  ));
-                })}
-                {variants.length > 3 && (
-                  <View
-                    className={`px-2 py-0.5 rounded-md ${
-                      isDarkMode ? "bg-gray-700" : "bg-gray-100"
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}
-                    >
-                      +{variants.length - 3}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
+{/* // Variants Display - COMPLETE FIX */}
+{variants && Array.isArray(variants) && variants.length > 0 && (
+  <View className="flex-row flex-wrap gap-1 mb-3">
+    {variants.slice(0, 3).map((variant, index) => {
+      const variantValues = [];
+      if (variant.size) variantValues.push(renderVariantValue(variant.size));
+      if (variant.color) variantValues.push(renderVariantValue(variant.color));
+      if (variant.material) variantValues.push(renderVariantValue(variant.material));
+      if (variant.gender) variantValues.push(renderVariantValue(variant.gender));
 
-            {/* Attributes Display */}
-            {attributes && typeof attributes === 'object' && (
+      // Skip if no values
+      if (variantValues.length === 0) return null;
+
+      // Use a stable key
+      const key = `variant-${variant.id || index}-${variant.size || ''}-${variant.color || ''}`;
+
+      return (
+        <View
+          key={key}
+          className={`px-2 py-0.5 rounded-md ${
+            isDarkMode ? "bg-green-900/30" : "bg-green-100"
+          }`}
+        >
+          <Text
+            className={`text-xs ${
+              isDarkMode ? "text-green-400" : "text-green-700"
+            }`}
+          >
+            {variantValues.join(', ')}
+          </Text>
+        </View>
+      );
+    })}
+    {variants.length > 3 && (
+      <View
+        className={`px-2 py-0.5 rounded-md ${
+          isDarkMode ? "bg-gray-700" : "bg-gray-100"
+        }`}
+      >
+        <Text
+          className={`text-xs ${
+            isDarkMode ? "text-gray-400" : "text-gray-600"
+          }`}
+        >
+          +{variants.length - 3}
+        </Text>
+      </View>
+    )}
+  </View>
+)}
+
+            {/* Attributes Display - FIXED */}
+            {attributes && (typeof attributes === 'object' || typeof attributes === 'string') && (
               <View className="flex-row flex-wrap gap-1 mb-3">
                 {(() => {
                   let attrs = attributes;
@@ -539,20 +546,23 @@ const ProductCard = ({
                       if (typeof item === 'object' && item !== null) {
                         Object.values(item).forEach(v => {
                           if (v !== null && v !== undefined && v !== '') {
-                            values.push(typeof v === 'object' ? JSON.stringify(v) : String(v));
+                            values.push(renderVariantValue(v));
                           }
                         });
                       } else if (item !== null && item !== undefined && item !== '') {
-                        values.push(String(item));
+                        values.push(renderVariantValue(item));
                       }
                     });
                   } else {
                     Object.values(attrs).forEach(v => {
                       if (v !== null && v !== undefined && v !== '') {
-                        values.push(typeof v === 'object' ? JSON.stringify(v) : String(v));
+                        values.push(renderVariantValue(v));
                       }
                     });
                   }
+
+                  // Remove duplicates and null values
+                  values = [...new Set(values.filter(v => v !== null && v !== ''))];
 
                   if (values.length === 0) return null;
 
@@ -561,7 +571,7 @@ const ProductCard = ({
                     <>
                       {displayValues.map((val, idx) => (
                         <View
-                          key={`attr-${idx}`}
+                          key={`attr-${idx}-${Date.now()}`}
                           className={`px-2 py-0.5 rounded-md ${
                             isDarkMode ? "bg-blue-900/30" : "bg-blue-100"
                           }`}
@@ -571,7 +581,7 @@ const ProductCard = ({
                               isDarkMode ? "text-blue-400" : "text-blue-700"
                             }`}
                           >
-                            {String(val)}
+                            {val}
                           </Text>
                         </View>
                       ))}
@@ -700,7 +710,7 @@ const ProductCard = ({
                 </Text>
                 {stocksList.slice(0, 2).map((stock, idx) => (
                   <View
-                    key={idx}
+                    key={`stock-${idx}`}
                     className="flex-row justify-between items-center mb-1"
                   >
                     <Text

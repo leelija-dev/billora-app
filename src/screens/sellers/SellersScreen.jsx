@@ -1,4 +1,4 @@
-// screens/sellers/SellersScreen.js
+// screens/sellers/SellersScreen.js - PAGINATION IMPLEMENTATION
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +23,6 @@ import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
 import SellerForm from "../../components/sellers/SellerForm";
 import SellerList from "../../components/sellers/SellerList";
-import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const SellersScreen = () => {
   const navigation = useNavigation();
@@ -35,8 +34,13 @@ const SellersScreen = () => {
     sellers = [],
     totalSellers,
     loading,
+    loadingMore,
+    hasMore,
+    currentPage,
+    lastPage,
     filters,
     fetchSellers,
+    loadMoreSellers,
     createSeller,
     updateSeller,
     deleteSeller,
@@ -48,8 +52,8 @@ const SellersScreen = () => {
   const [sortBy, setSortBy] = useState("name");
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastPage, setLastPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
   
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false);
@@ -62,8 +66,7 @@ const SellersScreen = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
-  const searchTimeoutRef = useRef(null);
-  const isMounted = useRef(true);
+  const scrollViewRef = useRef(null);
 
   // Get filtered menu items from permission store
   const menuItems = useMemo(() => {
@@ -84,81 +87,91 @@ const SellersScreen = () => {
     return "1";
   }, [user]);
 
-  // Initial data load
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        console.log("🔄 Fetching sellers for user:", getUserId());
-        const result = await fetchSellers(getUserId(), 1, searchQuery);
-        if (result?.sellers) {
-          setCurrentPage(result.sellers.current_page || 1);
-          setLastPage(result.sellers.last_page || 1);
-        }
-        console.log("✅ Sellers fetched successfully");
-      } catch (error) {
-        console.error("❌ Failed to fetch sellers:", error);
-      } finally {
-        if (isMounted.current) setInitialLoading(false);
-      }
-    };
-    loadInitialData();
+  // Load sellers on mount
+  useFocusEffect(
+    useCallback(() => {
+      setInitialLoading(true);
+      // Reset pagination state on focus
+      fetchSellers(getUserId(), 1, filters.search, false).finally(() => {
+        setInitialLoading(false);
+      });
+      return () => {};
+    }, [fetchSellers, getUserId, filters.search]),
+  );
 
-    return () => {
-      isMounted.current = false;
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    };
-  }, [fetchSellers, getUserId]);
+  // Reset trigger flag when loading more is complete
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
+    }
+  }, [isLoadingMore, loadingMore]);
 
   // Handle search with debounce
   useEffect(() => {
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => {
-      setFilters({ search: searchQuery });
-      setCurrentPage(1);
-      fetchSellers(getUserId(), 1, searchQuery);
-    }, 500);
-    return () => {
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    };
-  }, [searchQuery, setFilters, fetchSellers, getUserId]);
-
-  // Refresh on focus
-  useFocusEffect(
-    useCallback(() => {
-      console.log("Sellers screen focused - refreshing data");
-      handleRefresh();
-      return () => {};
-    }, [])
-  );
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    const result = await fetchSellers(getUserId(), 1, searchQuery);
-    if (result?.sellers) {
-      setCurrentPage(result.sellers.current_page || 1);
-      setLastPage(result.sellers.last_page || 1);
-    }
-    setRefreshing(false);
-  };
-
-  // Load more sellers for infinite scroll
-  const loadMoreSellers = useCallback(async () => {
-    if (currentPage < lastPage && !loading) {
-      const nextPage = currentPage + 1;
-      const result = await fetchSellers(getUserId(), nextPage, searchQuery, true);
-      if (result?.sellers) {
-        setCurrentPage(result.sellers.current_page || nextPage);
-        setLastPage(result.sellers.last_page || lastPage);
+    const delayDebounceFn = setTimeout(() => {
+      if (searchQuery !== filters.search) {
+        setFilters({ search: searchQuery });
+        // Reset to page 1 on search
+        fetchSellers(getUserId(), 1, searchQuery, false);
       }
-    }
-  }, [currentPage, lastPage, loading, getUserId, searchQuery, fetchSellers]);
+    }, 500);
 
-  // Infinite scroll hook
-  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreSellers, {
-    threshold: 500,
-    hasMore: currentPage < lastPage,
-    loading: loading,
-  });
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, filters.search, setFilters, fetchSellers, getUserId]);
+
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchSellers(getUserId(), 1, filters.search, false);
+    setRefreshing(false);
+  }, [fetchSellers, getUserId, filters.search]);
+
+  // Handle load more with proper conditions
+  const handleLoadMore = useCallback(async () => {
+    // Check conditions properly
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
+    }
+    
+    if (!hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
+
+    if (currentPage >= lastPage) {
+      console.log('⏭️ Skipping - reached last page');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreSellers - currentPage: ${currentPage}, lastPage: ${lastPage}`);
+    setIsLoadingMore(true);
+    await loadMoreSellers(getUserId());
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, hasMore, currentPage, lastPage, loadMoreSellers, getUserId]);
+
+  // Handle scroll for pagination
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Check if user has scrolled 50% of the screen height
+    const triggerThreshold = 50;
+    const shouldLoadMore = scrollPercentage >= triggerThreshold;
+    
+    if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
+      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
 
   const handleAddSeller = () => {
     setSelectedSeller(null);
@@ -204,7 +217,7 @@ const SellersScreen = () => {
       }
 
       handleCancelForm();
-      await fetchSellers(getUserId(), currentPage, searchQuery);
+      await fetchSellers(getUserId(), currentPage, filters.search, false);
     } catch (error) {
       console.error("Submit error:", error);
       setSuccessMessage(error.message || "An error occurred");
@@ -229,7 +242,7 @@ const SellersScreen = () => {
         setSuccessMessage("Seller deleted successfully");
         setShowSuccessModal(true);
         setTimeout(() => setShowSuccessModal(false), 2000);
-        await fetchSellers(getUserId(), currentPage, searchQuery);
+        await fetchSellers(getUserId(), currentPage, filters.search, false);
       } else {
         setSuccessMessage(result.error || "Failed to delete seller");
         setShowSuccessModal(true);
@@ -407,7 +420,7 @@ const SellersScreen = () => {
           />
 
           {/* Loading indicator for infinite scroll */}
-          {isFetchingMore && currentPage < lastPage && (
+          {loadingMore && currentPage < lastPage && (
             <View className="py-4 items-center">
               <ActivityIndicator size="small" color="#3B82F6" />
               <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
@@ -417,7 +430,7 @@ const SellersScreen = () => {
           )}
 
           {/* End of list indicator */}
-          {currentPage >= lastPage && safeSellers.length > 0 && (
+          {!hasMore && safeSellers.length > 0 && (
             <View className="py-4 items-center">
               <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
                 Showing all {safeSellers.length} sellers

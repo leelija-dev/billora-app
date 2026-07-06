@@ -1,10 +1,13 @@
 import apiClient from './client';
 
 export const ordersAPI = {
-  // Get user order history
-  getUserOrderHistory: async (userId) => {
+  // Get user order history with pagination
+  getUserOrderHistory: async (userId, page = 1) => {
     try {
-      return await apiClient.get(`/invoice/user-order-history/${userId}`);
+      // Pass page as a query parameter
+      return await apiClient.get(`/invoice/user-order-history/${userId}`, {
+        params: { page }
+      });
     } catch (error) {
       throw error.response?.data || error.message;
     }

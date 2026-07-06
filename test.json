@@ -1,0 +1,182 @@
+{
+    "config": {
+        "adapter": [
+            "xhr",
+            "http",
+            "fetch"
+        ],
+        "allowAbsoluteUrls": true,
+        "baseURL": "http://192.168.1.173:8000/api",
+        "data": undefined,
+        "env": {
+            "Blob": [Function Blob
+            ],
+            "FormData": [Function FormData
+            ]
+        },
+        "headers": [Object
+        ],
+        "maxBodyLength": 52428800,
+        "maxContentLength": 52428800,
+        "method": "get",
+        "params": {
+            "_t": 1782993293351
+        },
+        "timeout": 60000,
+        "transformRequest": [
+            [Function transformRequest
+            ]
+        ],
+        "transformResponse": [
+            [Function anonymous
+            ]
+        ],
+        "transitional": {
+            "clarifyTimeoutError": false,
+            "forcedJSONParsing": true,
+            "legacyInterceptorReqResOrdering": true,
+            "silentJSONParsing": true
+        },
+        "url": "/invoice/user-order-history/1",
+        "validateStatus": [Function validateStatus
+        ],
+        "withCredentials": false,
+        "xsrfCookieName": "XSRF-TOKEN",
+        "xsrfHeaderName": "X-XSRF-TOKEN"
+    },
+    "data": {
+        "current_page": 1,
+        "data": [
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ]
+        ],
+        "first_page_url": "http://192.168.1.173:8000/api/invoice/user-order-history/1?page=1",
+        "from": 1,
+        "last_page": 3,
+        "last_page_url": "http://192.168.1.173:8000/api/invoice/user-order-history/1?page=3",
+        "links": [
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ],
+            [Object
+            ]
+        ],
+        "next_page_url": "http://192.168.1.173:8000/api/invoice/user-order-history/1?page=2",
+        "path": "http://192.168.1.173:8000/api/invoice/user-order-history/1",
+        "per_page": 8,
+        "prev_page_url": null,
+        "to": 8,
+        "total": 21
+    },
+    "headers": {
+        "cache-control": "no-cache, private",
+        "connection": "close",
+        "content-type": "application/json",
+        "date": "Thu, 02 Jul 2026 11:54:55 GMT",
+        "host": "192.168.1.173:8000",
+        "vary": "Origin",
+        "x-powered-by": "PHP/8.2.12"
+    },
+    "request": {
+        "DONE": 4,
+        "HEADERS_RECEIVED": 2,
+        "LOADING": 3,
+        "OPENED": 1,
+        "UNSENT": 0,
+        "_aborted": false,
+        "_cachedResponse": undefined,
+        "_hasError": false,
+        "_headers": {
+            "accept": "application/json",
+            "authorization": "Bearer 576|wZmpHISWm0BOqA3tMZr2iyEq7xdHa0yaKMtqPaiCaac07ade",
+            "cache-control": "no-cache, no-store, must-revalidate",
+            "expires": "0",
+            "pragma": "no-cache"
+        },
+        "_incrementalEvents": false,
+        "_lowerCaseResponseHeaders": {
+            "cache-control": "no-cache, private",
+            "connection": "close",
+            "content-type": "application/json",
+            "date": "Thu, 02 Jul 2026 11:54:55 GMT",
+            "host": "192.168.1.173:8000",
+            "vary": "Origin",
+            "x-powered-by": "PHP/8.2.12"
+        },
+        "_method": "GET",
+        "_perfKey": "network_XMLHttpRequest_http://192.168.1.173:8000/api/invoice/user-order-history/1?_t=1782993293351",
+        "_performanceLogger": {
+            "_closed": false,
+            "_extras": [Object
+            ],
+            "_pointExtras": [Object
+            ],
+            "_points": [Object
+            ],
+            "_timespans": [Object
+            ]
+        },
+        "_requestId": null,
+        "_response": "{\"status\":true,\"message\":\"Order History\",\"response_from\":\"Cache\",\"response_time\":0.06392812728881836,\"data\":{\"current_page\":1,\"data\":[{\"id\":31,\"user_id\":1,\"order_id\":\"021\",\"store_id\":39,\"total_items\":2,\"total_amount\":\"1315.15\",\"paid_amount\":\"1315.15\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"Sahel\",\"customer_phone\":\"9007947586\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-06-09T09:30:32.000000Z\",\"updated_at\":\"2026-07-02T11:15:54.000000Z\",\"items\":[{\"id\":57,\"user_id\":1,\"customer_order_id\":31,\"order_id\":\"021\",\"product_id\":103,\"quantity\":\"1.00\",\"unit_id\":1,\"price\":\"444.00\",\"gst\":\"34.00\",\"discount\":\"4.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-06-09T09:30:32.000000Z\",\"updated_at\":\"2026-06-20T05:37:36.000000Z\",\"product\":{\"id\":103,\"user_id\":1,\"sku\":\"DSFSDF2332\",\"name\":\"dsfsfdsdf\",\"slug\":\"dsfsfdsdf\",\"brand_id\":2,\"category_id\":3,\"unit_amount\":\"1.00\",\"unit_id\":1,\"conversion_factor\":null,\"minimum_stock_quantity\":\"0.0000\",\"maximum_stock_quantity\":null,\"current_stock\":\"0.0000\",\"purchase_price\":\"232.00\",\"selling_price\":\"444.00\",\"mrp\":null,\"wholesale_price\":null,\"discount_amount\":\"0.00\",\"cess_percentage\":\"0.00\",\"gst_percentage\":\"34.00\",\"gst_hsn_code\":null,\"discount_percentage\":\"4.00\",\"description\":\"sdf sdfsd sdf sdf sds d\",\"attributes\":[{\"sfdsdsdf\":\"sdfdssdfsdf\"}],\"medicine_type_id\":null,\"expiry_date\":null,\"batch_number\":null,\"manufacturer_name\":null,\"prescription_required\":0,\"schedule_type\":null,\"salt_composition\":null,\"perishable\":0,\"organic_certified\":0,\"harvest_date\":null,\"storage_instructions\":null,\"short_description\":null,\"image\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779789263\\/Thefastbill\\/products\\/fybldqqteqfhtvjqye6d.webp\",\"qr_code\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779787005\\/Thefastbill\\/qr\\/opesrkpomiu8k01spi5i.svg\",\"barcode\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779787007\\/Thefastbill\\/barcodes\\/sroppx2yyrdbhatj9tzm.png\",\"image_public_id\":\"Thefastbill\\/products\\/fybldqqteqfhtvjqye6d\",\"qr_public_id\":\"Thefastbill\\/qr\\/opesrkpomiu8k01spi5i\",\"purchase_gst_percentage\":\"34.00\",\"barcode_public_id\":\"Thefastbill\\/barcodes\\/sroppx2yyrdbhatj9tzm\",\"is_active\":1,\"is_featured\":0,\"is_returnable\":1,\"is_refundable\":1,\"warranty_months\":0,\"warehouse_location\":null,\"supplier_id\":null,\"is_social_posted\":0,\"created_by\":\"1\",\"updated_by\":1,\"created_at\":\"2026-05-26T09:16:43.000000Z\",\"updated_at\":\"2026-05-26T09:54:24.000000Z\",\"deleted_at\":null}},{\"id\":58,\"user_id\":1,\"customer_order_id\":31,\"order_id\":\"021\",\"product_id\":104,\"quantity\":\"1.00\",\"unit_id\":23,\"price\":\"650.00\",\"gst\":\"18.00\",\"discount\":\"3.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-06-09T09:30:32.000000Z\",\"updated_at\":\"2026-06-20T05:37:36.000000Z\",\"product\":{\"id\":104,\"user_id\":1,\"sku\":\"NTM23\",\"name\":\"Nothing Testing\",\"slug\":\"nothing-testing\",\"brand_id\":2,\"category_id\":6,\"unit_amount\":\"1.00\",\"unit_id\":1,\"conversion_factor\":null,\"minimum_stock_quantity\":\"0.0000\",\"maximum_stock_quantity\":null,\"current_stock\":\"0.0000\",\"purchase_price\":\"450.00\",\"selling_price\":\"650.00\",\"mrp\":null,\"wholesale_price\":null,\"discount_amount\":\"0.00\",\"cess_percentage\":\"0.00\",\"gst_percentage\":\"18.00\",\"gst_hsn_code\":null,\"discount_percentage\":\"3.00\",\"description\":\"This is just a testing product.\",\"attributes\":[{\"sfdsfdsdf\":\"dssdsfd\",\"dsfdsfdsfsdf\":\"sdsdfsdf\",\"sdsdfdfsfsd\":\"sfdssdf\",\"sdfsdfsdf\":\"sdfsdfs\"}],\"medicine_type_id\":null,\"expiry_date\":null,\"batch_number\":null,\"manufacturer_name\":null,\"prescription_required\":0,\"schedule_type\":null,\"salt_composition\":null,\"perishable\":0,\"organic_certified\":0,\"harvest_date\":null,\"storage_instructions\":null,\"short_description\":null,\"image\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791189\\/Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp.png\",\"qr_code\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791191\\/Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g.svg\",\"barcode\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791193\\/Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd.png\",\"image_public_id\":\"Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp\",\"qr_public_id\":\"Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g\",\"purchase_gst_percentage\":\"0.00\",\"barcode_public_id\":\"Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd\",\"is_active\":1,\"is_featured\":0,\"is_returnable\":1,\"is_refundable\":1,\"warranty_months\":0,\"warehouse_location\":null,\"supplier_id\":null,\"is_social_posted\":0,\"created_by\":\"1\",\"updated_by\":1,\"created_at\":\"2026-05-26T10:26:30.000000Z\",\"updated_at\":\"2026-06-19T06:49:51.000000Z\",\"deleted_at\":null}}]},{\"id\":30,\"user_id\":1,\"order_id\":\"020\",\"store_id\":33,\"total_items\":2,\"total_amount\":\"64292201.74\",\"paid_amount\":\"5616551056.74\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"fdssfdsdfsdf\",\"customer_phone\":\"9007947586\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T07:13:03.000000Z\",\"updated_at\":\"2026-06-08T07:44:41.000000Z\",\"items\":[{\"id\":55,\"user_id\":1,\"customer_order_id\":30,\"order_id\":\"020\",\"product_id\":104,\"quantity\":\"2.00\",\"unit_id\":23,\"price\":\"650.00\",\"gst\":\"18.00\",\"discount\":\"3.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T07:13:03.000000Z\",\"updated_at\":\"2026-06-08T07:44:41.000000Z\",\"product\":{\"id\":104,\"user_id\":1,\"sku\":\"NTM23\",\"name\":\"Nothing Testing\",\"slug\":\"nothing-testing\",\"brand_id\":2,\"category_id\":6,\"unit_amount\":\"1.00\",\"unit_id\":1,\"conversion_factor\":null,\"minimum_stock_quantity\":\"0.0000\",\"maximum_stock_quantity\":null,\"current_stock\":\"0.0000\",\"purchase_price\":\"450.00\",\"selling_price\":\"650.00\",\"mrp\":null,\"wholesale_price\":null,\"discount_amount\":\"0.00\",\"cess_percentage\":\"0.00\",\"gst_percentage\":\"18.00\",\"gst_hsn_code\":null,\"discount_percentage\":\"3.00\",\"description\":\"This is just a testing product.\",\"attributes\":[{\"sfdsfdsdf\":\"dssdsfd\",\"dsfdsfdsfsdf\":\"sdsdfsdf\",\"sdsdfdfsfsd\":\"sfdssdf\",\"sdfsdfsdf\":\"sdfsdfs\"}],\"medicine_type_id\":null,\"expiry_date\":null,\"batch_number\":null,\"manufacturer_name\":null,\"prescription_required\":0,\"schedule_type\":null,\"salt_composition\":null,\"perishable\":0,\"organic_certified\":0,\"harvest_date\":null,\"storage_instructions\":null,\"short_description\":null,\"image\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791189\\/Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp.png\",\"qr_code\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791191\\/Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g.svg\",\"barcode\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791193\\/Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd.png\",\"image_public_id\":\"Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp\",\"qr_public_id\":\"Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g\",\"purchase_gst_percentage\":\"0.00\",\"barcode_public_id\":\"Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd\",\"is_active\":1,\"is_featured\":0,\"is_returnable\":1,\"is_refundable\":1,\"warranty_months\":0,\"warehouse_location\":null,\"supplier_id\":null,\"is_social_posted\":0,\"created_by\":\"1\",\"updated_by\":1,\"created_at\":\"2026-05-26T10:26:30.000000Z\",\"updated_at\":\"2026-06-19T06:49:51.000000Z\",\"deleted_at\":null}},{\"id\":56,\"user_id\":1,\"customer_order_id\":30,\"order_id\":\"020\",\"product_id\":76,\"quantity\":\"13.00\",\"unit_id\":1,\"price\":\"3434333.00\",\"gst\":\"44.00\",\"discount\":\"0.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T07:13:03.000000Z\",\"updated_at\":\"2026-06-08T07:44:41.000000Z\",\"product\":{\"id\":76,\"user_id\":1,\"sku\":\"DSFSDF234\",\"name\":\"sdsfsdf\",\"slug\":\"sdsfsdf\",\"brand_id\":2,\"category_id\":2,\"unit_amount\":\"1.00\",\"unit_id\":1,\"conversion_factor\":null,\"minimum_stock_quantity\":\"0.0000\",\"maximum_stock_quantity\":null,\"current_stock\":\"0.0000\",\"purchase_price\":\"2332322.00\",\"selling_price\":\"3434333.00\",\"mrp\":null,\"wholesale_price\":null,\"discount_amount\":\"0.00\",\"cess_percentage\":\"0.00\",\"gst_percentage\":\"44.00\",\"gst_hsn_code\":null,\"discount_percentage\":\"0.00\",\"description\":null,\"attributes\":null,\"medicine_type_id\":null,\"expiry_date\":null,\"batch_number\":null,\"manufacturer_name\":null,\"prescription_required\":0,\"schedule_type\":null,\"salt_composition\":null,\"perishable\":0,\"organic_certified\":0,\"harvest_date\":null,\"storage_instructions\":null,\"short_description\":null,\"image\":\"https:\\/\\/res.cloudinary.com\\/dkteqyggl\\/image\\/upload\\/v1778588271\\/Thefastbill\\/products\\/nrgrglxp9rwias26h6m8.png\",\"qr_code\":\"https:\\/\\/res.cloudinary.com\\/dkteqyggl\\/image\\/upload\\/v1778588273\\/Thefastbill\\/qr\\/qaineurjttqgqnp6k4am.svg\",\"barcode\":\"https:\\/\\/res.cloudinary.com\\/dkteqyggl\\/image\\/upload\\/v1778588275\\/Thefastbill\\/barcodes\\/dbdhohxaf4sj2hntuoav.png\",\"image_public_id\":\"Thefastbill\\/products\\/nrgrglxp9rwias26h6m8\",\"qr_public_id\":\"Thefastbill\\/qr\\/qaineurjttqgqnp6k4am\",\"purchase_gst_percentage\":\"0.00\",\"barcode_public_id\":\"Thefastbill\\/barcodes\\/dbdhohxaf4sj2hntuoav\",\"is_active\":1,\"is_featured\":0,\"is_returnable\":1,\"is_refundable\":1,\"warranty_months\":0,\"warehouse_location\":null,\"supplier_id\":null,\"is_social_posted\":0,\"created_by\":\"1\",\"updated_by\":1,\"created_at\":\"2026-05-12T12:17:52.000000Z\",\"updated_at\":\"2026-05-12T12:17:56.000000Z\",\"deleted_at\":null}}]},{\"id\":29,\"user_id\":1,\"order_id\":\"019\",\"store_id\":33,\"total_items\":1,\"total_amount\":\"743.99\",\"paid_amount\":\"0.00\",\"payment_status\":\"pending\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"dsfdsfdsf\",\"customer_phone\":\"9007947586\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T06:17:16.000000Z\",\"updated_at\":\"2026-07-02T10:55:45.000000Z\",\"items\":[{\"id\":54,\"user_id\":1,\"customer_order_id\":29,\"order_id\":\"019\",\"product_id\":104,\"quantity\":\"1.00\",\"unit_id\":23,\"price\":\"650.00\",\"gst\":\"18.00\",\"discount\":\"3.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T06:17:16.000000Z\",\"updated_at\":\"2026-07-02T10:55:45.000000Z\",\"product\":{\"id\":104,\"user_id\":1,\"sku\":\"NTM23\",\"name\":\"Nothing Testing\",\"slug\":\"nothing-testing\",\"brand_id\":2,\"category_id\":6,\"unit_amount\":\"1.00\",\"unit_id\":1,\"conversion_factor\":null,\"minimum_stock_quantity\":\"0.0000\",\"maximum_stock_quantity\":null,\"current_stock\":\"0.0000\",\"purchase_price\":\"450.00\",\"selling_price\":\"650.00\",\"mrp\":null,\"wholesale_price\":null,\"discount_amount\":\"0.00\",\"cess_percentage\":\"0.00\",\"gst_percentage\":\"18.00\",\"gst_hsn_code\":null,\"discount_percentage\":\"3.00\",\"description\":\"This is just a testing product.\",\"attributes\":[{\"sfdsfdsdf\":\"dssdsfd\",\"dsfdsfdsfsdf\":\"sdsdfsdf\",\"sdsdfdfsfsd\":\"sfdssdf\",\"sdfsdfsdf\":\"sdfsdfs\"}],\"medicine_type_id\":null,\"expiry_date\":null,\"batch_number\":null,\"manufacturer_name\":null,\"prescription_required\":0,\"schedule_type\":null,\"salt_composition\":null,\"perishable\":0,\"organic_certified\":0,\"harvest_date\":null,\"storage_instructions\":null,\"short_description\":null,\"image\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791189\\/Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp.png\",\"qr_code\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791191\\/Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g.svg\",\"barcode\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791193\\/Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd.png\",\"image_public_id\":\"Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp\",\"qr_public_id\":\"Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g\",\"purchase_gst_percentage\":\"0.00\",\"barcode_public_id\":\"Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd\",\"is_active\":1,\"is_featured\":0,\"is_returnable\":1,\"is_refundable\":1,\"warranty_months\":0,\"warehouse_location\":null,\"supplier_id\":null,\"is_social_posted\":0,\"created_by\":\"1\",\"updated_by\":1,\"created_at\":\"2026-05-26T10:26:30.000000Z\",\"updated_at\":\"2026-06-19T06:49:51.000000Z\",\"deleted_at\":null}}]},{\"id\":28,\"user_id\":1,\"order_id\":\"018\",\"store_id\":33,\"total_items\":1,\"total_amount\":\"743.99\",\"paid_amount\":\"743.99\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"Sahel\",\"customer_phone\":\"9007947586\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T05:31:44.000000Z\",\"updated_at\":\"2026-06-08T08:02:37.000000Z\",\"items\":[{\"id\":53,\"user_id\":1,\"customer_order_id\":28,\"order_id\":\"018\",\"product_id\":104,\"quantity\":\"1.00\",\"unit_id\":23,\"price\":\"650.00\",\"gst\":\"18.00\",\"discount\":\"3.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-06-06T05:31:44.000000Z\",\"updated_at\":\"2026-06-08T08:02:37.000000Z\",\"product\":{\"id\":104,\"user_id\":1,\"sku\":\"NTM23\",\"name\":\"Nothing Testing\",\"slug\":\"nothing-testing\",\"brand_id\":2,\"category_id\":6,\"unit_amount\":\"1.00\",\"unit_id\":1,\"conversion_factor\":null,\"minimum_stock_quantity\":\"0.0000\",\"maximum_stock_quantity\":null,\"current_stock\":\"0.0000\",\"purchase_price\":\"450.00\",\"selling_price\":\"650.00\",\"mrp\":null,\"wholesale_price\":null,\"discount_amount\":\"0.00\",\"cess_percentage\":\"0.00\",\"gst_percentage\":\"18.00\",\"gst_hsn_code\":null,\"discount_percentage\":\"3.00\",\"description\":\"This is just a testing product.\",\"attributes\":[{\"sfdsfdsdf\":\"dssdsfd\",\"dsfdsfdsfsdf\":\"sdsdfsdf\",\"sdsdfdfsfsd\":\"sfdssdf\",\"sdfsdfsdf\":\"sdfsdfs\"}],\"medicine_type_id\":null,\"expiry_date\":null,\"batch_number\":null,\"manufacturer_name\":null,\"prescription_required\":0,\"schedule_type\":null,\"salt_composition\":null,\"perishable\":0,\"organic_certified\":0,\"harvest_date\":null,\"storage_instructions\":null,\"short_description\":null,\"image\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791189\\/Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp.png\",\"qr_code\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791191\\/Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g.svg\",\"barcode\":\"https:\\/\\/res.cloudinary.com\\/dcj4fafql\\/image\\/upload\\/v1779791193\\/Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd.png\",\"image_public_id\":\"Thefastbill\\/products\\/zjr0zitf5auyhugu0hgp\",\"qr_public_id\":\"Thefastbill\\/qr\\/ruw3gdd2bclvda2sj09g\",\"purchase_gst_percentage\":\"0.00\",\"barcode_public_id\":\"Thefastbill\\/barcodes\\/rlt6gxlbqg5imirag7bd\",\"is_active\":1,\"is_featured\":0,\"is_returnable\":1,\"is_refundable\":1,\"warranty_months\":0,\"warehouse_location\":null,\"supplier_id\":null,\"is_social_posted\":0,\"created_by\":\"1\",\"updated_by\":1,\"created_at\":\"2026-05-26T10:26:30.000000Z\",\"updated_at\":\"2026-06-19T06:49:51.000000Z\",\"deleted_at\":null}}]},{\"id\":20,\"user_id\":1,\"order_id\":\"017\",\"store_id\":1,\"total_items\":2,\"total_amount\":\"22301.28\",\"paid_amount\":\"11000.00\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"Test dsfksdfkdsf\",\"customer_phone\":\"9007947586\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-05-07T11:51:29.000000Z\",\"updated_at\":\"2026-05-08T05:33:48.000000Z\",\"items\":[{\"id\":44,\"user_id\":1,\"customer_order_id\":20,\"order_id\":\"017\",\"product_id\":12,\"quantity\":\"1.00\",\"unit_id\":1,\"price\":\"23442.00\",\"gst\":\"23.00\",\"discount\":\"33.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-05-07T11:51:29.000000Z\",\"updated_at\":\"2026-05-07T11:51:58.000000Z\",\"product\":null},{\"id\":45,\"user_id\":1,\"customer_order_id\":20,\"order_id\":\"017\",\"product_id\":13,\"quantity\":\"1.00\",\"unit_id\":2,\"price\":\"3323.00\",\"gst\":\"2.00\",\"discount\":\"12.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-05-07T11:51:29.000000Z\",\"updated_at\":\"2026-05-07T11:51:58.000000Z\",\"product\":null}]},{\"id\":19,\"user_id\":1,\"order_id\":\"016\",\"store_id\":1,\"total_items\":2,\"total_amount\":\"22301.28\",\"paid_amount\":\"22301.28\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"Sahil\",\"customer_phone\":\"9007947586\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-05-07T11:46:00.000000Z\",\"updated_at\":\"2026-06-08T12:33:11.000000Z\",\"items\":[{\"id\":42,\"user_id\":1,\"customer_order_id\":19,\"order_id\":\"016\",\"product_id\":12,\"quantity\":\"1.00\",\"unit_id\":1,\"price\":\"23442.00\",\"gst\":\"23.00\",\"discount\":\"33.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-05-07T11:46:00.000000Z\",\"updated_at\":\"2026-05-08T05:20:43.000000Z\",\"product\":null},{\"id\":43,\"user_id\":1,\"customer_order_id\":19,\"order_id\":\"016\",\"product_id\":13,\"quantity\":\"1.00\",\"unit_id\":2,\"price\":\"3323.00\",\"gst\":\"2.00\",\"discount\":\"12.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-05-07T11:46:00.000000Z\",\"updated_at\":\"2026-05-08T05:20:43.000000Z\",\"product\":null}]},{\"id\":18,\"user_id\":1,\"order_id\":\"015\",\"store_id\":1,\"total_items\":1,\"total_amount\":\"27276.01\",\"paid_amount\":\"0.00\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"dsffds\",\"customer_phone\":\"8479055677\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-04-28T11:40:18.000000Z\",\"updated_at\":\"2026-05-08T05:27:56.000000Z\",\"items\":[{\"id\":41,\"user_id\":1,\"customer_order_id\":18,\"order_id\":\"015\",\"product_id\":25,\"quantity\":\"1.00\",\"unit_id\":1,\"price\":\"23433.00\",\"gst\":\"20.00\",\"discount\":\"3.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-04-28T11:40:18.000000Z\",\"updated_at\":\"2026-05-08T05:27:55.000000Z\",\"product\":null}]},{\"id\":17,\"user_id\":1,\"order_id\":\"014\",\"store_id\":1,\"total_items\":2,\"total_amount\":\"22301.28\",\"paid_amount\":\"22301.28\",\"payment_status\":\"completed\",\"payment_method\":\"cash\",\"order_status\":\"completed\",\"customer_name\":\"ssdffddsf\",\"customer_phone\":\"8479055677\",\"order_by\":\"user\",\"created_by\":\"1\",\"created_at\":\"2026-04-28T10:21:49.000000Z\",\"updated_at\":\"2026-05-08T05:33:08.000000Z\",\"items\":[{\"id\":39,\"user_id\":1,\"customer_order_id\":17,\"order_id\":\"014\",\"product_id\":12,\"quantity\":\"1.00\",\"unit_id\":1,\"price\":\"23442.00\",\"gst\":\"23.00\",\"discount\":\"33.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-04-28T10:21:49.000000Z\",\"updated_at\":\"2026-05-08T05:33:08.000000Z\",\"product\":null},{\"id\":40,\"user_id\":1,\"customer_order_id\":17,\"order_id\":\"014\",\"product_id\":13,\"quantity\":\"1.00\",\"unit_id\":2,\"price\":\"3323.00\",\"gst\":\"2.00\",\"discount\":\"12.00\",\"status\":\"completed\",\"created_by\":\"1\",\"created_at\":\"2026-04-28T10:21:49.000000Z\",\"updated_at\":\"2026-05-08T05:33:08.000000Z\",\"product\":null}]}],\"first_page_url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=1\",\"from\":1,\"last_page\":3,\"last_page_url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=3\",\"links\":[{\"url\":null,\"label\":\"&laquo; Previous\",\"page\":null,\"active\":false},{\"url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=1\",\"label\":\"1\",\"page\":1,\"active\":true},{\"url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=2\",\"label\":\"2\",\"page\":2,\"active\":false},{\"url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=3\",\"label\":\"3\",\"page\":3,\"active\":false},{\"url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=2\",\"label\":\"Next &raquo;\",\"page\":2,\"active\":false}],\"next_page_url\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1?page=2\",\"path\":\"http:\\/\\/192.168.1.173:8000\\/api\\/invoice\\/user-order-history\\/1\",\"per_page\":8,\"prev_page_url\":null,\"to\":8,\"total\":21}}",
+        "_responseType": "",
+        "_sent": true,
+        "_startTime": 440228188.093365,
+        "_subscriptions": [],
+        "_timedOut": false,
+        "_url": "http://192.168.1.173:8000/api/invoice/user-order-history/1?_t=1782993293351",
+        "readyState": 4,
+        "responseHeaders": {
+            "Cache-Control": "no-cache, private",
+            "Connection": "close",
+            "Content-Type": "application/json",
+            "Date": "Thu, 02 Jul 2026 11:54:55 GMT",
+            "Host": "192.168.1.173:8000",
+            "Vary": "Origin",
+            "X-Powered-By": "PHP/8.2.12"
+        },
+        "responseURL": "http://192.168.1.173:8000/api/invoice/user-order-history/1?_t=1782993293351",
+        "status": 200,
+        "timeout": 60000,
+        "upload": {},
+        "withCredentials": false, Symbol(bubblingListeners): Map {
+            "loadend" => [Map
+            ],
+            "abort" => [Map
+            ],
+            "error" => [Map
+            ],
+            "timeout" => [Map
+            ]
+        }, Symbol(eventHandlerAttributeMap): Map {
+            "loadend" => [Object
+            ],
+            "abort" => [Object
+            ],
+            "error" => [Object
+            ],
+            "timeout" => [Object
+            ]
+        }
+    },
+    "status": 200,
+    "statusText": undefined
+}

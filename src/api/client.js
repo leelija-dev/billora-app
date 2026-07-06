@@ -1,4 +1,4 @@
-// api/client.js
+// api/client.js - COMPLETE FIXED VERSION
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Platform } from "react-native";
@@ -89,7 +89,6 @@ apiClient.defaults.transformResponse = [
       );
 
       // Only try to fix if it looks like truncated JSON (missing closing brackets)
-      // Don't apply aggressive regex fixes that corrupt valid JSON
       let fixed = trimmed;
 
       // Fix: Missing closing brackets only (common truncation issue)
@@ -303,7 +302,7 @@ apiClient.interceptors.response.use(
   },
 );
 
-// Utility functions
+// ✅ FIXED: unwrapApiResponse - handles already unwrapped data
 export const unwrapApiResponse = (response) => {
   if (!response || !response.data) {
     return response;
@@ -312,7 +311,7 @@ export const unwrapApiResponse = (response) => {
   const data = response.data;
 
   if (typeof data === "object" && "status" in data && "data" in data) {
-    if (data.status === true) {
+    if (data.status === true || data.status === "success") {
       return {
         ...response,
         data: data.data,
@@ -329,11 +328,11 @@ export const unwrapApiResponse = (response) => {
   return response;
 };
 
+// ✅ FIXED: getPaginatedData - handles already unwrapped data without double parsing
 export const getPaginatedData = (response) => {
   try {
-    const unwrapped = unwrapApiResponse(response);
-
-    if (!unwrapped || !unwrapped.data) {
+    // If response is null or undefined
+    if (!response) {
       return {
         data: [],
         current_page: 1,
@@ -350,19 +349,75 @@ export const getPaginatedData = (response) => {
       };
     }
 
-    // If data has pagination structure
-    if (unwrapped.data.data !== undefined) {
-      return unwrapped.data;
+    // Get the data from response
+    let dataObj = response.data || response;
+
+    // If dataObj is a string, try to parse it
+    if (typeof dataObj === 'string') {
+      try {
+        dataObj = JSON.parse(dataObj);
+      } catch (e) {
+        console.error('Failed to parse string data:', e);
+        return {
+          data: [],
+          current_page: 1,
+          last_page: 1,
+          total: 0,
+          per_page: 15,
+          next_page_url: null,
+          prev_page_url: null,
+          first_page_url: null,
+          last_page_url: null,
+          path: null,
+          from: null,
+          to: null,
+        };
+      }
     }
 
-    // If data is array, wrap it
-    if (Array.isArray(unwrapped.data)) {
+    // If dataObj is already paginated data structure
+    if (dataObj && typeof dataObj === 'object' && dataObj.current_page !== undefined) {
+      // Ensure data is an array
+      if (!Array.isArray(dataObj.data)) {
+        dataObj.data = [];
+      }
+      return dataObj;
+    }
+
+    // If dataObj has a data property that is the paginated structure
+    if (dataObj && dataObj.data && dataObj.data.current_page !== undefined) {
+      if (!Array.isArray(dataObj.data.data)) {
+        dataObj.data.data = [];
+      }
+      return dataObj.data;
+    }
+
+    // If dataObj has a data property that's an array
+    if (dataObj && dataObj.data && Array.isArray(dataObj.data)) {
       return {
-        data: unwrapped.data,
+        data: dataObj.data,
+        current_page: dataObj.current_page || 1,
+        last_page: dataObj.last_page || 1,
+        total: dataObj.total || dataObj.data.length,
+        per_page: dataObj.per_page || 15,
+        next_page_url: dataObj.next_page_url || null,
+        prev_page_url: dataObj.prev_page_url || null,
+        first_page_url: dataObj.first_page_url || null,
+        last_page_url: dataObj.last_page_url || null,
+        path: dataObj.path || null,
+        from: dataObj.from || null,
+        to: dataObj.to || null,
+      };
+    }
+
+    // If dataObj is an array directly
+    if (Array.isArray(dataObj)) {
+      return {
+        data: dataObj,
         current_page: 1,
         last_page: 1,
-        total: unwrapped.data.length,
-        per_page: unwrapped.data.length,
+        total: dataObj.length,
+        per_page: dataObj.length,
         next_page_url: null,
         prev_page_url: null,
         first_page_url: null,
@@ -373,7 +428,42 @@ export const getPaginatedData = (response) => {
       };
     }
 
-    return unwrapped.data;
+    // If dataObj has a data property that's an object with data array
+    if (dataObj && dataObj.data && typeof dataObj.data === 'object') {
+      const nestedData = dataObj.data;
+      if (nestedData.data && Array.isArray(nestedData.data)) {
+        return {
+          data: nestedData.data,
+          current_page: nestedData.current_page || 1,
+          last_page: nestedData.last_page || 1,
+          total: nestedData.total || nestedData.data.length,
+          per_page: nestedData.per_page || 15,
+          next_page_url: nestedData.next_page_url || null,
+          prev_page_url: nestedData.prev_page_url || null,
+          first_page_url: nestedData.first_page_url || null,
+          last_page_url: nestedData.last_page_url || null,
+          path: nestedData.path || null,
+          from: nestedData.from || null,
+          to: nestedData.to || null,
+        };
+      }
+    }
+
+    // If nothing matches, return empty paginated data
+    return {
+      data: [],
+      current_page: 1,
+      last_page: 1,
+      total: 0,
+      per_page: 15,
+      next_page_url: null,
+      prev_page_url: null,
+      first_page_url: null,
+      last_page_url: null,
+      path: null,
+      from: null,
+      to: null,
+    };
   } catch (error) {
     console.error("Error getting paginated data:", error);
     return {
@@ -381,7 +471,7 @@ export const getPaginatedData = (response) => {
       current_page: 1,
       last_page: 1,
       total: 0,
-      per_page: 1,
+      per_page: 15,
       next_page_url: null,
       prev_page_url: null,
       first_page_url: null,
@@ -393,10 +483,66 @@ export const getPaginatedData = (response) => {
   }
 };
 
+// ✅ FIXED: getEntityData - handles already unwrapped data
 export const getEntityData = (response) => {
   try {
-    const unwrapped = unwrapApiResponse(response);
-    return unwrapped?.data || null;
+    if (!response) return null;
+
+    // Get the data from response
+    let dataObj = response.data || response;
+
+    // If dataObj is a string, try to parse it
+    if (typeof dataObj === 'string') {
+      try {
+        dataObj = JSON.parse(dataObj);
+      } catch (e) {
+        console.error('Failed to parse string data:', e);
+        return null;
+      }
+    }
+
+    // If dataObj is already the entity
+    if (dataObj && typeof dataObj === 'object') {
+      // If it has an id, it's likely the entity
+      if (dataObj.id !== undefined) {
+        return dataObj;
+      }
+
+      // If it has a data property that has an id
+      if (dataObj.data && dataObj.data.id !== undefined) {
+        return dataObj.data;
+      }
+
+      // If it has a data property that's the entity
+      if (dataObj.data && typeof dataObj.data === 'object') {
+        return dataObj.data;
+      }
+
+      // If it has a data property that's an array with one item
+      if (dataObj.data && Array.isArray(dataObj.data) && dataObj.data.length === 1) {
+        return dataObj.data[0];
+      }
+
+      // If it has a data property that's an array with multiple items
+      if (dataObj.data && Array.isArray(dataObj.data) && dataObj.data.length > 1) {
+        return dataObj.data;
+      }
+
+      // If it's the data object itself
+      return dataObj;
+    }
+
+    // If dataObj is an array with one item
+    if (Array.isArray(dataObj) && dataObj.length === 1) {
+      return dataObj[0];
+    }
+
+    // If dataObj is an array with multiple items
+    if (Array.isArray(dataObj)) {
+      return dataObj;
+    }
+
+    return dataObj;
   } catch (error) {
     console.error("Error getting entity data:", error);
     return null;
