@@ -11,7 +11,9 @@ import CategoriesStackNavigator from "./stacks/CategoriesStack";
 import CustomersStackNavigator from "./stacks/CustomersStack";
 
 
+import MedicineTypesStackNavigator from "./stacks/MedicineTypesStack";
 import OrdersStackNavigator from "./stacks/OrdersStack";
+import PackagesStackNavigator from "./stacks/PackagesStack";
 import ProductsStackNavigator from "./stacks/ProductsStack";
 import ReportsStackNavigator from "./stacks/ReportsStack";
 import SellersStackNavigator from "./stacks/SellersStack";
@@ -34,6 +36,8 @@ const COMPONENT_MAP = {
   Categories: CategoriesStackNavigator,
   Brands: BrandsStackNavigator,
   Units: UnitsStackNavigator,
+  MedicineTypes: MedicineTypesStackNavigator,
+  Packages: PackagesStackNavigator,
   Stores: StoresStackNavigator,
   Sellers: SellersStackNavigator,
   Settings: SettingsStackNavigator,

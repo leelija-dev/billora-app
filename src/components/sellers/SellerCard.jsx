@@ -3,7 +3,7 @@ import { TouchableOpacity, View, Text } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
 
-const SellerCard = ({ seller, onEdit, onDelete }) => {
+const SellerCard = ({ seller, onEdit, onDelete, onPress }) => {
   const { isDarkMode } = useThemeStore();
 
   const dueAmount = parseFloat(seller.due_amount) || 0;
@@ -11,6 +11,7 @@ const SellerCard = ({ seller, onEdit, onDelete }) => {
 
   return (
     <TouchableOpacity
+      onPress={() => onPress && onPress(seller)}
       className={`rounded-xl p-4 shadow-sm ${
         isDarkMode ? "bg-gray-800" : "bg-white"
       }`}

@@ -1,4 +1,4 @@
-// api/sellers.js
+// api/sellers.js - UPDATED FOR REACT NATIVE
 import apiClient from "./client";
 
 export const sellersAPI = {
@@ -82,6 +82,21 @@ export const sellersAPI = {
     }
   },
 
+  // Get seller products
+  getSellerProducts: async (sellerId, page = 1, search = "") => {
+    try {
+      const params = { page };
+      if (search) params.search = search;
+      console.log(`📦 Fetching seller products for seller ${sellerId}:`, params);
+      const response = await apiClient.get(`/seller-products/${sellerId}`, { params });
+      console.log('📦 Seller products fetched successfully');
+      return response;
+    } catch (error) {
+      console.error(`❌ Failed to fetch seller products ${sellerId}:`, error);
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Make due payment
   makeDuePayment: async (sellerId, paymentData) => {
     try {
@@ -91,6 +106,19 @@ export const sellersAPI = {
       return response;
     } catch (error) {
       console.error(`❌ Failed to make due payment for seller ${sellerId}:`, error);
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Get payment history
+  getPaymentHistory: async (sellerId, page = 1) => {
+    try {
+      console.log(`📊 Fetching payment history for seller ${sellerId}:`, { page });
+      const response = await apiClient.get(`/seller/payment-history/${sellerId}`, { params: { page } });
+      console.log('📊 Payment history fetched successfully');
+      return response;
+    } catch (error) {
+      console.error(`❌ Failed to fetch payment history ${sellerId}:`, error);
       throw error.response?.data || error.message;
     }
   },

@@ -22,7 +22,7 @@ import {
 } from "../../components/common/CustomModal";
 import Header from "../../components/common/Header";
 import { useAuthStore } from "../../store/authStore";
-import { useMedicineTypeStore } from "../../store/medicineTypeStore";
+import useMedicineTypeStore from "../../store/medicineTypeStore";
 import { useThemeStore } from "../../store/themeStore";
 
 const { width } = Dimensions.get("window");

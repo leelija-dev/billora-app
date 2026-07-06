@@ -1,3 +1,4 @@
+// components/sellers/SellerList.js - COMPLETE FIXED VERSION
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import {
@@ -22,6 +23,7 @@ const SellerList = ({
   onRefresh = () => {},
   onDelete = () => {},
   onEdit = () => {},
+  onPress = () => {},
 }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
@@ -41,7 +43,6 @@ const SellerList = ({
     if (!Array.isArray(sellers)) return [];
     let filtered = [...sellers];
     
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -55,7 +56,6 @@ const SellerList = ({
       );
     }
     
-    // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'name':
@@ -72,7 +72,6 @@ const SellerList = ({
     return filtered;
   }, [sellers, searchQuery, sortBy]);
 
-  // Statistics
   const stats = useMemo(() => {
     if (!Array.isArray(sellers)) return {
       total: 0,
@@ -90,9 +89,12 @@ const SellerList = ({
     };
   }, [sellers]);
 
+  // FIXED: Use 'id' parameter for navigation
   const handleSellerPress = (seller) => {
-    navigation.navigate("SellerDetail", { sellerId: seller.id });
-  };
+  console.log("🖱️ Seller pressed:", seller.id, seller.name);
+  // Use "SellerDetail" (without 's') to match the stack navigator
+  navigation.navigate("SellerDetail", { id: seller.id });
+};
 
   const handleDeleteSeller = async (sellerId) => {
     console.log('SellerList: Deleting seller:', sellerId);
@@ -141,7 +143,6 @@ const SellerList = ({
         )}
       </View>
       
-      {/* City stats */}
       {stats.cities > 0 && (
         <View className="flex-row mt-2">
           <View className={`flex-row items-center px-2 py-1 rounded-full ${
@@ -165,6 +166,7 @@ const SellerList = ({
         seller={item} 
         onEdit={onEdit}
         onDelete={handleDeleteSeller}
+        onPress={handleSellerPress}
       />
     </View>
   );
@@ -177,7 +179,6 @@ const SellerList = ({
         isDarkMode ? 'bg-gray-800' : 'bg-white'
       }`}
     >
-      {/* Seller Icon */}
       <View className="mr-3">
         <View className={`w-12 h-12 rounded-xl items-center justify-center ${
           isDarkMode ? 'bg-gray-700' : 'bg-gray-200'

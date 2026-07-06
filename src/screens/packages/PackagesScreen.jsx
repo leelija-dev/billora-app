@@ -83,7 +83,7 @@ const PackagesScreen = ({ navigation }) => {
     useCallback(() => {
       setInitialLoading(true);
       if (user?.id) {
-        fetchPackages(user.id, 1, false, false).finally(() => {
+        fetchPackages(1, user.id, false).finally(() => {
           setInitialLoading(false);
         });
       }
@@ -104,12 +104,12 @@ const PackagesScreen = ({ navigation }) => {
       if (searchText !== "") {
         setFilters({ search: searchText });
         if (user?.id) {
-          fetchPackages(user.id, 1, true, false);
+          fetchPackages(1, user.id, false);
         }
       } else if (searchText === "") {
         setFilters({ search: "" });
         if (user?.id) {
-          fetchPackages(user.id, 1, true, false);
+          fetchPackages(1, user.id, false);
         }
       }
     }, 500);
@@ -121,7 +121,7 @@ const PackagesScreen = ({ navigation }) => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (user?.id) {
-      await fetchPackages(user.id, 1, true, false);
+      await fetchPackages(1, user.id, false);
     }
     setRefreshing(false);
   }, [fetchPackages, user?.id]);
@@ -271,7 +271,7 @@ const PackagesScreen = ({ navigation }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     if (user?.id) {
-      await fetchPackages(user.id, 1, true, false);
+      await fetchPackages(1, user.id, false);
     }
     setRefreshing(false);
   };

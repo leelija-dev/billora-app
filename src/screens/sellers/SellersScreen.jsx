@@ -1,4 +1,4 @@
-// screens/sellers/SellersScreen.js - PAGINATION IMPLEMENTATION
+// screens/sellers/SellersScreen.js - COMPLETE WITH PAGINATION
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
 import SellerForm from "../../components/sellers/SellerForm";
 import SellerList from "../../components/sellers/SellerList";
+import DuePaymentModal from "../../components/sellers/DuePaymentModal";
 
 const SellersScreen = () => {
   const navigation = useNavigation();
@@ -45,11 +46,13 @@ const SellersScreen = () => {
     updateSeller,
     deleteSeller,
     setFilters,
+    getSellerById,
+    processDuePayment,
+    paymentProcessing,
   } = useSellerStore();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState("grid");
-  const [sortBy, setSortBy] = useState("name");
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -65,6 +68,10 @@ const SellersScreen = () => {
   const [deleting, setDeleting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  
+  // Payment modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPaymentSeller, setSelectedPaymentSeller] = useState(null);
 
   const scrollViewRef = useRef(null);
 
@@ -91,7 +98,6 @@ const SellersScreen = () => {
   useFocusEffect(
     useCallback(() => {
       setInitialLoading(true);
-      // Reset pagination state on focus
       fetchSellers(getUserId(), 1, filters.search, false).finally(() => {
         setInitialLoading(false);
       });
@@ -111,7 +117,6 @@ const SellersScreen = () => {
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery !== filters.search) {
         setFilters({ search: searchQuery });
-        // Reset to page 1 on search
         fetchSellers(getUserId(), 1, searchQuery, false);
       }
     }, 500);
@@ -128,7 +133,6 @@ const SellersScreen = () => {
 
   // Handle load more with proper conditions
   const handleLoadMore = useCallback(async () => {
-    // Check conditions properly
     if (isLoadingMore || loadingMore || loading) {
       console.log('⏭️ Skipping - already loading');
       return;
@@ -158,11 +162,9 @@ const SellersScreen = () => {
     const scrollViewHeight = layoutMeasurement.height;
     const totalContentHeight = contentSize.height;
     
-    // Calculate scroll percentage
     const maxScroll = totalContentHeight - scrollViewHeight;
     const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
     
-    // Check if user has scrolled 50% of the screen height
     const triggerThreshold = 50;
     const shouldLoadMore = scrollPercentage >= triggerThreshold;
     
@@ -179,10 +181,18 @@ const SellersScreen = () => {
     setShowFormModal(true);
   };
 
-  const handleEditSeller = (seller) => {
-    setSelectedSeller(seller);
-    setIsEditing(true);
-    setShowFormModal(true);
+  const handleEditSeller = async (seller) => {
+    try {
+      const sellerData = await getSellerById(seller.id);
+      setSelectedSeller(sellerData || seller);
+      setIsEditing(true);
+      setShowFormModal(true);
+    } catch (error) {
+      console.error("Failed to fetch seller data:", error);
+      setSelectedSeller(seller);
+      setIsEditing(true);
+      setShowFormModal(true);
+    }
   };
 
   const handleCancelForm = () => {
@@ -217,7 +227,7 @@ const SellersScreen = () => {
       }
 
       handleCancelForm();
-      await fetchSellers(getUserId(), currentPage, filters.search, false);
+      await fetchSellers(getUserId(), 1, filters.search, false);
     } catch (error) {
       console.error("Submit error:", error);
       setSuccessMessage(error.message || "An error occurred");
@@ -242,7 +252,7 @@ const SellersScreen = () => {
         setSuccessMessage("Seller deleted successfully");
         setShowSuccessModal(true);
         setTimeout(() => setShowSuccessModal(false), 2000);
-        await fetchSellers(getUserId(), currentPage, filters.search, false);
+        await fetchSellers(getUserId(), 1, filters.search, false);
       } else {
         setSuccessMessage(result.error || "Failed to delete seller");
         setShowSuccessModal(true);
@@ -260,6 +270,14 @@ const SellersScreen = () => {
     }
   };
 
+  const handlePaymentClick = (seller) => {
+    setSelectedPaymentSeller(seller);
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSuccess = async () => {
+    await fetchSellers(getUserId(), 1, filters.search, false);
+  };
 
   const toggleViewMode = () => {
     setViewMode(viewMode === "grid" ? "list" : "grid");
@@ -283,6 +301,7 @@ const SellersScreen = () => {
   if (initialLoading) {
     return (
       <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#F9FAFB"} />
         <ActivityIndicator size="large" color="#3b82f6" />
         <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>Loading sellers...</Text>
       </View>
@@ -290,8 +309,8 @@ const SellersScreen = () => {
   }
 
   return (
-    <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} pb-16`}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
+    <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#F9FAFB"} />
 
       <Header
         title="Sellers"
@@ -301,13 +320,31 @@ const SellersScreen = () => {
         navigationItems={menuItems}
         rightComponent={
           <View className="flex-row items-center">
-            <TouchableOpacity onPress={toggleViewMode} className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-              <Icon name={viewMode === "grid" ? "view-grid" : "view-list"} size={22} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            <TouchableOpacity 
+              onPress={handleRefresh} 
+              disabled={loading}
+              className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}
+            >
+              <Icon 
+                name="refresh" 
+                size={20} 
+                color={loading ? (isDarkMode ? "#4B5563" : "#9CA3AF") : (isDarkMode ? "#9CA3AF" : "#4b5563")} 
+              />
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleRefresh} className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-              <Icon name="refresh" size={20} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
+            <TouchableOpacity 
+              onPress={toggleViewMode} 
+              className={`w-10 h-10 rounded-full items-center justify-center mr-2 ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}
+            >
+              <Icon 
+                name={viewMode === "grid" ? "view-list" : "view-grid"} 
+                size={22} 
+                color={isDarkMode ? "#9CA3AF" : "#4b5563"} 
+              />
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleAddSeller} className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/30">
+            <TouchableOpacity 
+              onPress={handleAddSeller} 
+              className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/30"
+            >
               <Icon name="plus" size={24} color="#ffffff" />
             </TouchableOpacity>
           </View>
@@ -333,15 +370,40 @@ const SellersScreen = () => {
         </View>
       </View>
 
+      {/* Page Indicator */}
+      <View className={`px-4 py-2 flex-row justify-between items-center border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>
+        <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          {totalSellersCount > 0 ? `Showing ${safeSellers.length} of ${totalSellersCount} sellers` : `${safeSellers.length} sellers`}
+        </Text>
+        <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          Page {currentPage}/{lastPage}
+        </Text>
+      </View>
+
       <ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh} 
+            colors={["#3b82f6"]} 
+            tintColor={isDarkMode ? "#F9FAFB" : "#3b82f6"} 
+          />
+        }
         onScroll={handleScroll}
-        scrollEventThrottle={400}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 20 }}
       >
         {/* Stats Cards */}
         <View className="flex-row flex-wrap px-4 py-3">
-          <LinearGradient style={{borderRadius:8}} colors={["#3b82f6", "#2563eb"]} className="rounded-xl p-4 flex-1 mr-2" start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <LinearGradient 
+            style={{borderRadius: 12}} 
+            colors={["#3b82f6", "#2563eb"]} 
+            className="rounded-xl p-4 flex-1 mr-2" 
+            start={{ x: 0, y: 0 }} 
+            end={{ x: 1, y: 1 }}
+          >
             <Text className="text-white/80 text-xs">Total Sellers</Text>
             <Text className="text-white text-2xl font-bold">{totalSellersCount}</Text>
             <View className="flex-row items-center mt-1">
@@ -382,58 +444,53 @@ const SellersScreen = () => {
           </View>
         </View>
 
-        {/* Sort Options */}
-        <View className="flex-row px-4 mb-4">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row">
-              {[
-                { id: "name", label: "Name", icon: "sort-alphabetical-ascending" },
-                { id: "city", label: "City", icon: "city" },
-                { id: "due", label: "Due Amount", icon: "currency-inr" },
-              ].map((option) => (
-                <TouchableOpacity
-                  key={option.id}
-                  onPress={() => setSortBy(option.id)}
-                  className={`flex-row items-center mr-2 px-4 py-2 rounded-full border ${sortBy === option.id ? "bg-blue-500 border-blue-500" : isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}
-                >
-                  <Icon name={option.icon} size={16} color={sortBy === option.id ? "#ffffff" : isDarkMode ? "#9CA3AF" : "#4b5563"} />
-                  <Text className={`ml-2 text-sm ${sortBy === option.id ? "text-white" : isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-
         {/* Seller List */}
         <View className="flex-1 px-4 pb-4">
-          <SellerList
-            sellers={safeSellers}
-            viewMode={viewMode}
-            sortBy={sortBy}
-            loading={loading}
-            searchQuery={searchQuery}
-            onEdit={handleEditSeller}
-            onDelete={handleDeleteClick}
-            onRefresh={handleRefresh}
-          />
+          {loading && safeSellers.length === 0 ? (
+            <View className="py-12 items-center">
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                Loading sellers...
+              </Text>
+            </View>
+          ) : safeSellers.length === 0 ? (
+            <View className="py-20 items-center">
+              <Icon name="account-group" size={80} color={isDarkMode ? '#334155' : '#D1D5DB'} />
+              <Text className={`text-lg mt-4 text-center ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                No sellers found
+              </Text>
+              <Text className={`text-sm mt-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                {searchQuery ? 'Try adjusting your search' : 'Tap the + button to add your first seller'}
+              </Text>
+            </View>
+          ) : (
+            <SellerList
+              sellers={safeSellers}
+              viewMode={viewMode}
+              loading={loading}
+              searchQuery={searchQuery}
+              onEdit={handleEditSeller}
+              onDelete={handleDeleteClick}
+              onPayment={handlePaymentClick}
+              onRefresh={handleRefresh}
+            />
+          )}
 
-          {/* Loading indicator for infinite scroll */}
-          {loadingMore && currentPage < lastPage && (
-            <View className="py-4 items-center">
+          {/* Loading More Indicator */}
+          {(isLoadingMore || loadingMore) && (
+            <View className="py-6 items-center">
               <ActivityIndicator size="small" color="#3B82F6" />
-              <Text className={`text-sm mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                 Loading more sellers...
               </Text>
             </View>
           )}
 
-          {/* End of list indicator */}
-          {!hasMore && safeSellers.length > 0 && (
+          {/* No More Sellers */}
+          {!hasMore && safeSellers.length > 0 && safeSellers.length === totalSellersCount && (
             <View className="py-4 items-center">
-              <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                Showing all {safeSellers.length} sellers
+              <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                No more sellers to load
               </Text>
             </View>
           )}
@@ -450,6 +507,18 @@ const SellersScreen = () => {
           isEdit={isEditing}
         />
       </Modal>
+
+      {/* Payment Modal */}
+      <DuePaymentModal
+        seller={selectedPaymentSeller}
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setSelectedPaymentSeller(null);
+        }}
+        onSuccess={handlePaymentSuccess}
+        processing={paymentProcessing}
+      />
 
       {/* Delete Confirmation Modal */}
       <ConfirmationModal

@@ -1,9 +1,10 @@
-// store/sellerStore.js
+// store/sellerStore.js - COMPLETE FIXED VERSION
 import { create } from "zustand";
 import { sellersAPI } from "../api/sellers";
-import { useAuthStore } from "./authStore";
+import Toast from "react-native-toast-message";
 
 const useSellerStore = create((set, get) => ({
+  // State
   sellers: [],
   totalSellers: 0,
   currentPage: 1,
@@ -17,6 +18,67 @@ const useSellerStore = create((set, get) => ({
     search: "",
   },
 
+  // Seller products state
+  sellerProducts: [],
+  sellerProductsTotal: 0,
+  sellerProductsCurrentPage: 1,
+  sellerProductsLastPage: 1,
+  sellerProductsPageSize: 8,
+  sellerProductsLoading: false,
+  sellerProductsLoadingMore: false,
+  sellerProductsHasMore: true,
+  sellerProductsError: null,
+  sellerProductsSearch: "",
+  currentSellerId: null,
+
+  // Payment history state
+  paymentHistory: [],
+  paymentHistoryPagination: null,
+  paymentHistoryLoading: false,
+
+  // Payment state
+  paymentProcessing: false,
+  paymentError: null,
+
+  // Helper to extract sellers data
+  _extractSellersData: (response) => {
+    if (!response) {
+      return { sellers: [], pagination: { current_page: 1, last_page: 1, total: 0 } };
+    }
+
+    const data = response.data || response;
+
+    if (data?.current_page !== undefined && data?.data && Array.isArray(data.data)) {
+      const sellersArray = data.data;
+      const paginationData = data;
+      
+      const pagination = {
+        current_page: paginationData.current_page || 1,
+        last_page: paginationData.last_page || 1,
+        per_page: paginationData.per_page || 8,
+        total: paginationData.total || sellersArray.length,
+        next_page_url: paginationData.next_page_url || null,
+        prev_page_url: paginationData.prev_page_url || null,
+        first_page_url: paginationData.first_page_url || null,
+        last_page_url: paginationData.last_page_url || null,
+        path: paginationData.path || null,
+        from: paginationData.from || null,
+        to: paginationData.to || null,
+      };
+
+      return { sellers: sellersArray, pagination };
+    }
+
+    if (Array.isArray(data)) {
+      return {
+        sellers: data,
+        pagination: { current_page: 1, last_page: 1, total: data.length }
+      };
+    }
+
+    return { sellers: [], pagination: { current_page: 1, last_page: 1, total: 0 } };
+  },
+
   // Fetch sellers by user ID with pagination
   fetchSellers: async (userId, page = 1, search = "", append = false) => {
     if (!userId) {
@@ -25,8 +87,7 @@ const useSellerStore = create((set, get) => ({
     }
 
     console.log("👥 fetchSellers called with userId:", userId, "page:", page, "search:", search, "append:", append);
-    
-    // If not appending, set loading; if appending, use loadingMore
+
     if (append && page > 1) {
       set({ loadingMore: true, error: null });
     } else {
@@ -35,373 +96,662 @@ const useSellerStore = create((set, get) => ({
 
     try {
       const response = await sellersAPI.getByUserId(userId, page, search);
-      console.log("📦 Sellers API Response:", response);
+      const { sellers: sellersArray, pagination: paginationData } = get()._extractSellersData(response);
 
-      let sellersArray = [];
-      let paginationData = {};
+      const hasMoreData = paginationData.current_page < paginationData.last_page;
 
-      // Extract sellers array from correct nested structure
-      // The API returns: { status: true, data: { message, sellers: { current_page, data: [...] } } }
-      // After interceptor unwrapping: { message, sellers: { current_page, data: [...] } }
-      if (response?.data?.sellers?.data) {
-        sellersArray = response.data.sellers.data;
-        paginationData = response.data.sellers;
-        console.log("✅ Extracted from response.data.sellers");
-      } else if (response?.sellers?.data) {
-        sellersArray = response.sellers.data;
-        paginationData = response.sellers;
-        console.log("✅ Extracted from response.sellers");
-      } else if (response?.data?.data?.data) {
-        sellersArray = response.data.data.data;
-        paginationData = response.data.data;
-        console.log("✅ Extracted from response.data.data");
-      } else if (response?.data?.data) {
-        sellersArray = Array.isArray(response.data.data)
-          ? response.data.data
-          : [];
-        paginationData = response.data;
-        console.log("✅ Extracted from response.data (array)");
-      } else if (response?.data) {
-        sellersArray = Array.isArray(response.data) ? response.data : [];
-        paginationData = response;
-        console.log("✅ Extracted from response (array)");
-      } else if (Array.isArray(response)) {
-        sellersArray = response;
-        console.log("✅ Extracted from response (direct array)");
-      }
-
-      console.log("🔍 Sellers array length:", sellersArray.length);
-      console.log("🔍 Pagination data:", paginationData);
-
-      if (!Array.isArray(sellersArray)) {
-        sellersArray = [];
-      }
-
-      const pageData = {
-        current_page: paginationData.current_page || page,
-        last_page: paginationData.last_page || 1,
-        per_page: paginationData.per_page || get().perPage,
-        total: paginationData.total || sellersArray.length,
-        next_page_url: paginationData.next_page_url || null,
-        prev_page_url: paginationData.prev_page_url || null,
-        first_page_url: paginationData.first_page_url || null,
-        last_page_url: paginationData.last_page_url || null,
-      };
-
-      const hasMoreData = pageData.current_page < pageData.last_page;
-
-      // If append is true and page > 1, append to existing sellers (with duplicate prevention)
       const { sellers: existingSellers } = get();
       let finalSellers;
       if (append && page > 1) {
         const existingIds = new Set(existingSellers.map(s => s.id));
         const uniqueNewSellers = sellersArray.filter(s => !existingIds.has(s.id));
         finalSellers = [...existingSellers, ...uniqueNewSellers];
-        console.log(`📦 Appended ${uniqueNewSellers.length} new sellers, total: ${finalSellers.length}`);
       } else {
         finalSellers = sellersArray;
       }
 
       set({
         sellers: finalSellers,
-        totalSellers: pageData.total,
-        currentPage: pageData.current_page,
-        lastPage: pageData.last_page,
-        pagination: pageData,
+        totalSellers: paginationData.total,
+        currentPage: paginationData.current_page,
+        lastPage: paginationData.last_page,
+        perPage: paginationData.per_page,
         hasMore: hasMoreData,
         loading: false,
         loadingMore: false,
+        error: null,
       });
 
-      console.log("✅ Sellers loaded:", finalSellers.length, "Page:", pageData.current_page, "of", pageData.last_page, "hasMore:", hasMoreData);
+      console.log(`✅ Sellers loaded: ${finalSellers.length} sellers, page ${paginationData.current_page}/${paginationData.last_page}`);
       return response.data;
     } catch (error) {
       console.error("❌ Failed to fetch sellers:", error);
+      const errorMessage = error.message || "Failed to fetch sellers";
       set({
         sellers: append ? get().sellers : [],
         totalSellers: append ? get().totalSellers : 0,
-        currentPage: 1,
-        lastPage: 1,
-        pagination: null,
-        hasMore: false,
         loading: false,
         loadingMore: false,
-        error: error.message || "Failed to fetch sellers",
+        error: errorMessage,
       });
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      throw error;
     }
   },
 
   // Load more sellers for pagination
   loadMoreSellers: async (userId) => {
-    const { currentPage, lastPage, hasMore, loading, loadingMore, filters, sellers: existingSellers } = get();
+    const { currentPage, lastPage, hasMore, loading, loadingMore, filters } = get();
 
-    // Prevent loading if already loading or no more data
-    if (loading || loadingMore || !hasMore) {
-      console.log('⏭️ Skipping load more - already loading or no more data');
+    if (loading || loadingMore || !hasMore || currentPage >= lastPage) {
       return;
     }
 
-    if (currentPage >= lastPage) {
-      console.log('⏭️ Skipping - reached last page');
-      return;
-    }
-
-    console.log(`🔄 loadMoreSellers called with userId: ${userId}, currentPage: ${currentPage}`);
     set({ loadingMore: true, error: null });
 
     try {
       const nextPage = currentPage + 1;
       const response = await sellersAPI.getByUserId(userId, nextPage, filters.search);
-      console.log("📦 Sellers API Response received for page:", nextPage);
+      const { sellers: sellersArray, pagination: paginationData } = get()._extractSellersData(response);
 
-      let sellersArray = [];
+      const { sellers: existingSellers } = get();
+      const existingIds = new Set(existingSellers.map(s => s.id));
+      const uniqueNewSellers = sellersArray.filter(s => !existingIds.has(s.id));
+
+      const hasMoreData = paginationData.current_page < paginationData.last_page;
+
+      set({
+        sellers: [...existingSellers, ...uniqueNewSellers],
+        totalSellers: paginationData.total,
+        currentPage: paginationData.current_page,
+        lastPage: paginationData.last_page,
+        perPage: paginationData.per_page,
+        hasMore: hasMoreData,
+        loadingMore: false,
+        error: null,
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error("❌ Failed to load more sellers:", error);
+      const errorMessage = error.message || "Failed to load more sellers";
+      set({
+        loadingMore: false,
+        error: errorMessage,
+      });
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      throw error;
+    }
+  },
+
+  // Get seller by ID
+  getSellerById: async (sellerId) => {
+    console.log("🔍 getSellerById called with sellerId:", sellerId);
+    set({ loading: true, error: null });
+
+    try {
+      const response = await sellersAPI.getEditData(sellerId);
+      
+      let sellerData = null;
+      
+      if (response?.data?.data) {
+        sellerData = response.data.data;
+        console.log("✅ Extracted from response.data.data");
+      } else if (response?.data) {
+        sellerData = response.data;
+        console.log("✅ Extracted from response.data");
+      } else if (response) {
+        sellerData = response;
+        console.log("✅ Extracted from response");
+      }
+
+      if (!sellerData || !sellerData.id) {
+        throw new Error("Seller not found");
+      }
+
+      set({ loading: false, error: null });
+      return sellerData;
+    } catch (error) {
+      console.error("❌ Failed to fetch seller:", error);
+      const errorMessage = error.message || "Failed to fetch seller";
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      throw error;
+    }
+  },
+
+  // Fetch seller products
+fetchSellerProducts: async (sellerId, page = 1, search = "", append = false) => {
+  if (!sellerId) {
+    console.error("No seller ID provided");
+    return;
+  }
+
+  console.log("📦 fetchSellerProducts called with sellerId:", sellerId, "page:", page, "search:", search, "append:", append);
+
+  if (append && page > 1) {
+    set({ sellerProductsLoadingMore: true, sellerProductsError: null });
+  } else {
+    set({ sellerProductsLoading: true, sellerProductsError: null });
+  }
+
+  try {
+    const response = await sellersAPI.getSellerProducts(sellerId, page, search);
+    console.log("📦 Seller products response received");
+    
+    // Get the data - could be response.data or response
+    const data = response.data || response;
+    
+    console.log("📦 Response data type:", typeof data);
+    console.log("📦 Response data keys:", data ? Object.keys(data) : []);
+
+    // Try multiple ways to extract products
+    let productsArray = [];
+    let paginationData = {};
+    let paymentHistoryArray = [];
+    let paymentHistoryPagination = null;
+
+    // Check if data has a 'data' property (nested response)
+    const actualData = data?.data || data;
+
+    // Method 1: Direct sellerProducts from actualData
+    if (actualData?.sellerProducts?.data && Array.isArray(actualData.sellerProducts.data)) {
+      productsArray = actualData.sellerProducts.data;
+      paginationData = actualData.sellerProducts;
+      console.log(`✅ Method 1: Extracted ${productsArray.length} products from actualData.sellerProducts.data`);
+    }
+    // Method 2: data.data.sellerProducts
+    else if (data?.data?.sellerProducts?.data && Array.isArray(data.data.sellerProducts.data)) {
+      productsArray = data.data.sellerProducts.data;
+      paginationData = data.data.sellerProducts;
+      console.log(`✅ Method 2: Extracted ${productsArray.length} products from data.data.sellerProducts.data`);
+    }
+    // Method 3: data.products
+    else if (data?.products?.data && Array.isArray(data.products.data)) {
+      productsArray = data.products.data;
+      paginationData = data.products;
+      console.log(`✅ Method 3: Extracted ${productsArray.length} products from data.products.data`);
+    }
+    // Method 4: data.data (array)
+    else if (data?.data && Array.isArray(data.data)) {
+      productsArray = data.data;
+      paginationData = data;
+      console.log(`✅ Method 4: Extracted ${productsArray.length} products from data.data (array)`);
+    }
+    // Method 5: data is array
+    else if (Array.isArray(data)) {
+      productsArray = data;
+      paginationData = { current_page: 1, last_page: 1, total: productsArray.length };
+      console.log(`✅ Method 5: Extracted ${productsArray.length} products from data (array)`);
+    }
+
+    // ============ EXTRACT PAYMENT HISTORY ============
+    // Check for payment history in actualData first
+    if (actualData?.sellerPaymentHistory?.data && Array.isArray(actualData.sellerPaymentHistory.data)) {
+      paymentHistoryArray = actualData.sellerPaymentHistory.data;
+      paymentHistoryPagination = {
+        current_page: actualData.sellerPaymentHistory.current_page || 1,
+        last_page: actualData.sellerPaymentHistory.last_page || 1,
+        per_page: actualData.sellerPaymentHistory.per_page || 8,
+        total: actualData.sellerPaymentHistory.total || 0,
+        next_page_url: actualData.sellerPaymentHistory.next_page_url || null,
+        prev_page_url: actualData.sellerPaymentHistory.prev_page_url || null,
+        first_page_url: actualData.sellerPaymentHistory.first_page_url || null,
+        last_page_url: actualData.sellerPaymentHistory.last_page_url || null,
+        path: actualData.sellerPaymentHistory.path || null,
+        from: actualData.sellerPaymentHistory.from || null,
+        to: actualData.sellerPaymentHistory.to || null,
+      };
+      console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from actualData.sellerPaymentHistory.data`);
+    }
+    // Check for payment history in data.data.sellerPaymentHistory
+    else if (data?.data?.sellerPaymentHistory?.data && Array.isArray(data.data.sellerPaymentHistory.data)) {
+      paymentHistoryArray = data.data.sellerPaymentHistory.data;
+      paymentHistoryPagination = {
+        current_page: data.data.sellerPaymentHistory.current_page || 1,
+        last_page: data.data.sellerPaymentHistory.last_page || 1,
+        per_page: data.data.sellerPaymentHistory.per_page || 8,
+        total: data.data.sellerPaymentHistory.total || 0,
+        next_page_url: data.data.sellerPaymentHistory.next_page_url || null,
+        prev_page_url: data.data.sellerPaymentHistory.prev_page_url || null,
+        first_page_url: data.data.sellerPaymentHistory.first_page_url || null,
+        last_page_url: data.data.sellerPaymentHistory.last_page_url || null,
+        path: data.data.sellerPaymentHistory.path || null,
+        from: data.data.sellerPaymentHistory.from || null,
+        to: data.data.sellerPaymentHistory.to || null,
+      };
+      console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from data.data.sellerPaymentHistory.data`);
+    }
+    // Check for direct sellerPaymentHistory
+    else if (data?.sellerPaymentHistory?.data && Array.isArray(data.sellerPaymentHistory.data)) {
+      paymentHistoryArray = data.sellerPaymentHistory.data;
+      paymentHistoryPagination = {
+        current_page: data.sellerPaymentHistory.current_page || 1,
+        last_page: data.sellerPaymentHistory.last_page || 1,
+        per_page: data.sellerPaymentHistory.per_page || 8,
+        total: data.sellerPaymentHistory.total || 0,
+        next_page_url: data.sellerPaymentHistory.next_page_url || null,
+        prev_page_url: data.sellerPaymentHistory.prev_page_url || null,
+        first_page_url: data.sellerPaymentHistory.first_page_url || null,
+        last_page_url: data.sellerPaymentHistory.last_page_url || null,
+        path: data.sellerPaymentHistory.path || null,
+        from: data.sellerPaymentHistory.from || null,
+        to: data.sellerPaymentHistory.to || null,
+      };
+      console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from data.sellerPaymentHistory.data`);
+    } else {
+      console.log("ℹ️ No payment history found in response");
+    }
+
+    // If products array is empty, log warning
+    if (productsArray.length === 0) {
+      console.warn("⚠️ No products found in response");
+      console.log("📦 Full response structure:", JSON.stringify(data, null, 2));
+    }
+
+    const pagination = {
+      current_page: paginationData.current_page || 1,
+      last_page: paginationData.last_page || 1,
+      per_page: paginationData.per_page || 8,
+      total: paginationData.total || productsArray.length,
+      next_page_url: paginationData.next_page_url || null,
+      prev_page_url: paginationData.prev_page_url || null,
+      first_page_url: paginationData.first_page_url || null,
+      last_page_url: paginationData.last_page_url || null,
+      path: paginationData.path || null,
+      from: paginationData.from || null,
+      to: paginationData.to || null,
+    };
+
+    const hasMoreData = pagination.current_page < pagination.last_page;
+
+    const { sellerProducts: existingProducts } = get();
+    let finalProducts;
+    if (append && page > 1) {
+      const existingIds = new Set(existingProducts.map(p => p.id));
+      const uniqueNewProducts = productsArray.filter(p => !existingIds.has(p.id));
+      finalProducts = [...existingProducts, ...uniqueNewProducts];
+      console.log(`📦 Appended ${uniqueNewProducts.length} new products, total: ${finalProducts.length}`);
+    } else {
+      finalProducts = productsArray;
+    }
+
+    set({
+      sellerProducts: finalProducts,
+      sellerProductsTotal: pagination.total,
+      sellerProductsCurrentPage: pagination.current_page,
+      sellerProductsLastPage: pagination.last_page,
+      sellerProductsPageSize: pagination.per_page,
+      sellerProductsHasMore: hasMoreData,
+      sellerProductsLoading: false,
+      sellerProductsLoadingMore: false,
+      sellerProductsError: null,
+      sellerProductsSearch: search,
+      currentSellerId: sellerId,
+      // Store payment history
+      paymentHistory: paymentHistoryArray,
+      paymentHistoryPagination: paymentHistoryPagination,
+    });
+
+    console.log(`✅ Products loaded: ${finalProducts.length} products, page ${pagination.current_page}/${pagination.last_page}, hasMore: ${hasMoreData}`);
+    console.log(`✅ Payment history: ${paymentHistoryArray.length} records`);
+    return response.data;
+  } catch (error) {
+    console.error("❌ Failed to fetch seller products:", error);
+    const errorMessage = error.message || "Failed to fetch seller products";
+    set({
+      sellerProducts: append ? get().sellerProducts : [],
+      sellerProductsTotal: append ? get().sellerProductsTotal : 0,
+      sellerProductsLoading: false,
+      sellerProductsLoadingMore: false,
+      sellerProductsError: errorMessage,
+    });
+    Toast.show({
+      type: 'error',
+      text1: 'Error',
+      text2: errorMessage,
+    });
+    throw error;
+  }
+},
+
+  // Load more seller products
+  loadMoreSellerProducts: async (sellerId) => {
+    const { 
+      sellerProductsCurrentPage, 
+      sellerProductsLastPage, 
+      sellerProductsHasMore, 
+      sellerProductsLoading, 
+      sellerProductsLoadingMore, 
+      sellerProductsSearch 
+    } = get();
+
+    if (sellerProductsLoading || sellerProductsLoadingMore || !sellerProductsHasMore || sellerProductsCurrentPage >= sellerProductsLastPage) {
+      return;
+    }
+
+    set({ sellerProductsLoadingMore: true, sellerProductsError: null });
+
+    try {
+      const nextPage = sellerProductsCurrentPage + 1;
+      const response = await sellersAPI.getSellerProducts(sellerId, nextPage, sellerProductsSearch);
+      
+      // Get the data
+      const data = response.data || response;
+      
+      let productsArray = [];
       let paginationData = {};
 
-      // Extract sellers array from correct nested structure
-      if (response?.data?.sellers?.data) {
-        sellersArray = response.data.sellers.data;
-        paginationData = response.data.sellers;
-        console.log("✅ Extracted from response.data.sellers (loadMore)");
-      } else if (response?.sellers?.data) {
-        sellersArray = response.sellers.data;
-        paginationData = response.sellers;
-        console.log("✅ Extracted from response.sellers (loadMore)");
-      } else if (response?.data?.data?.data) {
-        sellersArray = response.data.data.data;
-        paginationData = response.data.data;
-        console.log("✅ Extracted from response.data.data (loadMore)");
-      } else if (response?.data?.data) {
-        sellersArray = Array.isArray(response.data.data) ? response.data.data : [];
-        paginationData = response.data;
-        console.log("✅ Extracted from response.data (array) (loadMore)");
-      } else if (response?.data) {
-        sellersArray = Array.isArray(response.data) ? response.data : [];
-        paginationData = response;
-        console.log("✅ Extracted from response (array) (loadMore)");
-      } else if (Array.isArray(response)) {
-        sellersArray = response;
-        console.log("✅ Extracted from response (direct array) (loadMore)");
+      // Extract products using same methods as fetchSellerProducts
+      if (data?.sellerProducts?.data && Array.isArray(data.sellerProducts.data)) {
+        productsArray = data.sellerProducts.data;
+        paginationData = data.sellerProducts;
+        console.log(`✅ Load more: Extracted ${productsArray.length} products from data.sellerProducts.data`);
+      } else if (data?.data?.sellerProducts?.data && Array.isArray(data.data.sellerProducts.data)) {
+        productsArray = data.data.sellerProducts.data;
+        paginationData = data.data.sellerProducts;
+        console.log(`✅ Load more: Extracted ${productsArray.length} products from data.data.sellerProducts.data`);
+      } else if (data?.products?.data && Array.isArray(data.products.data)) {
+        productsArray = data.products.data;
+        paginationData = data.products;
+        console.log(`✅ Load more: Extracted ${productsArray.length} products from data.products.data`);
+      } else if (data?.data && Array.isArray(data.data)) {
+        productsArray = data.data;
+        paginationData = data;
+        console.log(`✅ Load more: Extracted ${productsArray.length} products from data.data (array)`);
+      } else if (Array.isArray(data)) {
+        productsArray = data;
+        paginationData = { current_page: 1, last_page: 1, total: productsArray.length };
+        console.log(`✅ Load more: Extracted ${productsArray.length} products from data (array)`);
       }
 
-      console.log("🔍 Load more sellers array length:", sellersArray.length);
+      const { sellerProducts: existingProducts } = get();
+      const existingIds = new Set(existingProducts.map(p => p.id));
+      const uniqueNewProducts = productsArray.filter(p => !existingIds.has(p.id));
 
-      if (!Array.isArray(sellersArray)) {
-        sellersArray = [];
-      }
-
-      const pageData = {
-        current_page: paginationData.current_page || nextPage,
+      const pagination = {
+        current_page: paginationData.current_page || 1,
         last_page: paginationData.last_page || 1,
-        per_page: paginationData.per_page || get().perPage,
-        total: paginationData.total || 0,
+        per_page: paginationData.per_page || 8,
+        total: paginationData.total || productsArray.length,
         next_page_url: paginationData.next_page_url || null,
         prev_page_url: paginationData.prev_page_url || null,
         first_page_url: paginationData.first_page_url || null,
         last_page_url: paginationData.last_page_url || null,
+        path: paginationData.path || null,
+        from: paginationData.from || null,
+        to: paginationData.to || null,
       };
 
-      const hasMoreData = pageData.current_page < pageData.last_page;
-
-      // Create a Set of existing seller IDs to avoid duplicates
-      const existingIds = new Set(existingSellers.map(s => s.id));
-      const uniqueNewSellers = sellersArray.filter(s => !existingIds.has(s.id));
+      const hasMoreData = pagination.current_page < pagination.last_page;
 
       set({
-        sellers: [...existingSellers, ...uniqueNewSellers],
-        totalSellers: pageData.total,
-        currentPage: pageData.current_page,
-        lastPage: pageData.last_page,
-        pagination: pageData,
-        hasMore: hasMoreData,
-        loadingMore: false,
+        sellerProducts: [...existingProducts, ...uniqueNewProducts],
+        sellerProductsTotal: pagination.total,
+        sellerProductsCurrentPage: pagination.current_page,
+        sellerProductsLastPage: pagination.last_page,
+        sellerProductsPageSize: pagination.per_page,
+        sellerProductsHasMore: hasMoreData,
+        sellerProductsLoadingMore: false,
+        sellerProductsError: null,
       });
 
-      console.log(`✅ Load more completed: ${uniqueNewSellers.length} new sellers, total: ${existingSellers.length + uniqueNewSellers.length}, hasMore: ${hasMoreData}`);
+      console.log(`✅ Load more completed: ${uniqueNewProducts.length} new products, total: ${get().sellerProducts.length}, hasMore: ${hasMoreData}`);
+      return response.data;
     } catch (error) {
-      console.error("❌ Failed to load more sellers:", error);
+      console.error("❌ Failed to load more seller products:", error);
+      const errorMessage = error.message || "Failed to load more seller products";
       set({
-        loadingMore: false,
-        error: error.message || "Failed to load more sellers",
+        sellerProductsLoadingMore: false,
+        sellerProductsError: errorMessage,
       });
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      throw error;
     }
   },
 
   // Create seller
   createSeller: async (sellerData) => {
-    console.log("📝 createSeller called with:", sellerData);
     set({ loading: true, error: null });
 
     try {
       const response = await sellersAPI.create(sellerData);
-      console.log("✅ Seller created successfully", response.data);
-
+      
       let newSeller = null;
-      if (response?.data?.seller) {
-        newSeller = response.data.seller;
-      } else if (response?.data?.data) {
-        newSeller = response.data.data;
-      } else if (response?.data) {
-        newSeller = response.data;
-      } else {
-        newSeller = response;
+      const data = response.data || response;
+      
+      if (data?.seller) {
+        newSeller = data.seller;
+      } else if (data?.data?.seller) {
+        newSeller = data.data.seller;
+      } else if (data?.data) {
+        newSeller = data.data;
+      } else if (data) {
+        newSeller = data;
       }
 
       const { sellers } = get();
       set({
         sellers: [newSeller, ...sellers],
-        totalSellers: (sellers?.length || 0) + 1,
+        totalSellers: get().totalSellers + 1,
         loading: false,
+        error: null,
+      });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Seller created successfully',
       });
 
       return { success: true, data: newSeller };
     } catch (error) {
       console.error("❌ Failed to create seller:", error);
+      const errorMessage = error.message || "Failed to create seller";
       set({
-        error: error.message || "Failed to create seller",
+        error: errorMessage,
         loading: false,
       });
-      return { success: false, error: error.message };
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      return { success: false, error: errorMessage };
     }
   },
 
   // Update seller
   updateSeller: async (id, sellerData) => {
-    console.log("✏️ updateSeller called with:", id, sellerData);
     set({ loading: true, error: null });
 
     try {
       const response = await sellersAPI.update(id, sellerData);
-      console.log("✅ Seller updated successfully", response.data);
-
+      
       let updatedSeller = null;
-      if (response?.data?.seller) {
-        updatedSeller = response.data.seller;
-      } else if (response?.data?.data) {
-        updatedSeller = response.data.data;
-      } else if (response?.data) {
-        updatedSeller = response.data;
-      } else {
-        updatedSeller = response;
+      const data = response.data || response;
+      
+      if (data?.seller) {
+        updatedSeller = data.seller;
+      } else if (data?.data?.seller) {
+        updatedSeller = data.data.seller;
+      } else if (data?.data) {
+        updatedSeller = data.data;
+      } else if (data) {
+        updatedSeller = data;
       }
 
       const { sellers } = get();
       set({
         sellers: sellers.map(seller => seller.id === id ? updatedSeller : seller),
         loading: false,
+        error: null,
+      });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Seller updated successfully',
       });
 
       return { success: true, data: updatedSeller };
     } catch (error) {
       console.error("❌ Failed to update seller:", error);
+      const errorMessage = error.message || "Failed to update seller";
       set({
-        error: error.message || "Failed to update seller",
+        error: errorMessage,
         loading: false,
       });
-      return { success: false, error: error.message };
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      return { success: false, error: errorMessage };
     }
   },
 
   // Delete seller
   deleteSeller: async (id) => {
-    console.log("🗑️ deleteSeller called with:", id);
     set({ loading: true, error: null });
 
     try {
       await sellersAPI.delete(id);
-      console.log("✅ Seller deleted successfully");
 
       const { sellers } = get();
       set({
         sellers: sellers.filter(seller => seller.id !== id),
-        totalSellers: Math.max(0, (sellers?.length || 0) - 1),
+        totalSellers: Math.max(0, get().totalSellers - 1),
         loading: false,
+        error: null,
+      });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Seller deleted successfully',
       });
 
       return { success: true };
     } catch (error) {
       console.error("❌ Failed to delete seller:", error);
+      const errorMessage = error.message || "Failed to delete seller";
       set({
-        error: error.message || "Failed to delete seller",
+        error: errorMessage,
         loading: false,
       });
-      return { success: false, error: error.message };
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Get edit data
-  getEditData: async (sellerId) => {
-    console.log("🔍 getEditData called with sellerId:", sellerId);
-    set({ loading: true, error: null });
-
-    try {
-      const response = await sellersAPI.getEditData(sellerId);
-      set({ loading: false });
-      return response.data;
-    } catch (error) {
-      console.error("❌ Failed to fetch edit data:", error);
-      set({
-        error: error.message || "Failed to fetch edit data",
-        loading: false,
-      });
-      throw error;
-    }
-  },
-
-  // Get single seller details
-  getSingleSeller: async (sellerId) => {
-    console.log("🔍 getSingleSeller called with sellerId:", sellerId);
-    set({ loading: true, error: null });
-
-    try {
-      const response = await sellersAPI.getSingleSeller(sellerId);
-      set({ loading: false });
-      return response.data;
-    } catch (error) {
-      console.error("❌ Failed to fetch seller details:", error);
-      set({
-        error: error.message || "Failed to fetch seller details",
-        loading: false,
-      });
-      throw error;
-    }
-  },
-
-  // Make due payment
-  makeDuePayment: async (sellerId, paymentData) => {
-    console.log("💳 makeDuePayment called with sellerId:", sellerId, "data:", paymentData);
-    set({ loading: true, error: null });
+  // Process due payment
+  processDuePayment: async (sellerId, paymentData) => {
+    set({ paymentProcessing: true, paymentError: null });
 
     try {
       const response = await sellersAPI.makeDuePayment(sellerId, paymentData);
-      console.log("✅ Due payment successful", response.data);
 
-      // Refresh seller data after payment
-      const sellerResponse = await sellersAPI.getSingleSeller(sellerId);
-      let updatedSeller = null;
-      if (sellerResponse?.data?.seller) {
-        updatedSeller = sellerResponse.data.seller;
-      } else if (sellerResponse?.data?.data) {
-        updatedSeller = sellerResponse.data.data;
-      }
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: `Payment of ₹${parseFloat(paymentData.paid_amount).toFixed(2)} processed successfully`,
+      });
 
-      const { sellers } = get();
-      if (updatedSeller) {
-        set({
-          sellers: sellers.map(seller => seller.id === sellerId ? updatedSeller : seller),
-          loading: false,
-        });
-      } else {
-        set({ loading: false });
+      set({ paymentProcessing: false, paymentError: null });
+      
+      const { currentPage, filters } = get();
+      const userId = paymentData.user_id;
+      if (userId) {
+        await get().fetchSellers(userId, currentPage, filters.search, false);
       }
 
       return { success: true, data: response.data };
     } catch (error) {
-      console.error("❌ Failed to make due payment:", error);
+      console.error("❌ Failed to process payment:", error);
+      const errorMessage = error.message || "Failed to process payment";
       set({
-        error: error.message || "Failed to make due payment",
-        loading: false,
+        paymentProcessing: false,
+        paymentError: errorMessage,
       });
-      return { success: false, error: error.message };
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  // Fetch payment history
+  fetchPaymentHistory: async (sellerId, page = 1) => {
+    console.log("📊 fetchPaymentHistory called with sellerId:", sellerId, "page:", page);
+    set({ paymentHistoryLoading: true, paymentHistoryPagination: null });
+
+    try {
+      const response = await sellersAPI.getPaymentHistory(sellerId, page);
+      
+      let historyArray = [];
+      let paginationData = null;
+
+      const data = response.data || response;
+      
+      if (data?.data && Array.isArray(data.data)) {
+        historyArray = data.data;
+        paginationData = {
+          current_page: data.current_page || page,
+          last_page: data.last_page || 1,
+          per_page: data.per_page || 8,
+          total: data.total || historyArray.length,
+        };
+      } else if (Array.isArray(data)) {
+        historyArray = data;
+      }
+
+      set({
+        paymentHistory: historyArray,
+        paymentHistoryPagination: paginationData,
+        paymentHistoryLoading: false,
+      });
+
+      return { success: true, data: historyArray };
+    } catch (error) {
+      console.error("❌ Failed to fetch payment history:", error);
+      const errorMessage = error.message || "Failed to fetch payment history";
+      set({
+        paymentHistory: [],
+        paymentHistoryPagination: null,
+        paymentHistoryLoading: false,
+      });
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      return { success: false, error: errorMessage };
     }
   },
 
@@ -409,16 +759,68 @@ const useSellerStore = create((set, get) => ({
   setFilters: (filters) => {
     const currentFilters = get().filters;
     const updatedFilters = { ...currentFilters, ...filters };
-    set({ filters: updatedFilters });
+    set({
+      filters: updatedFilters,
+      currentPage: 1,
+      hasMore: true,
+    });
   },
 
-  // Set page
-  setPage: (page) => {
-    set({ currentPage: page });
+  // Clear seller products
+  clearSellerProducts: () => {
+    set({
+      sellerProducts: [],
+      sellerProductsTotal: 0,
+      sellerProductsCurrentPage: 1,
+      sellerProductsLastPage: 1,
+      sellerProductsPageSize: 8,
+      sellerProductsLoading: false,
+      sellerProductsLoadingMore: false,
+      sellerProductsHasMore: true,
+      sellerProductsError: null,
+      sellerProductsSearch: "",
+      currentSellerId: null,
+      paymentHistory: [],
+      paymentHistoryPagination: null,
+    });
   },
 
   // Clear error
   clearError: () => set({ error: null }),
+
+  // Reset store
+  reset: () => {
+    set({
+      sellers: [],
+      totalSellers: 0,
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 8,
+      loading: false,
+      loadingMore: false,
+      hasMore: true,
+      error: null,
+      filters: {
+        search: "",
+      },
+      sellerProducts: [],
+      sellerProductsTotal: 0,
+      sellerProductsCurrentPage: 1,
+      sellerProductsLastPage: 1,
+      sellerProductsPageSize: 8,
+      sellerProductsLoading: false,
+      sellerProductsLoadingMore: false,
+      sellerProductsHasMore: true,
+      sellerProductsError: null,
+      sellerProductsSearch: "",
+      currentSellerId: null,
+      paymentHistory: [],
+      paymentHistoryPagination: null,
+      paymentHistoryLoading: false,
+      paymentProcessing: false,
+      paymentError: null,
+    });
+  },
 }));
 
 export default useSellerStore;

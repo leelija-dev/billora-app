@@ -2,13 +2,18 @@ import apiClient from './client';
 
 export const packagesAPI = {
   // Get all packages for a user with pagination
-  getAll: (userId, page = 1, perPage = 8, search = '') => {
-    const params = new URLSearchParams();
-    if (page) params.append('page', page);
-    if (perPage) params.append('per_page', perPage);
-    if (search) params.append('search', search);
-    
-    return apiClient.get(`/packages-cost/${userId}?${params.toString()}`);
+  getAll: async (userId, page = 1, perPage = 8, search = '') => {
+    try {
+      // Match orders API pattern - simple params object
+      const payload = {
+        page: page || 1,
+        per_page: perPage || 8,
+        search: search || '',
+      };
+      return await apiClient.get(`/packages-cost/${userId}`, { params: payload });
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
   },
 
   // Get single package
