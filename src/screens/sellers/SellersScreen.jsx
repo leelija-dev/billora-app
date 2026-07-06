@@ -120,7 +120,7 @@ const SellersScreen = () => {
   }, [searchQuery, filters.search, setFilters, fetchSellers, getUserId]);
 
   // Handle pull-to-refresh
-  const onRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchSellers(getUserId(), 1, filters.search, false);
     setRefreshing(false);

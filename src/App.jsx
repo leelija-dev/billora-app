@@ -12,6 +12,7 @@ import { ThemeProvider, useTheme } from "./components/ThemeProvider";
 import "./global.css";
 import { navigationRef } from "./services/navigationService";
 import { useAuthStore } from "./store/authStore";
+import { usePermissionStore } from "./store/permissionStore";
 
 // Import screens
 import LoginScreen from "./screens/auth/LoginScreen";
@@ -21,10 +22,13 @@ import DashboardScreen from "./screens/dashboard/DashboardScreen";
 import BrandsStackNavigator from "./components/navigation/stacks/BrandsStack";
 import CategoriesStackNavigator from "./components/navigation/stacks/CategoriesStack";
 import CustomersStackNavigator from "./components/navigation/stacks/CustomersStack";
-import BillsStackNavigator from "./components/navigation/stacks/InvoicesStack.jsx";
+
+import MedicineTypesStackNavigator from "./components/navigation/stacks/MedicineTypesStack";
 import OrdersStackNavigator from "./components/navigation/stacks/OrdersStack";
+import PackagesStackNavigator from "./components/navigation/stacks/PackagesStack";
 import ProductsStackNavigator from "./components/navigation/stacks/ProductsStack";
 import ReportsStackNavigator from "./components/navigation/stacks/ReportsStack";
+import SellersStackNavigator from "./components/navigation/stacks/SellersStack";
 import SettingsStackNavigator from "./components/navigation/stacks/SettingsStack";
 import StocksStackNavigator from "./components/navigation/stacks/StocksStack";
 import StoresStackNavigator from "./components/navigation/stacks/StoresStack";
@@ -200,104 +204,93 @@ const AppLoadingScreen = () => {
   );
 };
 
-// All screens definition (without permission filtering)
-const ALL_SCREENS = [
-  {
-    name: "Dashboard",
-    component: DashboardScreen,
-    icon: "view-dashboard",
-    permission: "dashboard",
-  },
-  {
-    name: "Products",
-    component: ProductsStackNavigator,
-    icon: "package-variant",
-    permission: "products",
-  },
-  {
-    name: "Stocks",
-    component: StocksStackNavigator,
-    icon: "warehouse",
-    permission: "inventory",
-  },
-  {
-    name: "Orders",
-    component: OrdersStackNavigator,
-    icon: "cart",
-    permission: "orders",
-  },
-  {
-    name: "Bills",
-    component: BillsStackNavigator,
-    icon: "file-document",
-    permission: "invoices",
-  },
-  {
-    name: "Reports",
-    component: ReportsStackNavigator,
-    icon: "chart-bar",
-    permission: "reports",
-  },
-  {
-    name: "Customers",
-    component: CustomersStackNavigator,
-    icon: "account-group",
-    permission: "customers",
-  },
-  {
-    name: "Categories",
-    component: CategoriesStackNavigator,
-    icon: "shape",
-    permission: "categories",
-  },
-  {
-    name: "Brands",
-    component: BrandsStackNavigator,
-    icon: "trademark",
-    permission: "brands",
-  },
-  {
-    name: "Units",
-    component: UnitsStackNavigator,
-    icon: "ruler",
-    permission: "units",
-  },
-  {
-    name: "Stores",
-    component: StoresStackNavigator,
-    icon: "store",
-    permission: "stores",
-  },
-  {
-    name: "Settings",
-    component: SettingsStackNavigator,
-    icon: "cog",
-    permission: "settings",
-  },
-];
+// All screens definition (component mapping)
+const SCREEN_COMPONENTS = {
+  Dashboard: DashboardScreen,
+  Products: ProductsStackNavigator,
+  Stocks: StocksStackNavigator,
+  Orders: OrdersStackNavigator,
+  Invoices: DashboardScreen,
+  Reports: ReportsStackNavigator,
+  Customers: CustomersStackNavigator,
+  Categories: CategoriesStackNavigator,
+  Brands: BrandsStackNavigator,
+  Units: UnitsStackNavigator,
+  MedicineTypes: MedicineTypesStackNavigator,
+  Packages: PackagesStackNavigator,
+  Stores: StoresStackNavigator,
+  Sellers: SellersStackNavigator,
+  GST: DashboardScreen,
+  Plans: DashboardScreen,
+  SocialLink: DashboardScreen,
+  Settings: SettingsStackNavigator,
+};
+
+// Dynamic icon mapping
+const ICON_MAP = {
+  dashboard: 'view-dashboard',
+  products: 'package-variant',
+  categories: 'shape',
+  brands: 'trademark',
+  units: 'ruler',
+  'medicine-types': 'medical-bag',
+  stores: 'store',
+  packages: 'package-variant-closed',
+  stock: 'warehouse',
+  seller: 'account-group',
+  orders: 'cart',
+  customers: 'account-group',
+  invoices: 'file-document',
+  reports: 'chart-bar',
+  gst: 'currency-inr',
+  plans: 'credit-card',
+  'social-link': 'share-variant',
+  settings: 'cog',
+};
+
+// Screen name mapping from slug to screen name
+const SCREEN_MAP = {
+  dashboard: 'Dashboard',
+  products: 'Products',
+  categories: 'Categories',
+  brands: 'Brands',
+  units: 'Units',
+  'medicine-types': 'MedicineTypes',
+  stores: 'Stores',
+  packages: 'Packages',
+  stock: 'Stocks',
+  seller: 'Sellers',
+  orders: 'Orders',
+  customers: 'Customers',
+  invoices: 'Invoices',
+  reports: 'Reports',
+  gst: 'GST',
+  plans: 'Plans',
+  'social-link': 'SocialLink',
+  settings: 'Settings',
+};
 
 // Main Drawer Navigator
 const DrawerNavigator = () => {
-  const { canAccessSidebar, sidebarPermissions, permissions } = useAuthStore();
+  const { sidebarPermissions } = usePermissionStore();
 
   console.log("🔍 Sidebar Permissions:", sidebarPermissions);
-  console.log("🔍 All Permissions:", permissions);
 
-  // Filter screens based on permissions
-  let visibleScreens = [];
+  // Generate screens dynamically from API permissions
+  const visibleScreens = sidebarPermissions
+    .filter(p => p && p.status === 1)
+    .map(permission => {
+      const screenName = SCREEN_MAP[permission.slug] || permission.name;
+      const component = SCREEN_COMPONENTS[screenName] || DashboardScreen;
+      const icon = ICON_MAP[permission.slug] || 'circle';
 
-  // If permissions are loaded, filter based on them
-  if (sidebarPermissions && sidebarPermissions.length > 0) {
-    visibleScreens = ALL_SCREENS.filter((screen) => {
-      return canAccessSidebar(screen.permission);
+      return {
+        name: screenName,
+        component: component,
+        icon: icon,
+        title: permission.name,
+      };
     });
-  }
-
-  // Fallback: If no permissions or empty, show all screens
-  if (visibleScreens.length === 0) {
-    console.log("⚠️ No permissions found, showing all screens");
-    visibleScreens = ALL_SCREENS;
-  }
 
   console.log("📱 Visible screens count:", visibleScreens.length);
 
@@ -319,7 +312,7 @@ const DrawerNavigator = () => {
           name={screen.name}
           component={screen.component}
           options={{
-            title: screen.name,
+            title: screen.title,
             drawerIcon: ({ color, size }) => (
               <Icon name={screen.icon} size={size} color={color} />
             ),

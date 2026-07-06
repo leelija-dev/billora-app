@@ -7,7 +7,7 @@ const useUnitStore = create((set, get) => ({
   totalUnits: 0,
   currentPage: 1,
   lastPage: 1,
-  perPage: 15,
+  perPage: 8,
   loading: false,
   error: null,
   filters: {

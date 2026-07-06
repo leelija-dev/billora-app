@@ -8,7 +8,7 @@ const useSellerStore = create((set, get) => ({
   totalSellers: 0,
   currentPage: 1,
   lastPage: 1,
-  perPage: 15,
+  perPage: 8,
   loading: false,
   loadingMore: false,
   hasMore: true,

@@ -8,13 +8,13 @@ const useCustomerStore = create((set, get) => ({
   totalCustomers: 0,
   currentPage: 1,
   lastPage: 1,
-  perPage: 15,
+  perPage: 8,
   loading: false,
   error: null,
   pagination: {
     current_page: 1,
     last_page: 1,
-    per_page: 15,
+    per_page: 8,
     total: 0,
   },
   filters: {

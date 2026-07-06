@@ -22,7 +22,7 @@ const StocksScreen = () => {
   const { user } = useAuthStore();
   const { getFilteredMenuItems } = usePermissionStore();
 
-  const { stocks = [], totalStocks, loading, filters, fetchStocks, createStock, updateStock, deleteStock, addStockQuantity, setFilters, setPage, currentPage, lastPage } = useStockStore();
+  const { stocks = [], totalStocks, loading, loadingMore, hasMore, filters, fetchStocks, loadMoreStocks, createStock, updateStock, deleteStock, addStockQuantity, setFilters, currentPage, lastPage } = useStockStore();
   const { products = [], fetchProducts } = useProductStore();
   const { units = [], fetchUnits } = useUnitStore();
 
@@ -42,6 +42,10 @@ const StocksScreen = () => {
   const [showAddStockModal, setShowAddStockModal] = useState(false);
   const [selectedStockForModal, setSelectedStockForModal] = useState(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
+
+  const scrollViewRef = useRef(null);
 
   const searchTimeoutRef = useRef(null);
   const isMounted = useRef(true);
@@ -55,20 +59,74 @@ const StocksScreen = () => {
 
   useEffect(() => {
     const loadInitialData = async () => {
-      try { await Promise.all([fetchStocks(), fetchProducts(), fetchUnits()]); } catch (error) { console.error("Failed to load stocks:", error); } finally { if (isMounted.current) setInitialLoading(false); } };
+      try { await Promise.all([fetchStocks(1, '', false), fetchProducts(), fetchUnits()]); } catch (error) { console.error("Failed to load stocks:", error); } finally { if (isMounted.current) setInitialLoading(false); } };
     loadInitialData();
     return () => { isMounted.current = false; if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
   }, []);
 
+  // Reset trigger flag when loading more is complete
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
+    }
+  }, [isLoadingMore, loadingMore]);
+
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => { setFilters({ search: searchQuery }); fetchStocks(1, searchQuery); }, 500);
+    searchTimeoutRef.current = setTimeout(() => { setFilters({ search: searchQuery }); fetchStocks(1, searchQuery, false); }, 500);
     return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
   }, [searchQuery]);
 
-  useFocusEffect(useCallback(() => { fetchStocks(); return () => {}; }, []));
+  useFocusEffect(useCallback(() => { fetchStocks(1, '', false); return () => {}; }, []));
 
-  const handleRefresh = async () => { setRefreshing(true); await fetchStocks(); setRefreshing(false); };
+  const handleRefresh = async () => { setRefreshing(true); await fetchStocks(1, '', false); setRefreshing(false); };
+
+  // Handle load more with proper conditions
+  const handleLoadMore = useCallback(async () => {
+    // Check conditions properly
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
+    }
+    
+    if (!hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
+
+    if (currentPage >= lastPage) {
+      console.log('⏭️ Skipping - reached last page');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreStocks - currentPage: ${currentPage}, lastPage: ${lastPage}`);
+    setIsLoadingMore(true);
+    await loadMoreStocks(searchQuery);
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, hasMore, currentPage, lastPage, loadMoreStocks, searchQuery]);
+
+  // Handle scroll for pagination
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Check if user has scrolled 50% of the screen height
+    const triggerThreshold = 50;
+    const shouldLoadMore = scrollPercentage >= triggerThreshold;
+    
+    if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
+      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
   const handleAddStock = () => { setSelectedStock(null); setIsEditing(false); setShowFormModal(true); };
   const handleEditStock = (stock) => { setSelectedStock(stock); setIsEditing(true); setShowFormModal(true); };
   const handleCancelForm = () => { setShowFormModal(false); setSelectedStock(null); setIsEditing(false); };
@@ -81,7 +139,7 @@ const StocksScreen = () => {
       let result;
       if (isEditing && selectedStock) result = await updateStock(selectedStock.id, payload);
       else result = await createStock(payload);
-      if (result.success) { setSuccessMessage(isEditing ? "Stock updated successfully" : "Stock created successfully"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); handleCancelForm(); await fetchStocks(); }
+      if (result.success) { setSuccessMessage(isEditing ? "Stock updated successfully" : "Stock created successfully"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); handleCancelForm(); await fetchStocks(1, searchQuery, false); }
       else setSuccessMessage(result.error || "Operation failed");
     } catch (error) { console.error("Submit error:", error); setSuccessMessage(error.message || "An error occurred"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); } finally { setFormSubmitting(false); }
   };
@@ -92,7 +150,7 @@ const StocksScreen = () => {
     setDeleting(true);
     try {
       const result = await deleteStock(stockToDelete.id, getUserId());
-      if (result.success) { setSuccessMessage("Stock deleted successfully"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); await fetchStocks(); }
+      if (result.success) { setSuccessMessage("Stock deleted successfully"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); await fetchStocks(1, searchQuery, false); }
       setShowDeleteConfirm(false); setStockToDelete(null);
     } catch (error) { console.error("Delete error:", error); } finally { setDeleting(false); }
   };
@@ -100,7 +158,7 @@ const StocksScreen = () => {
   const handleOpenAddStockModal = (stock) => { setSelectedStockForModal(stock); setShowAddStockModal(true); };
   const handleAddStockFromModal = async (stockId, quantity) => {
     const result = await addStockQuantity(stockId, getUserId(), quantity);
-    if (result.success) { setSuccessMessage("Stock quantity added successfully"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); await fetchStocks(); }
+    if (result.success) { setSuccessMessage("Stock quantity added successfully"); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); await fetchStocks(1, searchQuery, false); }
     setShowAddStockModal(false); setSelectedStockForModal(null);
   };
 
@@ -134,7 +192,12 @@ const StocksScreen = () => {
         </View>
       </View>
 
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}>
+      <ScrollView
+        ref={scrollViewRef}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         <View className="flex-row flex-wrap px-4 py-3">
           <LinearGradient colors={["#3b82f6", "#2563eb"]} className="rounded-xl p-4 flex-1 mr-2" start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Text className="text-white/80 text-xs">Total Stock Items</Text>
@@ -174,13 +237,38 @@ const StocksScreen = () => {
           </ScrollView>
         </View>
 
+        {/* Page Indicator */}
+        <View className={`px-4 py-2 flex-row justify-between items-center border-b ${
+          isDarkMode ? 'border-gray-800' : 'border-gray-100'
+        }`}>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {totalStocks > 0 ? `Showing ${safeStocks.length} of ${totalStocks} stocks` : `${safeStocks.length} stocks`}
+          </Text>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Page {currentPage}/{lastPage}
+          </Text>
+        </View>
+
         <StockList stocks={safeStocks} viewMode={viewMode} searchQuery={searchQuery} sortBy={sortBy} loading={loading} onRefresh={handleRefresh} onEdit={handleEditStock} onDelete={handleDeleteStock} onAddQuantity={handleOpenAddStockModal} />
 
-        {lastPage > 1 && (<View className="flex-row items-center justify-center py-4 space-x-2">
-          <TouchableOpacity onPress={() => setPage(currentPage - 1)} disabled={currentPage === 1} className={`p-2 rounded-lg border ${currentPage === 1 ? "border-gray-200 dark:border-gray-700 opacity-40" : "border-gray-300 dark:border-gray-600"}`}><Icon name="chevron-left" size={18} color={isDarkMode ? "#9CA3AF" : "#4b5563"} /></TouchableOpacity>
-          <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Page {currentPage} of {lastPage}</Text>
-          <TouchableOpacity onPress={() => setPage(currentPage + 1)} disabled={currentPage === lastPage} className={`p-2 rounded-lg border ${currentPage === lastPage ? "border-gray-200 dark:border-gray-700 opacity-40" : "border-gray-300 dark:border-gray-600"}`}><Icon name="chevron-right" size={18} color={isDarkMode ? "#9CA3AF" : "#4b5563"} /></TouchableOpacity>
-        </View>)}
+        {/* Loading More Indicator */}
+        {(isLoadingMore || loadingMore) && (
+          <View className="py-6 items-center">
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading more stocks...
+            </Text>
+          </View>
+        )}
+
+        {/* No More Stocks */}
+        {!hasMore && safeStocks.length > 0 && safeStocks.length === totalStocks && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              No more stocks to load
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       <Modal visible={showFormModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCancelForm}>

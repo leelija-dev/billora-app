@@ -159,6 +159,16 @@ export const NAVIGATION_SCREENS = {
     UNIT_DETAIL: 'UnitDetail',
     ADD_UNIT: 'AddUnit',
     
+    // Medicine Types
+    MEDICINE_TYPES: 'MedicineTypes',
+    MEDICINE_TYPE_DETAIL: 'MedicineTypeDetail',
+    ADD_MEDICINE_TYPE: 'AddMedicineType',
+    
+    // Packages
+    PACKAGES: 'Packages',
+    PACKAGE_DETAIL: 'PackageDetail',
+    ADD_PACKAGE: 'AddPackage',
+    
     BILLS: 'Bills',
     BILL_DETAIL: 'BillDetail',
     CREATE_BILL: 'CreateBill',

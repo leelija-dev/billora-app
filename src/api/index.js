@@ -5,7 +5,7 @@ import { brandsAPI } from './brands';
 import { categoriesAPI } from './categories';
 import { unitsAPI } from './units';
 import { stocksAPI } from './stocks';
-import { invoicesAPI } from './invoices';
+
 import { storesAPI } from './stores';
 import { customersAPI } from './customers';
 import { dashboardAPI } from './dashboard';
@@ -36,8 +36,7 @@ export {
   // Stocks
   stocksAPI,
   
-  // Invoices
-  invoicesAPI,
+
   
   // Stores
   storesAPI,

@@ -8,8 +8,10 @@ const useStockStore = create((set, get) => ({
   totalStocks: 0,
   currentPage: 1,
   lastPage: 1,
-  perPage: 15,
+  perPage: 8,
   loading: false,
+  loadingMore: false,
+  hasMore: true,
   error: null,
   filters: {
     search: '',
@@ -25,8 +27,8 @@ const useStockStore = create((set, get) => ({
   },
 
   // Fetch stocks with pagination
-  fetchStocks: async (page = 1, search = '') => {
-    console.log('🔄 fetchStocks called with page:', page, 'search:', search);
+  fetchStocks: async (page = 1, search = '', append = false) => {
+    console.log('🔄 fetchStocks called with page:', page, 'search:', search, 'append:', append);
     set({ loading: true, error: null });
 
     try {
@@ -101,13 +103,17 @@ const useStockStore = create((set, get) => ({
 
       console.log('✅ Enriched stocks count:', enrichedStocks.length);
 
-      set({
-        stocks: enrichedStocks,
+      const hasMore = (paginationData.current_page || page) < (paginationData.last_page || 1);
+
+      set((state) => ({
+        stocks: append ? [...state.stocks, ...enrichedStocks] : enrichedStocks,
         totalStocks: paginationData.total || enrichedStocks.length,
         currentPage: paginationData.current_page || page,
         lastPage: paginationData.last_page || 1,
+        hasMore: hasMore,
         loading: false,
-      });
+        loadingMore: false,
+      }));
 
       return response;
     } catch (error) {
@@ -260,6 +266,99 @@ const useStockStore = create((set, get) => ({
   setPage: (page) => {
     const { filters } = get();
     get().fetchStocks(page, filters.search);
+  },
+
+  // Load more stocks
+  loadMoreStocks: async (search = '') => {
+    const { hasMore, loadingMore, loading, currentPage, lastPage } = get();
+    
+    console.log(`🔄 Load more: hasMore=${hasMore}, loadingMore=${loadingMore}, loading=${loading}, currentPage=${currentPage}, lastPage=${lastPage}`);
+    
+    // Prevent loading if already loading, no more stocks, or reached last page
+    if (loadingMore || loading || !hasMore || currentPage >= lastPage) {
+      console.log('⏭️ Skipping load more - conditions not met');
+      return;
+    }
+
+    set({ loadingMore: true });
+    const nextPage = currentPage + 1;
+    console.log(`📡 Fetching next page: ${nextPage}`);
+
+    try {
+      const response = await stocksAPI.getAll(search, nextPage, get().perPage);
+      console.log('📦 Stocks API Full Response:', response);
+      
+      let stocksArray = [];
+      let paginationData = {};
+      
+      if (response?.data?.data?.data) {
+        stocksArray = response.data.data.data;
+        paginationData = response.data.data;
+      } else if (response?.data?.data) {
+        stocksArray = Array.isArray(response.data.data) ? response.data.data : [];
+        paginationData = response.data;
+      } else if (response?.data) {
+        stocksArray = Array.isArray(response.data) ? response.data : [];
+      } else if (Array.isArray(response)) {
+        stocksArray = response;
+      }
+      
+      if (!Array.isArray(stocksArray)) {
+        stocksArray = [];
+      }
+      
+      // Fetch products to enrich stock data
+      let productsArray = [];
+      try {
+        const productsResponse = await productsAPI.getAll();
+        if (productsResponse?.data?.data?.data) {
+          productsArray = productsResponse.data.data.data;
+        } else if (productsResponse?.data?.data) {
+          productsArray = Array.isArray(productsResponse.data.data) ? productsResponse.data.data : [];
+        } else if (productsResponse?.data) {
+          productsArray = Array.isArray(productsResponse.data) ? productsResponse.data : [];
+        }
+      } catch (productError) {
+        console.error('❌ Failed to fetch products:', productError);
+      }
+
+      // Enrich stocks with product information
+      const enrichedStocks = stocksArray.map(stock => {
+        const product = productsArray.find(p => p.id === stock.product_id);
+        return {
+          ...stock,
+          product: product || null,
+          product_name: product?.name || stock.product_name || `Product ${stock.product_id}`,
+          product_sku: product?.sku || stock.product_sku || '',
+          product_image: product?.image || stock.product_image || null,
+          selling_price: stock.selling_price || product?.selling_price || 0,
+          purchase_price: stock.purchase_price || product?.purchase_price || 0,
+        };
+      });
+
+      const hasMore = (paginationData.current_page || nextPage) < (paginationData.last_page || 1);
+
+      set((state) => {
+        // Create a Set of existing stock IDs to avoid duplicates
+        const existingIds = new Set(state.stocks.map(s => s.id));
+        const newStocks = enrichedStocks.filter(s => !existingIds.has(s.id));
+        
+        return {
+          stocks: [...state.stocks, ...newStocks],
+          totalStocks: paginationData.total || state.stocks.length + newStocks.length,
+          currentPage: paginationData.current_page || nextPage,
+          lastPage: paginationData.last_page || 1,
+          hasMore: hasMore,
+          loadingMore: false,
+        };
+      });
+
+      return { success: true, data: enrichedStocks };
+    } catch (error) {
+      console.error('❌ Failed to load more stocks:', error);
+      set({ loadingMore: false });
+      return { success: false, error: error.message };
+    }
   },
 
   // Clear error

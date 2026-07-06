@@ -7,10 +7,67 @@ import { Alert, Text, TouchableOpacity, View } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuthStore } from "../../store/authStore";
 import { useThemeStore } from "../../store/themeStore";
+import { usePermissionStore } from "../../store/permissionStore";
 
 const Sidebar = (props) => {
   const { isDarkMode } = useThemeStore();
   const { user, logout } = useAuthStore();
+  const { sidebarPermissions } = usePermissionStore();
+
+  // Dynamic icon mapping (matching admin sidebar)
+  const iconMap = {
+    dashboard: 'view-dashboard',
+    products: 'package-variant',
+    categories: 'shape',
+    brands: 'trademark',
+    units: 'ruler',
+    'medicine-types': 'medical-bag',
+    stores: 'store',
+    packages: 'package-variant-closed',
+    stock: 'warehouse',
+    seller: 'account-group',
+    orders: 'cart',
+    customers: 'account-group',
+    invoices: 'file-document',
+    reports: 'chart-bar',
+    gst: 'currency-inr',
+    plans: 'credit-card',
+    'social-link': 'share-variant',
+    settings: 'cog',
+  };
+
+  // Screen name mapping from slug to screen name
+  const screenMap = {
+    dashboard: 'Dashboard',
+    products: 'Products',
+    categories: 'Categories',
+    brands: 'Brands',
+    units: 'Units',
+    'medicine-types': 'MedicineTypes',
+    stores: 'Stores',
+    packages: 'Packages',
+    stock: 'Stocks',
+    seller: 'Sellers',
+    orders: 'Orders',
+    customers: 'Customers',
+    invoices: 'Invoices',
+    reports: 'Reports',
+    gst: 'GST',
+    plans: 'Plans',
+    'social-link': 'SocialLink',
+    settings: 'Settings',
+  };
+
+  // Generate menu items dynamically from API permissions
+  const menuItems = sidebarPermissions
+    .filter(p => p && p.status === 1)
+    .map(permission => ({
+      id: permission.id,
+      name: permission.name,
+      slug: permission.slug,
+      icon: iconMap[permission.slug] || 'circle',
+      screen: screenMap[permission.slug] || permission.name,
+    }));
 
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -103,13 +160,15 @@ const Sidebar = (props) => {
 
       {/* Custom Drawer Items for better dark mode support */}
       <DrawerContentScrollView {...props}>
-        {props.state.routes.map((route, index) => {
-          const isFocused = props.state.index === index;
+        {menuItems.map((item) => {
+          const isFocused = props.state.routes.some(
+            route => route.name === item.screen && props.state.index === props.state.routes.indexOf(route)
+          );
           return (
             <TouchableOpacity
-              key={route.key}
+              key={item.id}
               onPress={() => {
-                props.navigation.navigate(route.name);
+                props.navigation.navigate(item.screen);
                 props.navigation.closeDrawer();
               }}
               className={`flex-row items-center px-4 py-3 mx-2 my-1 rounded-xl ${
@@ -119,7 +178,7 @@ const Sidebar = (props) => {
               }`}
             >
               <Icon 
-                name={ALL_ICONS[route.name] || "circle"} 
+                name={item.icon} 
                 size={22} 
                 color={isFocused ? "#6366F1" : (isDarkMode ? "#9CA3AF" : "#6B7280")} 
               />
@@ -132,7 +191,7 @@ const Sidebar = (props) => {
                       : "text-gray-700"
                 }`}
               >
-                {route.name}
+                {item.name}
               </Text>
             </TouchableOpacity>
           );
@@ -159,21 +218,6 @@ const Sidebar = (props) => {
       </View>
     </View>
   );
-};
-
-// Icon mapping for drawer items
-const ALL_ICONS = {
-  'Dashboard': 'view-dashboard',
-  'Products': 'package-variant',
-  'Stocks': 'warehouse',
-  'Bills': 'file-document',
-  'Reports': 'chart-bar',
-  'Customers': 'account-group',
-  'Categories': 'shape',
-  'Brands': 'trademark',
-  'Units': 'ruler',
-  'Stores': 'store',
-  'Settings': 'cog',
 };
 
 export default Sidebar;

@@ -477,7 +477,7 @@ const DashboardScreen = () => {
             <StatsCard
               title="Total Orders"
               value={(stats.orders || 0).toLocaleString()}
-              icon="shopping-bag"
+              icon="cart"
               trend={stats.ordersChange}
               color="#3B82F6"
               style={{ width: "48%", marginBottom: 12 }}

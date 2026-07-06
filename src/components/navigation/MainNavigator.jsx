@@ -10,7 +10,7 @@ import BrandsStackNavigator from "./stacks/BrandsStack";
 import CategoriesStackNavigator from "./stacks/CategoriesStack";
 import CustomersStackNavigator from "./stacks/CustomersStack";
 
-import InvoicesStackNavigator from "./stacks/InvoicesStack";
+
 import OrdersStackNavigator from "./stacks/OrdersStack";
 import ProductsStackNavigator from "./stacks/ProductsStack";
 import ReportsStackNavigator from "./stacks/ReportsStack";
@@ -28,7 +28,7 @@ const COMPONENT_MAP = {
   Products: ProductsStackNavigator,
   Stocks: StocksStackNavigator,
   Orders: OrdersStackNavigator,
-  Invoices: InvoicesStackNavigator,
+  Invoices: '',
   Reports: ReportsStackNavigator,
   Customers: CustomersStackNavigator,
   Categories: CategoriesStackNavigator,
