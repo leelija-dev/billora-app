@@ -180,7 +180,7 @@ export const MENU_ITEMS = {
     label: 'Invoices',
     order: 13,
     screen: 'Invoices',
-    stack: null,
+    stack: 'InvoicesStack',
     slug: 'invoices',
   },
   reports: {

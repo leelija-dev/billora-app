@@ -21,6 +21,7 @@ import SettingsStackNavigator from "./stacks/SettingsStack";
 import StocksStackNavigator from "./stacks/StocksStack";
 import StoresStackNavigator from "./stacks/StoresStack";
 import UnitsStackNavigator from "./stacks/UnitsStack";
+import InvoicesStackNavigator from "./stacks/InvoicesStack";
 
 const Tab = createBottomTabNavigator();
 
@@ -30,7 +31,7 @@ const COMPONENT_MAP = {
   Products: ProductsStackNavigator,
   Stocks: StocksStackNavigator,
   Orders: OrdersStackNavigator,
-  Invoices: '',
+  Invoices: InvoicesStackNavigator,
   Reports: ReportsStackNavigator,
   Customers: CustomersStackNavigator,
   Categories: CategoriesStackNavigator,

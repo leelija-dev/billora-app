@@ -10,6 +10,7 @@ import { storesAPI } from './stores';
 import { customersAPI } from './customers';
 import { dashboardAPI } from './dashboard';
 import { reportsAPI } from './reports';
+import { invoiceAPI } from './invoices';
 
 // API Configuration
 export const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
@@ -35,9 +36,7 @@ export {
   
   // Stocks
   stocksAPI,
-  
 
-  
   // Stores
   storesAPI,
   
@@ -49,6 +48,9 @@ export {
   
   // Reports
   reportsAPI,
+  
+  // Invoices
+  invoiceAPI,
 };
 
 // Legacy exports for backward compatibility

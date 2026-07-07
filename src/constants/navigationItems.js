@@ -93,6 +93,15 @@ export const NAVIGATION_ITEMS = [
     badge: null,
   },
   {
+    id: "invoices",
+    title: "Invoices",
+    icon: "file-document",
+    iconActive: "file-document",
+    parent: "InvoicesStack",
+    screen: NAVIGATION_SCREENS.MAIN.INVOICES,
+    badge: null,
+  },
+  {
     id: "customers",
     title: "Customers",
     icon: "account-group",

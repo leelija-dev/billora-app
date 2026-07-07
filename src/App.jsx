@@ -33,6 +33,7 @@ import SettingsStackNavigator from "./components/navigation/stacks/SettingsStack
 import StocksStackNavigator from "./components/navigation/stacks/StocksStack";
 import StoresStackNavigator from "./components/navigation/stacks/StoresStack";
 import UnitsStackNavigator from "./components/navigation/stacks/UnitsStack";
+import InvoicesStackNavigator from "./components/navigation/stacks/InvoicesStack";
 
 import MainNavigator from "./components/navigation/MainNavigator";
 
@@ -210,7 +211,7 @@ const SCREEN_COMPONENTS = {
   Products: ProductsStackNavigator,
   Stocks: StocksStackNavigator,
   Orders: OrdersStackNavigator,
-  Invoices: DashboardScreen,
+  Invoices: InvoicesStackNavigator,
   Reports: ReportsStackNavigator,
   Customers: CustomersStackNavigator,
   Categories: CategoriesStackNavigator,
