@@ -188,6 +188,10 @@ const SellersScreen = () => {
     setShowFormModal(true);
   };
 
+  const handleSellerPress = (seller) => {
+    navigation.navigate("SellerDetail", { id: seller.id });
+  };
+
   const handleEditSeller = async (seller) => {
     try {
       const sellerData = await getSellerById(seller.id);
@@ -540,6 +544,7 @@ const SellersScreen = () => {
                 onDelete={handleDeleteClick}
                 onPayment={handlePaymentClick}
                 onRefresh={handleRefresh}
+                onPress={handleSellerPress}
               />
             )}
 

@@ -1,4 +1,5 @@
-// components/sellers/SellerList.js - WITH DUE PAYMENT (already has onPayment)
+// components/sellers/SellerList.js - WITH ALL BUTTONS VISIBLE IN BOTH VIEWS
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import {
@@ -24,7 +25,7 @@ const SellerList = ({
   onDelete = () => {},
   onEdit = () => {},
   onPress = () => {},
-  onPayment = () => {}, // ✅ Payment handler prop
+  onPayment = () => {},
 }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
@@ -165,6 +166,7 @@ const SellerList = ({
     </Animated.View>
   );
 
+  // ✅ Updated Grid Item - Shows all buttons
   const renderGridItem = (item) => (
     <View key={item.id} className="w-[48%] mx-[1%] mb-3">
       <SellerCard 
@@ -172,99 +174,150 @@ const SellerList = ({
         onEdit={onEdit}
         onDelete={handleDeleteSeller}
         onPress={handleSellerPress}
-        onPayment={onPayment} // ✅ Pass payment handler
+        onPayment={onPayment}
       />
     </View>
   );
 
-  const renderListItem = (item) => (
-    <TouchableOpacity
-      key={item.id}
-      onPress={() => handleSellerPress(item)}
-      className={`flex-row rounded-xl mb-3 p-4 shadow-sm ${
-        isDarkMode ? 'bg-gray-800' : 'bg-white'
-      }`}
-    >
-      <View className="mr-3">
-        <View className={`w-12 h-12 rounded-xl items-center justify-center ${
-          isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
-        }`}>
-          <Icon name="account" size={24} color={isDarkMode ? "#9CA3AF" : "#4b5563"} />
-        </View>
-      </View>
+  // ✅ Updated List Item - Shows all buttons
+  const renderListItem = (item) => {
+    const dueAmount = parseFloat(item.due_amount) || 0;
+    const hasDue = dueAmount > 0;
 
-      <View className="flex-1">
-        <View className="flex-row justify-between items-start">
-          <View className="flex-1">
-            <Text
-              className={`text-base font-semibold ${
-                isDarkMode ? 'text-white' : 'text-gray-800'
-              }`}
-              numberOfLines={1}
-            >
-              {item.name}
+    return (
+      <TouchableOpacity
+        key={item.id}
+        onPress={() => handleSellerPress(item)}
+        className={`flex-row rounded-xl mb-3 p-4 shadow-sm ${
+          isDarkMode ? 'bg-gray-800' : 'bg-white'
+        }`}
+        activeOpacity={0.7}
+      >
+        {/* Avatar */}
+        <View className="mr-3">
+          <View className={`w-12 h-12 rounded-xl items-center justify-center ${
+            isDarkMode ? 'bg-gray-700' : 'bg-gray-200'
+          }`}>
+            <Text className={`text-lg font-bold ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            }`}>
+              {item.name?.charAt(0).toUpperCase() || 'S'}
             </Text>
           </View>
-          <View className="flex-row items-center gap-2">
-            {/* ✅ Pay Due button in list view */}
-            {parseFloat(item.due_amount) > 0 && (
-              <TouchableOpacity
-                onPress={() => onPayment(item)}
-                className="px-2 py-1 rounded-lg bg-green-100 dark:bg-green-900/30 flex-row items-center"
+        </View>
+
+        {/* Content */}
+        <View className="flex-1">
+          {/* Name and ID */}
+          <View className="flex-row justify-between items-start">
+            <View className="flex-1">
+              <Text
+                className={`text-base font-semibold ${
+                  isDarkMode ? 'text-white' : 'text-gray-800'
+                }`}
+                numberOfLines={1}
               >
-                <Icon name="currency-inr" size={12} color="#22c55e" />
-                <Text className="text-xs text-green-600 dark:text-green-400 ml-0.5">Pay</Text>
-              </TouchableOpacity>
-            )}
+                {item.name}
+              </Text>
+            </View>
             <Text className={`text-xs ${
               isDarkMode ? 'text-gray-500' : 'text-gray-400'
             }`}>
               #{item.id}
             </Text>
           </View>
-        </View>
 
-        <View className="mt-2">
-          <View className="flex-row items-center">
-            <Icon name="phone" size={12} color="#9ca3af" />
-            <Text className={`text-xs ml-1 flex-1 ${
-              isDarkMode ? 'text-gray-400' : 'text-gray-500'
-            }`} numberOfLines={1}>
-              {item.phone || 'N/A'}
-            </Text>
+          {/* Contact Info */}
+          <View className="mt-1">
+            {item.phone && (
+              <View className="flex-row items-center">
+                <Icon name="phone" size={12} color="#9ca3af" />
+                <Text className={`text-xs ml-1 flex-1 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`} numberOfLines={1}>
+                  {item.phone}
+                </Text>
+              </View>
+            )}
+            {item.city && (
+              <View className="flex-row items-center mt-0.5">
+                <Icon name="map-marker" size={12} color="#9ca3af" />
+                <Text className={`text-xs ml-1 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`} numberOfLines={1}>
+                  {item.city}
+                </Text>
+              </View>
+            )}
           </View>
-          
-          {item.city && (
-            <View className="flex-row items-center mt-1">
-              <Icon name="map-marker" size={12} color="#9ca3af" />
-              <Text className={`text-xs ml-1 ${
-                isDarkMode ? 'text-gray-400' : 'text-gray-500'
-              }`} numberOfLines={1}>
-                {item.city}
+
+          {/* Due Amount and Actions Row */}
+          <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            {/* Due Amount */}
+            <View className="flex-row items-center">
+              <Icon name="currency-inr" size={12} color={hasDue ? "#f97316" : "#22c55e"} />
+              <Text className={`text-xs ml-1 font-medium ${
+                hasDue ? 'text-orange-500' : 'text-green-500'
+              }`}>
+                ₹{dueAmount.toLocaleString()}
               </Text>
+              {hasDue && (
+                <Text className={`text-xs ml-1 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                }`}>
+                  due
+                </Text>
+              )}
             </View>
-          )}
-        </View>
 
-        <View className="flex-row justify-between items-center mt-2">
-          <View className="flex-row items-center">
-            <Icon name="currency-inr" size={12} color="#f97316" />
-            <Text className={`text-xs ml-1 font-medium ${
-              parseFloat(item.due_amount) > 0 ? 'text-orange-500' : isDarkMode ? 'text-gray-500' : 'text-gray-400'
-            }`}>
-              ₹{parseFloat(item.due_amount || 0).toLocaleString()}
-            </Text>
+            {/* Action Buttons */}
+            <View className="flex-row items-center gap-1">
+              {/* Pay Due Button */}
+              {hasDue && (
+                <TouchableOpacity
+                  onPress={() => onPayment(item)}
+                  className={`px-2 py-1 rounded-lg flex-row items-center ${
+                    isDarkMode ? 'bg-green-900/30' : 'bg-green-50'
+                  }`}
+                >
+                  <Icon name="currency-inr" size={12} color="#22c55e" />
+                  <Text className="text-xs text-green-600 dark:text-green-400 ml-0.5 font-medium">
+                    Pay
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Edit Button */}
+              <TouchableOpacity
+                onPress={() => onEdit(item)}
+                className={`px-2 py-1 rounded-lg flex-row items-center ${
+                  isDarkMode ? 'bg-blue-900/30' : 'bg-blue-50'
+                }`}
+              >
+                <Icon name="pencil" size={12} color="#3b82f6" />
+                <Text className="text-xs text-blue-600 dark:text-blue-400 ml-0.5 font-medium">
+                  Edit
+                </Text>
+              </TouchableOpacity>
+
+              {/* Delete Button */}
+              <TouchableOpacity
+                onPress={() => handleDeleteSeller(item.id)}
+                className={`px-2 py-1 rounded-lg flex-row items-center ${
+                  isDarkMode ? 'bg-red-900/30' : 'bg-red-50'
+                }`}
+              >
+                <Icon name="delete" size={12} color="#ef4444" />
+                <Text className="text-xs text-red-600 dark:text-red-400 ml-0.5 font-medium">
+                  Del
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          
-          <Text className={`text-xs ${
-            isDarkMode ? 'text-gray-500' : 'text-gray-400'
-          }`}>
-            {new Date(item.created_at).toLocaleDateString()}
-          </Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderGridItems = () => {
     const rows = [];

@@ -1,4 +1,4 @@
-// components/sellers/DuePaymentModal.jsx - FIXED
+// components/sellers/DuePaymentModal.jsx - FIXED HEIGHT
 
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -11,10 +11,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  TouchableWithoutFeedback,
+  Dimensions,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
 import Toast from "react-native-toast-message";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const DuePaymentModal = ({ 
   seller, 
@@ -44,16 +48,13 @@ const DuePaymentModal = ({
   const dueAmount = parseFloat(seller.due_amount) || 0;
 
   const handleAmountChange = (value) => {
-    // Allow only digits and decimal
     let cleaned = value.replace(/[^0-9.]/g, '');
     
-    // Prevent multiple decimal points
     const decimalCount = (cleaned.match(/\./g) || []).length;
     if (decimalCount > 1) {
       cleaned = cleaned.slice(0, cleaned.lastIndexOf('.'));
     }
     
-    // Limit to 2 decimal places
     if (cleaned.includes('.')) {
       const parts = cleaned.split('.');
       if (parts[1] && parts[1].length > 2) {
@@ -64,7 +65,6 @@ const DuePaymentModal = ({
     setPaidAmount(cleaned);
     setTouched(true);
     
-    // Validate
     const numericValue = parseFloat(cleaned);
     if (cleaned && !isNaN(numericValue) && numericValue > dueAmount && dueAmount > 0) {
       setErrors({
@@ -104,7 +104,6 @@ const DuePaymentModal = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ FIXED: Properly handle submit and call onSuccess
   const handleSubmit = async () => {
     if (!validateForm()) return;
     
@@ -123,12 +122,9 @@ const DuePaymentModal = ({
     
     try {
       if (onSuccess) {
-        // Call onSuccess with the amount and wait for it to complete
         await onSuccess(amount);
-        // The parent will handle closing the modal
       } else {
         console.warn("⚠️ onSuccess callback not provided");
-        // If no onSuccess, close modal ourselves
         if (onClose) {
           onClose();
         }
@@ -145,7 +141,6 @@ const DuePaymentModal = ({
     }
   };
 
-  // Close handler - reset state
   const handleClose = () => {
     setPaidAmount("");
     setErrors({});
@@ -169,195 +164,196 @@ const DuePaymentModal = ({
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className="flex-1 bg-black/50 justify-end"
-      >
-        <TouchableOpacity
-          className="flex-1"
-          activeOpacity={1}
-          onPress={handleClose}
-        >
-          <View
-            className={`rounded-t-3xl p-6 ${
-              isDarkMode ? "bg-gray-800" : "bg-white"
-            }`}
-          >
-            {/* Header */}
-            <View className="items-center mb-4">
-              <View
-                className={`w-12 h-1 rounded-full ${
-                  isDarkMode ? "bg-gray-600" : "bg-gray-300"
-                }`}
-              />
-            </View>
-
-            <View className="flex-row items-center justify-between mb-4">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl items-center justify-center mr-3">
-                  <Icon name="currency-inr" size={20} color="#16a34a" />
-                </View>
-                <View>
-                  <Text className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}>
-                    Due Payment
-                  </Text>
-                  <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                    {seller.name}
-                  </Text>
-                </View>
+      <TouchableWithoutFeedback onPress={handleClose}>
+        <View className="flex-1 bg-black/50 justify-end">
+          <TouchableWithoutFeedback>
+            <View
+              className={`rounded-t-3xl p-6 ${
+                isDarkMode ? "bg-gray-800" : "bg-white"
+              }`}
+              style={{ 
+                maxHeight: SCREEN_HEIGHT * 0.85,
+                minHeight: SCREEN_HEIGHT * 0.5,
+              }}
+            >
+              {/* Handle Bar */}
+              <View className="items-center mb-4">
+                <View
+                  className={`w-12 h-1 rounded-full ${
+                    isDarkMode ? "bg-gray-600" : "bg-gray-300"
+                  }`}
+                />
               </View>
-              <TouchableOpacity
-                onPress={handleClose}
-                className={`p-2 rounded-lg ${
-                  isDarkMode ? "bg-gray-700" : "bg-gray-100"
-                }`}
-              >
-                <Icon name="close" size={20} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Seller Info */}
-              <View
-                className={`p-4 rounded-xl mb-4 ${
-                  isDarkMode ? "bg-gray-700" : "bg-gray-50"
-                }`}
-              >
-                <View className="flex-row justify-between items-center py-1">
-                  <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                    Total Due
-                  </Text>
-                  <Text className={`text-lg font-bold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>
-                    ₹{dueAmount.toFixed(2)}
-                  </Text>
-                </View>
-                {dueAmount > 0 && (
-                  <View className="flex-row justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-600">
-                    <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                      Maximum amount allowed
+              {/* Header */}
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-row items-center">
+                  <View className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl items-center justify-center mr-3">
+                    <Icon name="currency-inr" size={20} color="#16a34a" />
+                  </View>
+                  <View>
+                    <Text className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}>
+                      Due Payment
                     </Text>
-                    <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                    <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      {seller.name}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={handleClose}
+                  className={`p-2 rounded-lg ${
+                    isDarkMode ? "bg-gray-700" : "bg-gray-100"
+                  }`}
+                >
+                  <Icon name="close" size={20} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Content - Using View with flex:1 instead of ScrollView for proper height */}
+              <View className="flex-1">
+                {/* Seller Info */}
+                <View
+                  className={`p-4 rounded-xl mb-4 ${
+                    isDarkMode ? "bg-gray-700" : "bg-gray-50"
+                  }`}
+                >
+                  <View className="flex-row justify-between items-center py-1">
+                    <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      Total Due
+                    </Text>
+                    <Text className={`text-lg font-bold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>
                       ₹{dueAmount.toFixed(2)}
                     </Text>
                   </View>
-                )}
-              </View>
-
-              {/* Amount Input */}
-              <View className="mb-4">
-                <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}>
-                  Payment Amount <Text className="text-red-500">*</Text>
-                </Text>
-                <View className="relative">
-                  <View className="absolute left-3 top-1/2 transform -translate-y-1/2 z-10">
-                    <Icon name="currency-inr" size={18} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
-                  </View>
-                  <TextInput
-                    ref={inputRef}
-                    className={`border rounded-xl px-4 py-3 pl-10 text-base ${
-                      errors.paidAmount && touched
-                        ? "border-red-500"
-                        : isDarkMode
-                        ? "border-gray-600 text-white bg-gray-700"
-                        : "border-gray-300 text-gray-800 bg-gray-50"
-                    }`}
-                    placeholder="Enter amount"
-                    placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9CA3AF"}
-                    keyboardType="numeric"
-                    value={paidAmount}
-                    onChangeText={handleAmountChange}
-                    editable={!isProcessing && dueAmount > 0}
-                    autoFocus
-                  />
-                </View>
-                {errors.paidAmount && touched && (
-                  <Text className="mt-1 text-xs text-red-500">
-                    {errors.paidAmount}
-                  </Text>
-                )}
-                {dueAmount > 0 && (
-                  <View className="mt-2 flex-row items-center space-x-3">
-                    <TouchableOpacity
-                      onPress={handleMaxPayment}
-                      disabled={isProcessing}
-                      className="px-3 py-1 rounded-lg bg-blue-100 dark:bg-blue-900/30"
-                    >
-                      <Text className="text-xs text-blue-600 dark:text-blue-400">
-                        Pay full amount (₹{dueAmount.toFixed(2)})
-                      </Text>
-                    </TouchableOpacity>
-                    {paidAmount && !errors.paidAmount && numericValue > 0 && (
+                  {dueAmount > 0 && (
+                    <View className="flex-row justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-600">
                       <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                        Remaining: ₹{remainingAmount.toFixed(2)}
+                        Maximum amount allowed
+                      </Text>
+                      <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        ₹{dueAmount.toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Amount Input */}
+                <View className="mb-4">
+                  <Text className={`text-sm font-medium mb-2 ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}>
+                    Payment Amount <Text className="text-red-500">*</Text>
+                  </Text>
+                  <View className="relative">
+                    <View className="absolute left-3 top-1/2 transform -translate-y-1/2 z-10">
+                      <Icon name="currency-inr" size={18} color={isDarkMode ? "#9CA3AF" : "#6B7280"} />
+                    </View>
+                    <TextInput
+                      ref={inputRef}
+                      className={`border rounded-xl px-4 py-3 pl-10 text-base ${
+                        errors.paidAmount && touched
+                          ? "border-red-500"
+                          : isDarkMode
+                          ? "border-gray-600 text-white bg-gray-700"
+                          : "border-gray-300 text-gray-800 bg-gray-50"
+                      }`}
+                      placeholder="Enter amount"
+                      placeholderTextColor={isDarkMode ? "#9CA3AF" : "#9CA3AF"}
+                      keyboardType="numeric"
+                      value={paidAmount}
+                      onChangeText={handleAmountChange}
+                      editable={!isProcessing && dueAmount > 0}
+                      autoFocus
+                    />
+                  </View>
+                  {errors.paidAmount && touched && (
+                    <Text className="mt-1 text-xs text-red-500">
+                      {errors.paidAmount}
+                    </Text>
+                  )}
+                  {dueAmount > 0 && (
+                    <View className="mt-2 flex-row items-center space-x-3 flex-wrap">
+                      <TouchableOpacity
+                        onPress={handleMaxPayment}
+                        disabled={isProcessing}
+                        className="px-3 py-1 rounded-lg bg-blue-100 dark:bg-blue-900/30"
+                      >
+                        <Text className="text-xs text-blue-600 dark:text-blue-400">
+                          Pay full amount (₹{dueAmount.toFixed(2)})
+                        </Text>
+                      </TouchableOpacity>
+                      {paidAmount && !errors.paidAmount && numericValue > 0 && (
+                        <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                          Remaining: ₹{remainingAmount.toFixed(2)}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                {/* Summary */}
+                <View className="flex-row justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700 mb-4">
+                  <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                    {dueAmount > 0 ? (
+                      <Text>
+                        Remaining after payment:{' '}
+                        <Text className={`font-medium ${remainingAmount < 0 ? "text-red-500" : ""}`}>
+                          ₹{remainingAmount.toFixed(2)}
+                        </Text>
+                      </Text>
+                    ) : (
+                      <Text className="text-green-600 dark:text-green-400">
+                        No pending dues
                       </Text>
                     )}
-                  </View>
-                )}
-              </View>
-
-              {/* Summary */}
-              <View className="flex-row justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700 mb-4">
-                <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  {dueAmount > 0 ? (
-                    <Text>
-                      Remaining after payment:{' '}
-                      <Text className={`font-medium ${remainingAmount < 0 ? "text-red-500" : ""}`}>
-                        ₹{remainingAmount.toFixed(2)}
-                      </Text>
-                    </Text>
-                  ) : (
-                    <Text className="text-green-600 dark:text-green-400">
-                      No pending dues
-                    </Text>
-                  )}
-                </Text>
-                {isValid && (
-                  <View className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                    <Text className="text-xs text-green-600 dark:text-green-400">
-                      ✓ Valid amount
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Buttons */}
-              <View className="flex-row space-x-3 pt-2">
-                <TouchableOpacity
-                  onPress={handleClose}
-                  disabled={isProcessing}
-                  className={`flex-1 py-3 rounded-xl border ${
-                    isDarkMode ? "border-gray-600" : "border-gray-300"
-                  }`}
-                >
-                  <Text className={`text-center font-medium ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}>
-                    Cancel
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleSubmit}
-                  disabled={isProcessing || dueAmount <= 0 || !paidAmount || !isValid}
-                  className={`flex-1 py-3 rounded-xl flex-row items-center justify-center ${
-                    isProcessing || dueAmount <= 0 || !paidAmount || !isValid
-                      ? "bg-gray-400"
-                      : "bg-blue-500"
-                  }`}
-                >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Icon name="check" size={18} color="#FFFFFF" />
-                      <Text className="text-white font-semibold ml-2">
-                        Process Payment
+                  {isValid && (
+                    <View className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <Text className="text-xs text-green-600 dark:text-green-400">
+                        ✓ Valid amount
                       </Text>
-                    </>
+                    </View>
                   )}
-                </TouchableOpacity>
+                </View>
+
+                {/* Buttons */}
+                <View className="flex-row space-x-3 pt-2 pb-2 gap-4">
+                  <TouchableOpacity
+                    onPress={handleClose}
+                    disabled={isProcessing}
+                    className={`flex-1 py-3 rounded-xl border ${
+                      isDarkMode ? "border-gray-600" : "border-gray-300"
+                    }`}
+                  >
+                    <Text className={`text-center font-medium ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSubmit}
+                    disabled={isProcessing || dueAmount <= 0 || !paidAmount || !isValid}
+                    className={`flex-1 py-3 rounded-xl flex-row items-center justify-center ${
+                      isProcessing || dueAmount <= 0 || !paidAmount || !isValid
+                        ? "bg-gray-400"
+                        : "bg-blue-500"
+                    }`}
+                  >
+                    {isProcessing ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Icon name="check" size={18} color="#FFFFFF" />
+                        <Text className="text-white font-semibold ml-2">
+                          Process Payment
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 };

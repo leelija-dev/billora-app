@@ -334,6 +334,14 @@ export const getPaginatedData = (response) => {
       return dataObj.data;
     }
 
+    // Handle nested structure like { sellerProducts: { current_page, data: [...] } }
+    if (dataObj && dataObj.sellerProducts && dataObj.sellerProducts.current_page !== undefined) {
+      if (!Array.isArray(dataObj.sellerProducts.data)) {
+        dataObj.sellerProducts.data = [];
+      }
+      return dataObj.sellerProducts;
+    }
+
     if (dataObj && dataObj.data && Array.isArray(dataObj.data)) {
       return {
         data: dataObj.data,

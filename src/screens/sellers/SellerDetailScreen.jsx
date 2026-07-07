@@ -1,4 +1,4 @@
-// screens/sellers/SellerDetailsScreen.js - COMPLETE FIXED VERSION
+// screens/sellers/SellerDetailsScreen.js - FIXED VERSION
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -108,7 +108,7 @@ const SellerDetailsScreen = () => {
     return "1";
   }, [user]);
 
-  // Fetch seller details
+  // Fetch seller details - FIXED
   const fetchSellerDetails = useCallback(async () => {
     if (!id) {
       console.log("⚠️ No seller ID provided");
@@ -119,10 +119,14 @@ const SellerDetailsScreen = () => {
     setSellerLoading(true);
     
     try {
-      const sellerData = await getSellerById(id);
-      console.log("📝 Received seller data:", sellerData);
+      const result = await getSellerById(id);
+      console.log("📝 Received seller result:", result);
       
-      if (sellerData) {
+      // ✅ FIX: Extract seller data from result
+      const sellerData = result?.data || result;
+      console.log("📝 Extracted seller data:", sellerData);
+      
+      if (sellerData && sellerData.id) {
         setSeller(sellerData);
         setEditFormData({
           name: sellerData.name || "",
@@ -330,13 +334,16 @@ const SellerDetailsScreen = () => {
       const result = await updateSeller(id, data);
       console.log("✅ Seller updated successfully", result);
       
+      // Extract updated seller data
+      const updatedSeller = result?.data || result;
+      
       setSuccessMessage("Seller updated successfully");
       setShowSuccessModal(true);
       
       // Update local seller data
       setSeller(prev => ({
         ...prev,
-        ...editFormData
+        ...updatedSeller
       }));
       
       Toast.show({
@@ -365,50 +372,49 @@ const SellerDetailsScreen = () => {
   };
 
   const handlePaymentSuccess = useCallback(async (amount) => {
-  console.log("💳 Payment success handler called with amount:", amount);
-  try {
-    const result = await processDuePayment(id, {
-      user_id: getUserId(),
-      paid_amount: amount,
-    });
-    
-    if (result && result.success) {
-      // Close payment modal first
-      setShowPaymentModal(false);
-      setSelectedPaymentSeller(null);
-      
-      setPaymentSuccess(true);
-      
-      // Refresh seller details
-      await fetchSellerDetails();
-      // Refresh products
-      await fetchProducts();
-      
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: `Payment of ₹${amount.toFixed(2)} processed successfully`,
+    console.log("💳 Payment success handler called with amount:", amount);
+    try {
+      const result = await processDuePayment(id, {
+        user_id: getUserId(),
+        paid_amount: amount,
       });
       
-      setTimeout(() => {
-        setPaymentSuccess(false);
-      }, 3000);
-    } else {
+      if (result && result.success) {
+        setShowPaymentModal(false);
+        setSelectedPaymentSeller(null);
+        
+        setPaymentSuccess(true);
+        
+        // Refresh seller details
+        await fetchSellerDetails();
+        // Refresh products
+        await fetchProducts();
+        
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: `Payment of ₹${amount.toFixed(2)} processed successfully`,
+        });
+        
+        setTimeout(() => {
+          setPaymentSuccess(false);
+        }, 3000);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: result?.error || 'Failed to process payment',
+        });
+      }
+    } catch (error) {
+      console.error("❌ Payment failed:", error);
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: result?.error || 'Failed to process payment',
+        text2: error.message || 'Failed to process payment',
       });
     }
-  } catch (error) {
-    console.error("❌ Payment failed:", error);
-    Toast.show({
-      type: 'error',
-      text1: 'Error',
-      text2: error.message || 'Failed to process payment',
-    });
-  }
-}, [id, getUserId, processDuePayment, fetchSellerDetails, fetchProducts]);
+  }, [id, getUserId, processDuePayment, fetchSellerDetails, fetchProducts]);
 
   const handleRefresh = async () => {
     console.log("🔄 Refreshing products");
@@ -1037,18 +1043,18 @@ const SellerDetailsScreen = () => {
         )}
       </ScrollView>
 
-     {/* Payment Modal */}
-<DuePaymentModal
-  seller={selectedPaymentSeller || seller}
-  isOpen={showPaymentModal}
-  onClose={() => {
-    console.log("🔒 Closing payment modal");
-    setShowPaymentModal(false);
-    setSelectedPaymentSeller(null);
-  }}
-  onSuccess={handlePaymentSuccess}
-  processing={paymentProcessing}
-/>
+      {/* Payment Modal */}
+      <DuePaymentModal
+        seller={selectedPaymentSeller || seller}
+        isOpen={showPaymentModal}
+        onClose={() => {
+          console.log("🔒 Closing payment modal");
+          setShowPaymentModal(false);
+          setSelectedPaymentSeller(null);
+        }}
+        onSuccess={handlePaymentSuccess}
+        processing={paymentProcessing}
+      />
 
       {/* Success Modal */}
       <SuccessModal

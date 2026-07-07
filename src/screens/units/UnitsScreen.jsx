@@ -50,7 +50,7 @@ const UnitsScreen = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState("grid");
-  const [sortBy, setSortBy] = useState("name"); // Default sort by name
+  const [sortBy, setSortBy] = useState(""); // Default sort by name
   const [refreshing, setRefreshing] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
