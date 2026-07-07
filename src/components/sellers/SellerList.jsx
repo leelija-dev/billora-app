@@ -1,4 +1,4 @@
-// components/sellers/SellerList.js - NO SORTING (preserve API order)
+// components/sellers/SellerList.js - WITH DUE PAYMENT (already has onPayment)
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import {
@@ -17,13 +17,14 @@ import SellerCard from "./SellerCard";
 const SellerList = ({
   viewMode = "grid",
   searchQuery = "",
-  sortBy = null, // Default to null (no sorting)
+  sortBy = null,
   sellers = [],
   loading = false,
   onRefresh = () => {},
   onDelete = () => {},
   onEdit = () => {},
   onPress = () => {},
+  onPayment = () => {}, // ✅ Payment handler prop
 }) => {
   const navigation = useNavigation();
   const { isDarkMode } = useThemeStore();
@@ -43,7 +44,6 @@ const SellerList = ({
     if (!Array.isArray(sellers)) return [];
     let filtered = [...sellers];
     
-    // Search filter (if needed)
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -57,7 +57,6 @@ const SellerList = ({
       );
     }
     
-    // ✅ ONLY sort if sortBy is provided and not null
     if (sortBy) {
       filtered.sort((a, b) => {
         switch (sortBy) {
@@ -72,7 +71,6 @@ const SellerList = ({
         }
       });
     }
-    // If sortBy is null, keep the original order from API
     
     return filtered;
   }, [sellers, searchQuery, sortBy]);
@@ -174,6 +172,7 @@ const SellerList = ({
         onEdit={onEdit}
         onDelete={handleDeleteSeller}
         onPress={handleSellerPress}
+        onPayment={onPayment} // ✅ Pass payment handler
       />
     </View>
   );
@@ -206,11 +205,23 @@ const SellerList = ({
               {item.name}
             </Text>
           </View>
-          <Text className={`text-xs ${
-            isDarkMode ? 'text-gray-500' : 'text-gray-400'
-          }`}>
-            #{item.id}
-          </Text>
+          <View className="flex-row items-center gap-2">
+            {/* ✅ Pay Due button in list view */}
+            {parseFloat(item.due_amount) > 0 && (
+              <TouchableOpacity
+                onPress={() => onPayment(item)}
+                className="px-2 py-1 rounded-lg bg-green-100 dark:bg-green-900/30 flex-row items-center"
+              >
+                <Icon name="currency-inr" size={12} color="#22c55e" />
+                <Text className="text-xs text-green-600 dark:text-green-400 ml-0.5">Pay</Text>
+              </TouchableOpacity>
+            )}
+            <Text className={`text-xs ${
+              isDarkMode ? 'text-gray-500' : 'text-gray-400'
+            }`}>
+              #{item.id}
+            </Text>
+          </View>
         </View>
 
         <View className="mt-2">

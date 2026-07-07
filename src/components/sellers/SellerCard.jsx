@@ -1,13 +1,20 @@
+// components/sellers/SellerCard.js - WITH DUE PAYMENT
 import React from "react";
 import { TouchableOpacity, View, Text } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
 
-const SellerCard = ({ seller, onEdit, onDelete, onPress }) => {
+const SellerCard = ({ seller, onEdit, onDelete, onPress, onPayment }) => {
   const { isDarkMode } = useThemeStore();
 
   const dueAmount = parseFloat(seller.due_amount) || 0;
   const hasDue = dueAmount > 0;
+
+  const handlePayment = () => {
+    if (onPayment) {
+      onPayment(seller);
+    }
+  };
 
   return (
     <TouchableOpacity
@@ -36,6 +43,17 @@ const SellerCard = ({ seller, onEdit, onDelete, onPress }) => {
           </Text>
         </View>
         <View className="flex-row gap-2">
+          {/* Pay Due Button - Only show if due amount > 0 */}
+          {hasDue && (
+            <TouchableOpacity
+              onPress={handlePayment}
+              className={`w-8 h-8 rounded-lg items-center justify-center ${
+                isDarkMode ? "bg-green-900/30" : "bg-green-50"
+              }`}
+            >
+              <Icon name="currency-inr" size={16} color="#22c55e" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={() => onEdit(seller)}
             className={`w-8 h-8 rounded-lg items-center justify-center ${
@@ -98,8 +116,10 @@ const SellerCard = ({ seller, onEdit, onDelete, onPress }) => {
         )}
       </View>
 
-      {/* Due Amount */}
-      <View
+      {/* Due Amount - Clickable */}
+      <TouchableOpacity
+        onPress={hasDue ? handlePayment : null}
+        activeOpacity={hasDue ? 0.7 : 1}
         className={`px-3 py-2 rounded-lg ${
           hasDue
             ? isDarkMode
@@ -125,15 +145,20 @@ const SellerCard = ({ seller, onEdit, onDelete, onPress }) => {
               {hasDue ? "Due Amount" : "No Due"}
             </Text>
           </View>
-          <Text
-            className={`text-sm font-semibold ${
-              hasDue ? "text-orange-500" : "text-green-500"
-            }`}
-          >
-            ₹{dueAmount.toLocaleString()}
-          </Text>
+          <View className="flex-row items-center">
+            <Text
+              className={`text-sm font-semibold ${
+                hasDue ? "text-orange-500" : "text-green-500"
+              }`}
+            >
+              ₹{dueAmount.toLocaleString()}
+            </Text>
+            {hasDue && (
+              <Icon name="chevron-right" size={16} color="#f97316" style={{ marginLeft: 4 }} />
+            )}
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* GST Badge */}
       {seller.gst_number && (
