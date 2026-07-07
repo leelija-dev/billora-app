@@ -1,4 +1,4 @@
-// components/sellers/SellerList.js - COMPLETE FIXED VERSION
+// components/sellers/SellerList.js - NO SORTING (preserve API order)
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
 import {
@@ -17,7 +17,7 @@ import SellerCard from "./SellerCard";
 const SellerList = ({
   viewMode = "grid",
   searchQuery = "",
-  sortBy = "name",
+  sortBy = null, // Default to null (no sorting)
   sellers = [],
   loading = false,
   onRefresh = () => {},
@@ -43,6 +43,7 @@ const SellerList = ({
     if (!Array.isArray(sellers)) return [];
     let filtered = [...sellers];
     
+    // Search filter (if needed)
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -56,18 +57,22 @@ const SellerList = ({
       );
     }
     
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return (a.name || '').localeCompare(b.name || '');
-        case 'city':
-          return (a.city || '').localeCompare(b.city || '');
-        case 'due':
-          return (parseFloat(b.due_amount) || 0) - (parseFloat(a.due_amount) || 0);
-        default:
-          return 0;
-      }
-    });
+    // ✅ ONLY sort if sortBy is provided and not null
+    if (sortBy) {
+      filtered.sort((a, b) => {
+        switch (sortBy) {
+          case 'name':
+            return (a.name || '').localeCompare(b.name || '');
+          case 'city':
+            return (a.city || '').localeCompare(b.city || '');
+          case 'due':
+            return (parseFloat(b.due_amount) || 0) - (parseFloat(a.due_amount) || 0);
+          default:
+            return 0;
+        }
+      });
+    }
+    // If sortBy is null, keep the original order from API
     
     return filtered;
   }, [sellers, searchQuery, sortBy]);
@@ -89,12 +94,14 @@ const SellerList = ({
     };
   }, [sellers]);
 
-  // FIXED: Use 'id' parameter for navigation
   const handleSellerPress = (seller) => {
-  console.log("🖱️ Seller pressed:", seller.id, seller.name);
-  // Use "SellerDetail" (without 's') to match the stack navigator
-  navigation.navigate("SellerDetail", { id: seller.id });
-};
+    console.log("🖱️ Seller pressed:", seller.id, seller.name);
+    if (onPress) {
+      onPress(seller);
+    } else {
+      navigation.navigate("SellerDetail", { id: seller.id });
+    }
+  };
 
   const handleDeleteSeller = async (sellerId) => {
     console.log('SellerList: Deleting seller:', sellerId);

@@ -5,13 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f4f602c7-85e4-45b1-adc0-a611405c7b28" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/api/packages.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/api/packages.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/navigation/MainNavigator.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/medicineTypes/MedicineTypesScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/medicineTypes/MedicineTypesScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/packages/PackagesScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/packages/PackagesScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/screens/sellers/SellersScreen.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/screens/sellers/SellersScreen.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/store/packageStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/packageStore.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/components/sellers/SellerList.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/components/sellers/SellerList.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/store/sellerStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/store/sellerStore.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

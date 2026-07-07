@@ -1,4 +1,5 @@
-// store/sellerStore.js - COMPLETE FIXED VERSION
+// store/sellerStore.js - COMPLETE FIXED VERSION (with proper appending)
+
 import { create } from "zustand";
 import { sellersAPI } from "../api/sellers";
 import Toast from "react-native-toast-message";
@@ -105,7 +106,9 @@ const useSellerStore = create((set, get) => ({
       if (append && page > 1) {
         const existingIds = new Set(existingSellers.map(s => s.id));
         const uniqueNewSellers = sellersArray.filter(s => !existingIds.has(s.id));
+        // ✅ APPEND to the end
         finalSellers = [...existingSellers, ...uniqueNewSellers];
+        console.log(`📦 Appended ${uniqueNewSellers.length} new sellers to the end, total: ${finalSellers.length}`);
       } else {
         finalSellers = sellersArray;
       }
@@ -143,14 +146,16 @@ const useSellerStore = create((set, get) => ({
     }
   },
 
-  // Load more sellers for pagination
+  // Load more sellers for pagination - FIXED (append to end)
   loadMoreSellers: async (userId) => {
     const { currentPage, lastPage, hasMore, loading, loadingMore, filters } = get();
 
     if (loading || loadingMore || !hasMore || currentPage >= lastPage) {
+      console.log('⏭️ Skipping load more - conditions not met');
       return;
     }
 
+    console.log(`📜 loadMoreSellers - currentPage: ${currentPage}, lastPage: ${lastPage}`);
     set({ loadingMore: true, error: null });
 
     try {
@@ -164,6 +169,8 @@ const useSellerStore = create((set, get) => ({
 
       const hasMoreData = paginationData.current_page < paginationData.last_page;
 
+      // ✅ IMPORTANT: Append new sellers to the END of the list
+      // This keeps the list in chronological order (oldest first, newest added to bottom)
       set({
         sellers: [...existingSellers, ...uniqueNewSellers],
         totalSellers: paginationData.total,
@@ -175,6 +182,7 @@ const useSellerStore = create((set, get) => ({
         error: null,
       });
 
+      console.log(`✅ Load more completed: ${uniqueNewSellers.length} new sellers appended to end, total: ${get().sellers.length}, hasMore: ${hasMoreData}`);
       return response.data;
     } catch (error) {
       console.error("❌ Failed to load more sellers:", error);
@@ -236,199 +244,180 @@ const useSellerStore = create((set, get) => ({
   },
 
   // Fetch seller products
-fetchSellerProducts: async (sellerId, page = 1, search = "", append = false) => {
-  if (!sellerId) {
-    console.error("No seller ID provided");
-    return;
-  }
-
-  console.log("📦 fetchSellerProducts called with sellerId:", sellerId, "page:", page, "search:", search, "append:", append);
-
-  if (append && page > 1) {
-    set({ sellerProductsLoadingMore: true, sellerProductsError: null });
-  } else {
-    set({ sellerProductsLoading: true, sellerProductsError: null });
-  }
-
-  try {
-    const response = await sellersAPI.getSellerProducts(sellerId, page, search);
-    console.log("📦 Seller products response received");
-    
-    // Get the data - could be response.data or response
-    const data = response.data || response;
-    
-    console.log("📦 Response data type:", typeof data);
-    console.log("📦 Response data keys:", data ? Object.keys(data) : []);
-
-    // Try multiple ways to extract products
-    let productsArray = [];
-    let paginationData = {};
-    let paymentHistoryArray = [];
-    let paymentHistoryPagination = null;
-
-    // Check if data has a 'data' property (nested response)
-    const actualData = data?.data || data;
-
-    // Method 1: Direct sellerProducts from actualData
-    if (actualData?.sellerProducts?.data && Array.isArray(actualData.sellerProducts.data)) {
-      productsArray = actualData.sellerProducts.data;
-      paginationData = actualData.sellerProducts;
-      console.log(`✅ Method 1: Extracted ${productsArray.length} products from actualData.sellerProducts.data`);
-    }
-    // Method 2: data.data.sellerProducts
-    else if (data?.data?.sellerProducts?.data && Array.isArray(data.data.sellerProducts.data)) {
-      productsArray = data.data.sellerProducts.data;
-      paginationData = data.data.sellerProducts;
-      console.log(`✅ Method 2: Extracted ${productsArray.length} products from data.data.sellerProducts.data`);
-    }
-    // Method 3: data.products
-    else if (data?.products?.data && Array.isArray(data.products.data)) {
-      productsArray = data.products.data;
-      paginationData = data.products;
-      console.log(`✅ Method 3: Extracted ${productsArray.length} products from data.products.data`);
-    }
-    // Method 4: data.data (array)
-    else if (data?.data && Array.isArray(data.data)) {
-      productsArray = data.data;
-      paginationData = data;
-      console.log(`✅ Method 4: Extracted ${productsArray.length} products from data.data (array)`);
-    }
-    // Method 5: data is array
-    else if (Array.isArray(data)) {
-      productsArray = data;
-      paginationData = { current_page: 1, last_page: 1, total: productsArray.length };
-      console.log(`✅ Method 5: Extracted ${productsArray.length} products from data (array)`);
+  fetchSellerProducts: async (sellerId, page = 1, search = "", append = false) => {
+    if (!sellerId) {
+      console.error("No seller ID provided");
+      return;
     }
 
-    // ============ EXTRACT PAYMENT HISTORY ============
-    // Check for payment history in actualData first
-    if (actualData?.sellerPaymentHistory?.data && Array.isArray(actualData.sellerPaymentHistory.data)) {
-      paymentHistoryArray = actualData.sellerPaymentHistory.data;
-      paymentHistoryPagination = {
-        current_page: actualData.sellerPaymentHistory.current_page || 1,
-        last_page: actualData.sellerPaymentHistory.last_page || 1,
-        per_page: actualData.sellerPaymentHistory.per_page || 8,
-        total: actualData.sellerPaymentHistory.total || 0,
-        next_page_url: actualData.sellerPaymentHistory.next_page_url || null,
-        prev_page_url: actualData.sellerPaymentHistory.prev_page_url || null,
-        first_page_url: actualData.sellerPaymentHistory.first_page_url || null,
-        last_page_url: actualData.sellerPaymentHistory.last_page_url || null,
-        path: actualData.sellerPaymentHistory.path || null,
-        from: actualData.sellerPaymentHistory.from || null,
-        to: actualData.sellerPaymentHistory.to || null,
-      };
-      console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from actualData.sellerPaymentHistory.data`);
-    }
-    // Check for payment history in data.data.sellerPaymentHistory
-    else if (data?.data?.sellerPaymentHistory?.data && Array.isArray(data.data.sellerPaymentHistory.data)) {
-      paymentHistoryArray = data.data.sellerPaymentHistory.data;
-      paymentHistoryPagination = {
-        current_page: data.data.sellerPaymentHistory.current_page || 1,
-        last_page: data.data.sellerPaymentHistory.last_page || 1,
-        per_page: data.data.sellerPaymentHistory.per_page || 8,
-        total: data.data.sellerPaymentHistory.total || 0,
-        next_page_url: data.data.sellerPaymentHistory.next_page_url || null,
-        prev_page_url: data.data.sellerPaymentHistory.prev_page_url || null,
-        first_page_url: data.data.sellerPaymentHistory.first_page_url || null,
-        last_page_url: data.data.sellerPaymentHistory.last_page_url || null,
-        path: data.data.sellerPaymentHistory.path || null,
-        from: data.data.sellerPaymentHistory.from || null,
-        to: data.data.sellerPaymentHistory.to || null,
-      };
-      console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from data.data.sellerPaymentHistory.data`);
-    }
-    // Check for direct sellerPaymentHistory
-    else if (data?.sellerPaymentHistory?.data && Array.isArray(data.sellerPaymentHistory.data)) {
-      paymentHistoryArray = data.sellerPaymentHistory.data;
-      paymentHistoryPagination = {
-        current_page: data.sellerPaymentHistory.current_page || 1,
-        last_page: data.sellerPaymentHistory.last_page || 1,
-        per_page: data.sellerPaymentHistory.per_page || 8,
-        total: data.sellerPaymentHistory.total || 0,
-        next_page_url: data.sellerPaymentHistory.next_page_url || null,
-        prev_page_url: data.sellerPaymentHistory.prev_page_url || null,
-        first_page_url: data.sellerPaymentHistory.first_page_url || null,
-        last_page_url: data.sellerPaymentHistory.last_page_url || null,
-        path: data.sellerPaymentHistory.path || null,
-        from: data.sellerPaymentHistory.from || null,
-        to: data.sellerPaymentHistory.to || null,
-      };
-      console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from data.sellerPaymentHistory.data`);
-    } else {
-      console.log("ℹ️ No payment history found in response");
-    }
+    console.log("📦 fetchSellerProducts called with sellerId:", sellerId, "page:", page, "search:", search, "append:", append);
 
-    // If products array is empty, log warning
-    if (productsArray.length === 0) {
-      console.warn("⚠️ No products found in response");
-      console.log("📦 Full response structure:", JSON.stringify(data, null, 2));
-    }
-
-    const pagination = {
-      current_page: paginationData.current_page || 1,
-      last_page: paginationData.last_page || 1,
-      per_page: paginationData.per_page || 8,
-      total: paginationData.total || productsArray.length,
-      next_page_url: paginationData.next_page_url || null,
-      prev_page_url: paginationData.prev_page_url || null,
-      first_page_url: paginationData.first_page_url || null,
-      last_page_url: paginationData.last_page_url || null,
-      path: paginationData.path || null,
-      from: paginationData.from || null,
-      to: paginationData.to || null,
-    };
-
-    const hasMoreData = pagination.current_page < pagination.last_page;
-
-    const { sellerProducts: existingProducts } = get();
-    let finalProducts;
     if (append && page > 1) {
-      const existingIds = new Set(existingProducts.map(p => p.id));
-      const uniqueNewProducts = productsArray.filter(p => !existingIds.has(p.id));
-      finalProducts = [...existingProducts, ...uniqueNewProducts];
-      console.log(`📦 Appended ${uniqueNewProducts.length} new products, total: ${finalProducts.length}`);
+      set({ sellerProductsLoadingMore: true, sellerProductsError: null });
     } else {
-      finalProducts = productsArray;
+      set({ sellerProductsLoading: true, sellerProductsError: null });
     }
 
-    set({
-      sellerProducts: finalProducts,
-      sellerProductsTotal: pagination.total,
-      sellerProductsCurrentPage: pagination.current_page,
-      sellerProductsLastPage: pagination.last_page,
-      sellerProductsPageSize: pagination.per_page,
-      sellerProductsHasMore: hasMoreData,
-      sellerProductsLoading: false,
-      sellerProductsLoadingMore: false,
-      sellerProductsError: null,
-      sellerProductsSearch: search,
-      currentSellerId: sellerId,
-      // Store payment history
-      paymentHistory: paymentHistoryArray,
-      paymentHistoryPagination: paymentHistoryPagination,
-    });
+    try {
+      const response = await sellersAPI.getSellerProducts(sellerId, page, search);
+      console.log("📦 Seller products response received");
+      
+      const data = response.data || response;
+      
+      console.log("📦 Response data type:", typeof data);
+      console.log("📦 Response data keys:", data ? Object.keys(data) : []);
 
-    console.log(`✅ Products loaded: ${finalProducts.length} products, page ${pagination.current_page}/${pagination.last_page}, hasMore: ${hasMoreData}`);
-    console.log(`✅ Payment history: ${paymentHistoryArray.length} records`);
-    return response.data;
-  } catch (error) {
-    console.error("❌ Failed to fetch seller products:", error);
-    const errorMessage = error.message || "Failed to fetch seller products";
-    set({
-      sellerProducts: append ? get().sellerProducts : [],
-      sellerProductsTotal: append ? get().sellerProductsTotal : 0,
-      sellerProductsLoading: false,
-      sellerProductsLoadingMore: false,
-      sellerProductsError: errorMessage,
-    });
-    Toast.show({
-      type: 'error',
-      text1: 'Error',
-      text2: errorMessage,
-    });
-    throw error;
-  }
-},
+      let productsArray = [];
+      let paginationData = {};
+      let paymentHistoryArray = [];
+      let paymentHistoryPagination = null;
+
+      const actualData = data?.data || data;
+
+      // Extract products
+      if (actualData?.sellerProducts?.data && Array.isArray(actualData.sellerProducts.data)) {
+        productsArray = actualData.sellerProducts.data;
+        paginationData = actualData.sellerProducts;
+        console.log(`✅ Method 1: Extracted ${productsArray.length} products from actualData.sellerProducts.data`);
+      } else if (data?.data?.sellerProducts?.data && Array.isArray(data.data.sellerProducts.data)) {
+        productsArray = data.data.sellerProducts.data;
+        paginationData = data.data.sellerProducts;
+        console.log(`✅ Method 2: Extracted ${productsArray.length} products from data.data.sellerProducts.data`);
+      } else if (data?.products?.data && Array.isArray(data.products.data)) {
+        productsArray = data.products.data;
+        paginationData = data.products;
+        console.log(`✅ Method 3: Extracted ${productsArray.length} products from data.products.data`);
+      } else if (data?.data && Array.isArray(data.data)) {
+        productsArray = data.data;
+        paginationData = data;
+        console.log(`✅ Method 4: Extracted ${productsArray.length} products from data.data (array)`);
+      } else if (Array.isArray(data)) {
+        productsArray = data;
+        paginationData = { current_page: 1, last_page: 1, total: productsArray.length };
+        console.log(`✅ Method 5: Extracted ${productsArray.length} products from data (array)`);
+      }
+
+      // Extract payment history
+      if (actualData?.sellerPaymentHistory?.data && Array.isArray(actualData.sellerPaymentHistory.data)) {
+        paymentHistoryArray = actualData.sellerPaymentHistory.data;
+        paymentHistoryPagination = {
+          current_page: actualData.sellerPaymentHistory.current_page || 1,
+          last_page: actualData.sellerPaymentHistory.last_page || 1,
+          per_page: actualData.sellerPaymentHistory.per_page || 8,
+          total: actualData.sellerPaymentHistory.total || 0,
+          next_page_url: actualData.sellerPaymentHistory.next_page_url || null,
+          prev_page_url: actualData.sellerPaymentHistory.prev_page_url || null,
+          first_page_url: actualData.sellerPaymentHistory.first_page_url || null,
+          last_page_url: actualData.sellerPaymentHistory.last_page_url || null,
+          path: actualData.sellerPaymentHistory.path || null,
+          from: actualData.sellerPaymentHistory.from || null,
+          to: actualData.sellerPaymentHistory.to || null,
+        };
+        console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from actualData.sellerPaymentHistory.data`);
+      } else if (data?.data?.sellerPaymentHistory?.data && Array.isArray(data.data.sellerPaymentHistory.data)) {
+        paymentHistoryArray = data.data.sellerPaymentHistory.data;
+        paymentHistoryPagination = {
+          current_page: data.data.sellerPaymentHistory.current_page || 1,
+          last_page: data.data.sellerPaymentHistory.last_page || 1,
+          per_page: data.data.sellerPaymentHistory.per_page || 8,
+          total: data.data.sellerPaymentHistory.total || 0,
+          next_page_url: data.data.sellerPaymentHistory.next_page_url || null,
+          prev_page_url: data.data.sellerPaymentHistory.prev_page_url || null,
+          first_page_url: data.data.sellerPaymentHistory.first_page_url || null,
+          last_page_url: data.data.sellerPaymentHistory.last_page_url || null,
+          path: data.data.sellerPaymentHistory.path || null,
+          from: data.data.sellerPaymentHistory.from || null,
+          to: data.data.sellerPaymentHistory.to || null,
+        };
+        console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from data.data.sellerPaymentHistory.data`);
+      } else if (data?.sellerPaymentHistory?.data && Array.isArray(data.sellerPaymentHistory.data)) {
+        paymentHistoryArray = data.sellerPaymentHistory.data;
+        paymentHistoryPagination = {
+          current_page: data.sellerPaymentHistory.current_page || 1,
+          last_page: data.sellerPaymentHistory.last_page || 1,
+          per_page: data.sellerPaymentHistory.per_page || 8,
+          total: data.sellerPaymentHistory.total || 0,
+          next_page_url: data.sellerPaymentHistory.next_page_url || null,
+          prev_page_url: data.sellerPaymentHistory.prev_page_url || null,
+          first_page_url: data.sellerPaymentHistory.first_page_url || null,
+          last_page_url: data.sellerPaymentHistory.last_page_url || null,
+          path: data.sellerPaymentHistory.path || null,
+          from: data.sellerPaymentHistory.from || null,
+          to: data.sellerPaymentHistory.to || null,
+        };
+        console.log(`✅ Extracted ${paymentHistoryArray.length} payment history records from data.sellerPaymentHistory.data`);
+      } else {
+        console.log("ℹ️ No payment history found in response");
+      }
+
+      if (productsArray.length === 0) {
+        console.warn("⚠️ No products found in response");
+      }
+
+      const pagination = {
+        current_page: paginationData.current_page || 1,
+        last_page: paginationData.last_page || 1,
+        per_page: paginationData.per_page || 8,
+        total: paginationData.total || productsArray.length,
+        next_page_url: paginationData.next_page_url || null,
+        prev_page_url: paginationData.prev_page_url || null,
+        first_page_url: paginationData.first_page_url || null,
+        last_page_url: paginationData.last_page_url || null,
+        path: paginationData.path || null,
+        from: paginationData.from || null,
+        to: paginationData.to || null,
+      };
+
+      const hasMoreData = pagination.current_page < pagination.last_page;
+
+      const { sellerProducts: existingProducts } = get();
+      let finalProducts;
+      if (append && page > 1) {
+        const existingIds = new Set(existingProducts.map(p => p.id));
+        const uniqueNewProducts = productsArray.filter(p => !existingIds.has(p.id));
+        finalProducts = [...existingProducts, ...uniqueNewProducts];
+        console.log(`📦 Appended ${uniqueNewProducts.length} new products, total: ${finalProducts.length}`);
+      } else {
+        finalProducts = productsArray;
+      }
+
+      set({
+        sellerProducts: finalProducts,
+        sellerProductsTotal: pagination.total,
+        sellerProductsCurrentPage: pagination.current_page,
+        sellerProductsLastPage: pagination.last_page,
+        sellerProductsPageSize: pagination.per_page,
+        sellerProductsHasMore: hasMoreData,
+        sellerProductsLoading: false,
+        sellerProductsLoadingMore: false,
+        sellerProductsError: null,
+        sellerProductsSearch: search,
+        currentSellerId: sellerId,
+        paymentHistory: paymentHistoryArray,
+        paymentHistoryPagination: paymentHistoryPagination,
+      });
+
+      console.log(`✅ Products loaded: ${finalProducts.length} products, page ${pagination.current_page}/${pagination.last_page}, hasMore: ${hasMoreData}`);
+      console.log(`✅ Payment history: ${paymentHistoryArray.length} records`);
+      return response.data;
+    } catch (error) {
+      console.error("❌ Failed to fetch seller products:", error);
+      const errorMessage = error.message || "Failed to fetch seller products";
+      set({
+        sellerProducts: append ? get().sellerProducts : [],
+        sellerProductsTotal: append ? get().sellerProductsTotal : 0,
+        sellerProductsLoading: false,
+        sellerProductsLoadingMore: false,
+        sellerProductsError: errorMessage,
+      });
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      throw error;
+    }
+  },
 
   // Load more seller products
   loadMoreSellerProducts: async (sellerId) => {
@@ -451,13 +440,11 @@ fetchSellerProducts: async (sellerId, page = 1, search = "", append = false) => 
       const nextPage = sellerProductsCurrentPage + 1;
       const response = await sellersAPI.getSellerProducts(sellerId, nextPage, sellerProductsSearch);
       
-      // Get the data
       const data = response.data || response;
       
       let productsArray = [];
       let paginationData = {};
 
-      // Extract products using same methods as fetchSellerProducts
       if (data?.sellerProducts?.data && Array.isArray(data.sellerProducts.data)) {
         productsArray = data.sellerProducts.data;
         paginationData = data.sellerProducts;
@@ -500,6 +487,7 @@ fetchSellerProducts: async (sellerId, page = 1, search = "", append = false) => 
 
       const hasMoreData = pagination.current_page < pagination.last_page;
 
+      // ✅ APPEND products to the end
       set({
         sellerProducts: [...existingProducts, ...uniqueNewProducts],
         sellerProductsTotal: pagination.total,
@@ -550,6 +538,7 @@ fetchSellerProducts: async (sellerId, page = 1, search = "", append = false) => 
       }
 
       const { sellers } = get();
+      // ✅ Add new seller to the beginning (most recent first)
       set({
         sellers: [newSeller, ...sellers],
         totalSellers: get().totalSellers + 1,
