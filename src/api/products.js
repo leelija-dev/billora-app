@@ -1,7 +1,8 @@
 // api/products.js
 import apiClient, {
   getEntityData,
-  getPaginatedData
+  getPaginatedData,
+  unwrapApiResponse
 } from "./client";
 
 export const productsAPI = {
@@ -10,9 +11,12 @@ export const productsAPI = {
     try {
       console.log(`📦 Fetching create page data for user: ${userId}`);
       const response = await apiClient.get(`/products/create/${userId}`);
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Create page data fetched successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error("❌ Failed to fetch create page data:", error);
       throw error;
@@ -27,13 +31,15 @@ export const productsAPI = {
       console.log("📦 Fetching all products with params:", params);
       const response = await apiClient.get("/products", { params });
 
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      
       // Use utility to get paginated data
-      const paginatedData = getPaginatedData(response);
+      const paginatedData = getPaginatedData(unwrapped);
       console.log("✅ Products fetched successfully");
-      console.log(response);
 
       return {
-        ...response,
+        ...unwrapped,
         data: paginatedData,
       };
     } catch (error) {
@@ -78,12 +84,15 @@ export const productsAPI = {
       console.log("📦 Final request path:", path);
       const response = await apiClient.get(path);
 
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+
       // Use utility to get paginated data
-      const paginatedData = getPaginatedData(response);
+      const paginatedData = getPaginatedData(unwrapped);
       console.log("✅ Products fetched by URL successfully");
 
       return {
-        ...response,
+        ...unwrapped,
         data: paginatedData,
       };
     } catch (error) {
@@ -103,11 +112,14 @@ export const productsAPI = {
         { params },
       );
 
-      const paginatedData = getPaginatedData(response);
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+
+      const paginatedData = getPaginatedData(unwrapped);
       console.log("✅ Deleted products fetched successfully");
 
       return {
-        ...response,
+        ...unwrapped,
         data: paginatedData,
       };
     } catch (error) {
@@ -121,9 +133,12 @@ export const productsAPI = {
     try {
       console.log(`📦 Fetching product with ID: ${id}`);
       const response = await apiClient.get(`/products/${id}`);
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Product fetched successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error(`❌ Failed to fetch product ${id}:`, error);
       throw error;
@@ -317,9 +332,11 @@ export const productsAPI = {
         },
       });
 
-      const data = getEntityData(response);
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Product created successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error("❌ Failed to create product:", error);
       throw error;
@@ -558,9 +575,11 @@ export const productsAPI = {
         response = await apiClient.put(`/products/${id}`, cleanedData);
       }
 
-      const data = getEntityData(response);
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Product updated successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error(`❌ Failed to update product ${id}:`, error);
       throw error;
@@ -572,9 +591,12 @@ export const productsAPI = {
     try {
       console.log(`🗑️ Deleting product with ID: ${id}`);
       const response = await apiClient.delete(`/products/${id}`);
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Product deleted successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error(`❌ Failed to delete product ${id}:`, error);
       throw error;
@@ -586,9 +608,12 @@ export const productsAPI = {
     try {
       console.log(`♻️ Restoring product with ID: ${id}`);
       const response = await apiClient.patch(`/products/${id}/restore`);
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Product restored successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error(`❌ Failed to restore product ${id}:`, error);
       throw error;
@@ -600,9 +625,12 @@ export const productsAPI = {
     try {
       console.log(`💥 Permanently deleting product with ID: ${id}`);
       const response = await apiClient.delete(`/products/${id}/force`);
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Product permanently deleted");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error(`❌ Failed to permanently delete product ${id}:`, error);
       throw error;
@@ -616,9 +644,12 @@ export const productsAPI = {
       const response = await apiClient.delete("/products/bulk-delete", {
         data: { ids },
       });
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Products bulk deleted successfully");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error("❌ Failed to bulk delete products:", error);
       throw error;
@@ -632,9 +663,12 @@ export const productsAPI = {
       const response = await apiClient.delete(`/products/bulk-force-delete`, {
         data: { ids },
       });
-      const data = getEntityData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const data = getEntityData(unwrapped);
       console.log("✅ Products bulk permanently deleted");
-      return { ...response, data };
+      return { ...unwrapped, data };
     } catch (error) {
       console.error("❌ Failed to bulk permanently delete products:", error);
       throw error;
@@ -648,9 +682,12 @@ export const productsAPI = {
       const response = await apiClient.get("/products", {
         params: { search: query, ...filters },
       });
-      const paginatedData = getPaginatedData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const paginatedData = getPaginatedData(unwrapped);
       console.log("✅ Products search results fetched");
-      return { ...response, data: paginatedData };
+      return { ...unwrapped, data: paginatedData };
     } catch (error) {
       console.error("❌ Failed to search products:", error);
       throw error;
@@ -664,9 +701,12 @@ export const productsAPI = {
       const response = await apiClient.get("/products", {
         params: { category_id: categoryId, page },
       });
-      const paginatedData = getPaginatedData(response);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      const paginatedData = getPaginatedData(unwrapped);
       console.log("✅ Products by category fetched successfully");
-      return { ...response, data: paginatedData };
+      return { ...unwrapped, data: paginatedData };
     } catch (error) {
       console.error(
         `❌ Failed to fetch products by category ${categoryId}:`,

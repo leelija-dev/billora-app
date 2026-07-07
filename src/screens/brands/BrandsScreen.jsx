@@ -35,8 +35,13 @@ const BrandsScreen = () => {
     brands = [],
     totalBrands,
     loading,
+    loadingMore,
+    hasMore,
+    currentPage,
+    lastPage,
     filters,
     fetchBrands,
+    loadMoreBrands,
     createBrand,
     updateBrand,
     deleteBrand,
@@ -48,6 +53,12 @@ const BrandsScreen = () => {
   const [viewMode, setViewMode] = useState("grid");
   const [sortBy, setSortBy] = useState("name");
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  
+  // Infinite scroll states
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
+  const scrollViewRef = useRef(null);
   
   // Modal states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -55,7 +66,6 @@ const BrandsScreen = () => {
   const [deleting, setDeleting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [initialLoading, setInitialLoading] = useState(true);
   
   // Add/Edit Form Modal
   const [showFormModal, setShowFormModal] = useState(false);
@@ -65,6 +75,9 @@ const BrandsScreen = () => {
 
   const searchTimeoutRef = useRef(null);
   const isMounted = useRef(true);
+
+  // Get safe brands array
+  const safeBrands = useMemo(() => Array.isArray(brands) ? brands : [], [brands]);
 
   // Get filtered menu items from permission store
   const menuItems = useMemo(() => {
@@ -85,12 +98,19 @@ const BrandsScreen = () => {
     return "1";
   }, [user]);
 
+  // Reset trigger flag when new data is loaded or when conditions change
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
+    }
+  }, [isLoadingMore, loadingMore]);
+
   // Initial data load
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         console.log("🔄 Fetching brands for user:", getUserId());
-        await fetchBrands();
+        await fetchBrands(1, false);
         console.log("✅ Brands fetched successfully");
       } catch (error) {
         console.error("❌ Failed to fetch brands:", error);
@@ -109,7 +129,9 @@ const BrandsScreen = () => {
   // Handle search with debounce
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => setFilters({ search: searchQuery }), 500);
+    searchTimeoutRef.current = setTimeout(() => {
+      setFilters({ search: searchQuery });
+    }, 500);
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
@@ -126,9 +148,63 @@ const BrandsScreen = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchBrands();
+    await fetchBrands(1, false);
     setRefreshing(false);
   };
+
+  // ✅ FIXED: Load more handler
+  const handleLoadMore = useCallback(async () => {
+    // Check if we have more data to load
+    const hasMoreData = safeBrands.length < totalBrands;
+    
+    // Prevent loading if already loading
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
+    }
+    
+    if (!hasMoreData || !hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreBrands - current: ${safeBrands.length}/${totalBrands}, page: ${currentPage}/${lastPage}`);
+    setIsLoadingMore(true);
+    await loadMoreBrands();
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, safeBrands.length, totalBrands, hasMore, currentPage, lastPage, loadMoreBrands]);
+
+  // ✅ Scroll handler for infinite scroll
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Check distance from bottom
+    const distanceFromBottom = totalContentHeight - currentScrollPosition - scrollViewHeight;
+    const isNearBottom = distanceFromBottom < 300;
+    
+    // Check if we have more data
+    const hasMoreData = safeBrands.length < totalBrands && hasMore;
+    
+    // Trigger when scrolled 50% or near bottom
+    if ((scrollPercentage >= 50 || isNearBottom) && 
+        !hasTriggeredLoadMore && 
+        !isLoadingMore && 
+        !loadingMore && 
+        hasMoreData && 
+        !loading) {
+      console.log(`🎯 Triggering load more - scroll: ${Math.floor(scrollPercentage)}%, ${safeBrands.length}/${totalBrands}`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, loading, safeBrands.length, totalBrands, hasMore, handleLoadMore]);
 
   const handleAddBrand = () => {
     setSelectedBrand(null);
@@ -175,7 +251,7 @@ const BrandsScreen = () => {
       }
 
       handleCancelForm();
-      await fetchBrands();
+      await fetchBrands(1, false);
     } catch (error) {
       console.error("Submit error:", error);
       setSuccessMessage(error.message || "An error occurred");
@@ -199,7 +275,7 @@ const BrandsScreen = () => {
       await deleteBrand(brandToDelete.id);
       setShowDeleteConfirm(false);
       setBrandToDelete(null);
-      await fetchBrands();
+      await fetchBrands(1, false);
       setSuccessMessage("Brand deleted successfully");
       setShowSuccessModal(true);
       setTimeout(() => setShowSuccessModal(false), 2000);
@@ -231,7 +307,6 @@ const BrandsScreen = () => {
   };
 
   // Calculate stats
-  const safeBrands = Array.isArray(brands) ? brands : [];
   const totalBrandsCount = totalBrands || safeBrands.length;
   const activeBrands = safeBrands.filter(b => b.is_active === true || b.is_active === 1).length;
 
@@ -303,9 +378,24 @@ const BrandsScreen = () => {
         </View>
       </View>
 
+      {/* ScrollView with infinite scroll */}
       <ScrollView
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#3b82f6"]} tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh} 
+            colors={["#3b82f6"]} 
+            tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} 
+          />
+        }
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingBottom: 20,
+          flexGrow: 1,
+        }}
       >
         {/* Stats Cards */}
         <View className="flex-row flex-wrap px-4 py-3">
@@ -398,17 +488,46 @@ const BrandsScreen = () => {
           </ScrollView>
         </View>
 
+        {/* Page Indicator */}
+        <View className="px-4 py-2 flex-row justify-between items-center">
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {totalBrands > 0 ? `Showing ${safeBrands.length} of ${totalBrands} brands` : `${safeBrands.length} brands`}
+          </Text>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Page {currentPage}/{lastPage}
+          </Text>
+        </View>
+
         {/* Brand List */}
         <View className="flex-1 px-4 pb-4">
           <BrandList
             brands={safeBrands}
             viewMode={viewMode}
             sortBy={sortBy}
-            loading={loading}
+            loading={loading && safeBrands.length === 0}
             onEdit={handleEditBrand}
             onDelete={handleDeleteBrand}
           />
         </View>
+
+        {/* Loading More Indicator */}
+        {(isLoadingMore || loadingMore) && (
+          <View className="py-6 items-center">
+            <ActivityIndicator size="small" color="#3b82f6" />
+            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading more brands...
+            </Text>
+          </View>
+        )}
+
+        {/* No More Brands */}
+        {!hasMore && safeBrands.length > 0 && safeBrands.length === totalBrands && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              No more brands to load
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Add/Edit Brand Modal */}

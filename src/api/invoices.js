@@ -1,4 +1,4 @@
-// api/invoices.js - Invoice API service
+// api/invoices.js - Invoice API service (UPDATED)
 import apiClient from './client';
 
 export const invoiceAPI = {
@@ -124,13 +124,23 @@ export const invoiceAPI = {
     return response;
   },
 
-  // Pay invoice-wise due (partial or full)
+  // Pay invoice-wise due (partial or full) - FIXED with proper error handling
   invoiceDuePay: async (id, payload) => {
-    const response = await apiClient.put(`/invoice/invoice-due-pay/${id}`, {
-      paid_amount: payload.paid_amount,
-      payment_method: payload.payment_method,
-    });
-    return response;
+    try {
+      console.log('💳 invoiceDuePay called with:', { id, payload });
+      const response = await apiClient.put(`/invoice/invoice-due-pay/${id}`, {
+        paid_amount: payload.paid_amount,
+        payment_method: payload.payment_method,
+      });
+      console.log('💳 invoiceDuePay response status:', response.status);
+      console.log('💳 invoiceDuePay response data:', response.data);
+      
+      // Ensure we return the full response
+      return response;
+    } catch (error) {
+      console.error('❌ invoiceDuePay error:', error);
+      throw error;
+    }
   },
 
   // Get products with stock for invoice creation

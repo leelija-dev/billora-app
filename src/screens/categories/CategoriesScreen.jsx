@@ -22,7 +22,6 @@ import { useAuthStore } from "../../store/authStore";
 import useCategoryStore from "../../store/categoryStore";
 import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
-import { useInfiniteScroll } from "../../hooks/useInfiniteScroll";
 
 const CategoriesScreen = () => {
   const navigation = useNavigation();
@@ -35,10 +34,13 @@ const CategoriesScreen = () => {
     categories = [],
     totalCategories,
     loading,
-    filters,
+    loadingMore,
+    hasMore,
     currentPage,
     lastPage,
+    filters,
     fetchCategories,
+    loadMoreCategories,
     createCategory,
     updateCategory,
     deleteCategory,
@@ -49,6 +51,12 @@ const CategoriesScreen = () => {
   const [viewMode, setViewMode] = useState("grid");
   const [sortBy, setSortBy] = useState("name");
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  
+  // Infinite scroll states
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
+  const scrollViewRef = useRef(null);
   
   // Modal states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -61,22 +69,11 @@ const CategoriesScreen = () => {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Load more categories function for infinite scroll
-  const loadMoreCategories = useCallback(async () => {
-    if (currentPage < lastPage && !loading) {
-      await fetchCategories(currentPage + 1, false, true);
-    }
-  }, [currentPage, lastPage, loading, fetchCategories]);
-
-  // Infinite scroll hook
-  const { handleScroll, isFetchingMore } = useInfiniteScroll(loadMoreCategories, {
-    threshold: 500,
-    hasMore: currentPage < lastPage,
-    loading: loading,
-  });
-
   const searchTimeoutRef = useRef(null);
   const isMounted = useRef(true);
+
+  // Get safe categories array
+  const safeCategories = useMemo(() => Array.isArray(categories) ? categories : [], [categories]);
 
   // Get filtered menu items from permission store
   const menuItems = useMemo(() => {
@@ -97,80 +94,113 @@ const CategoriesScreen = () => {
     return "1";
   }, [user]);
 
-  // Get stats for display
-  const displayStats = useMemo(() => {
-    const safeCategories = Array.isArray(categories) ? categories : [];
-    const total = totalCategories || safeCategories.length;
-    const active = safeCategories.filter(c => c.is_active === true || c.is_active === 1).length;
-    const inactive = total - active;
-    
-    // Calculate unique creators
-    const creators = new Set();
-    safeCategories.forEach(c => creators.add(c.created_by || c.user_id));
-    const uniqueCreators = creators.size;
-    
-    // Get latest update date
-    let latestUpdate = "N/A";
-    if (safeCategories.length > 0) {
-      const dates = safeCategories.map(c => c.updated_at ? new Date(c.updated_at).getTime() : 0);
-      const maxDate = Math.max(...dates);
-      if (maxDate > 0) {
-        latestUpdate = new Date(maxDate).toLocaleDateString();
-      }
+  // Reset trigger flag when new data is loaded or when conditions change
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
     }
-    
-    // Calculate average products per category (if you have product count)
-    const avgProducts = safeCategories.reduce((sum, c) => sum + (c.products_count || 0), 0) / (total || 1);
-    
-    // Example trends (you would calculate these based on previous period data)
-    const totalTrend = null;
-    const activeTrend = null;
-    const creatorsTrend = null;
-
-    return {
-      total,
-      active,
-      inactive,
-      uniqueCreators,
-      latestUpdate,
-      avgProducts,
-      totalTrend,
-      activeTrend,
-      creatorsTrend,
-      activePercentage: total > 0 ? (active / total) * 100 : 0,
-    };
-  }, [categories, totalCategories]);
+  }, [isLoadingMore, loadingMore]);
 
   // Initial data load
-  useFocusEffect(
-    useCallback(() => {
-      const loadInitialData = async () => {
-        try {
-          await fetchCategories(1, false, false);
-        } catch (error) {
-          console.error("Failed to fetch categories:", error);
-        }
-      };
-      loadInitialData();
-      return () => {
-        isMounted.current = false;
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-      };
-    }, [fetchCategories])
-  );
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        console.log("🔄 Fetching categories for user:", getUserId());
+        await fetchCategories(1, false);
+        console.log("✅ Categories fetched successfully");
+      } catch (error) {
+        console.error("❌ Failed to fetch categories:", error);
+      } finally {
+        if (isMounted.current) setInitialLoading(false);
+      }
+    };
+    loadInitialData();
+
+    return () => {
+      isMounted.current = false;
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [fetchCategories, getUserId]);
 
   // Handle search with debounce
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => setFilters({ search: searchQuery }), 500);
-    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+    searchTimeoutRef.current = setTimeout(() => {
+      setFilters({ search: searchQuery });
+    }, 500);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
   }, [searchQuery, setFilters]);
+
+  // Refresh on focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("Categories screen focused - refreshing data");
+      handleRefresh();
+      return () => {};
+    }, [])
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchCategories(1, true, false);
+    await fetchCategories(1, false);
     setRefreshing(false);
   };
+
+  // ✅ Load more handler
+  const handleLoadMore = useCallback(async () => {
+    // Check if we have more data to load
+    const hasMoreData = safeCategories.length < totalCategories;
+    
+    // Prevent loading if already loading
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
+    }
+    
+    if (!hasMoreData || !hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreCategories - current: ${safeCategories.length}/${totalCategories}, page: ${currentPage}/${lastPage}`);
+    setIsLoadingMore(true);
+    await loadMoreCategories();
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, safeCategories.length, totalCategories, hasMore, currentPage, lastPage, loadMoreCategories]);
+
+  // ✅ Scroll handler for infinite scroll
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Check distance from bottom
+    const distanceFromBottom = totalContentHeight - currentScrollPosition - scrollViewHeight;
+    const isNearBottom = distanceFromBottom < 300;
+    
+    // Check if we have more data
+    const hasMoreData = safeCategories.length < totalCategories && hasMore;
+    
+    // Trigger when scrolled 50% or near bottom
+    if ((scrollPercentage >= 50 || isNearBottom) && 
+        !hasTriggeredLoadMore && 
+        !isLoadingMore && 
+        !loadingMore && 
+        hasMoreData && 
+        !loading) {
+      console.log(`🎯 Triggering load more - scroll: ${Math.floor(scrollPercentage)}%, ${safeCategories.length}/${totalCategories}`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, loading, safeCategories.length, totalCategories, hasMore, handleLoadMore]);
 
   const handleAddCategory = () => {
     setSelectedCategory(null);
@@ -217,7 +247,7 @@ const CategoriesScreen = () => {
       }
 
       handleCancelForm();
-      await fetchCategories(1, true, false);
+      await fetchCategories(1, false);
     } catch (error) {
       console.error("Submit error:", error);
       setSuccessMessage(error.message || "An error occurred");
@@ -240,7 +270,7 @@ const CategoriesScreen = () => {
       await deleteCategory(categoryToDelete.id);
       setShowDeleteConfirm(false);
       setCategoryToDelete(null);
-      await fetchCategories(1, true, false);
+      await fetchCategories(1, false);
       setSuccessMessage("Category deleted successfully");
       setShowSuccessModal(true);
       setTimeout(() => setShowSuccessModal(false), 2000);
@@ -256,6 +286,40 @@ const CategoriesScreen = () => {
 
   const handleSearch = (query) => setSearchQuery(query);
   const toggleViewMode = () => setViewMode(viewMode === "grid" ? "list" : "grid");
+
+  // Calculate stats
+  const totalCategoriesCount = totalCategories || safeCategories.length;
+  const activeCategories = safeCategories.filter(c => c.is_active === true || c.is_active === 1).length;
+
+  const latestUpdate = useMemo(() => {
+    if (safeCategories.length === 0) return "N/A";
+    const dates = safeCategories.map(c => c.updated_at ? new Date(c.updated_at).getTime() : 0);
+    return new Date(Math.max(...dates)).toLocaleDateString();
+  }, [safeCategories]);
+
+  const uniqueCreators = useMemo(() => {
+    const creators = new Set();
+    safeCategories.forEach(c => {
+      if (c.created_by) creators.add(c.created_by);
+      else if (c.user_id) creators.add(`User ${c.user_id}`);
+    });
+    return creators.size;
+  }, [safeCategories]);
+
+  // Calculate active percentage
+  const activePercentage = totalCategoriesCount > 0 ? (activeCategories / totalCategoriesCount) * 100 : 0;
+
+  // Calculate average products per category
+  const avgProducts = safeCategories.reduce((sum, c) => sum + (c.products_count || 0), 0) / (totalCategoriesCount || 1);
+
+  if (initialLoading) {
+    return (
+      <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"} items-center justify-center`}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className={`mt-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>Loading categories...</Text>
+      </View>
+    );
+  }
 
   return (
     <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
@@ -293,9 +357,10 @@ const CategoriesScreen = () => {
       />
 
       <ScrollView 
+        ref={scrollViewRef}
         showsVerticalScrollIndicator={false} 
         onScroll={handleScroll}
-        scrollEventThrottle={400}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -304,6 +369,10 @@ const CategoriesScreen = () => {
             tintColor={isDarkMode ? "#ffffff" : "#3b82f6"} 
           />
         }
+        contentContainerStyle={{
+          paddingBottom: 20,
+          flexGrow: 1,
+        }}
       >
         {/* Search Bar */}
         <View className="px-4 pt-4 pb-2">
@@ -324,29 +393,27 @@ const CategoriesScreen = () => {
           </View>
         </View>
 
-        {/* Stats Cards - Using StatsCard component like CustomersScreen */}
+        {/* Stats Cards */}
         <View className="flex-row flex-wrap gap-3 px-4">
           <StatsCard
             title="Total Categories"
-            value={displayStats.total}
+            value={totalCategoriesCount}
             icon="shape"
             color="#10b981"
-            trend={displayStats.totalTrend}
             style={{ width: "48%" }}
           />
 
           <StatsCard
             title="Active Categories"
-            value={displayStats.active}
+            value={activeCategories}
             icon="check-circle"
             color="#3b82f6"
-            trend={displayStats.activeTrend}
             style={{ width: "48%" }}
           />
 
           <StatsCard
             title="Active Rate"
-            value={`${displayStats.activePercentage.toFixed(0)}%`}
+            value={`${activePercentage.toFixed(0)}%`}
             icon="percent"
             color="#8b5cf6"
             style={{ width: "48%" }}
@@ -354,10 +421,9 @@ const CategoriesScreen = () => {
 
           <StatsCard
             title="Creators"
-            value={displayStats.uniqueCreators}
+            value={uniqueCreators}
             icon="account-group"
             color="#f59e0b"
-            trend={displayStats.creatorsTrend}
             style={{ width: "48%" }}
           />
         </View>
@@ -371,7 +437,7 @@ const CategoriesScreen = () => {
                 Latest Update:
               </Text>
               <Text className={`ml-2 text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}>
-                {displayStats.latestUpdate}
+                {latestUpdate}
               </Text>
             </View>
             <View className="flex-row items-center">
@@ -380,11 +446,33 @@ const CategoriesScreen = () => {
                 Avg Products: 
               </Text>
               <Text className={`ml-2 text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}>
-                {displayStats.avgProducts.toFixed(1)}
+                {avgProducts.toFixed(1)}
               </Text>
             </View>
           </View>
         </View>
+
+        {/* Filter Chips */}
+        {(filters.status !== "all" || filters.search) && (
+          <View className="px-4 mb-3 flex-row flex-wrap">
+            {filters.status !== "all" && (
+              <View className={`flex-row items-center mr-2 mb-2 px-3 py-1.5 rounded-full ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Status: {filters.status}</Text>
+                <TouchableOpacity onPress={() => setFilters({ ...filters, status: "all" })} className="ml-2">
+                  <Icon name="close" size={16} color={isDarkMode ? "#9CA3AF" : "#6b7280"} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {filters.search && (
+              <View className={`flex-row items-center mr-2 mb-2 px-3 py-1.5 rounded-full ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Search: {filters.search}</Text>
+                <TouchableOpacity onPress={() => { setSearchQuery(""); setFilters({ ...filters, search: "" }); }} className="ml-2">
+                  <Icon name="close" size={16} color={isDarkMode ? "#9CA3AF" : "#6b7280"} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Sort Options */}
         <View className="px-4 mb-4">
@@ -420,23 +508,43 @@ const CategoriesScreen = () => {
           </ScrollView>
         </View>
 
+        {/* Page Indicator */}
+        <View className="px-4 py-2 flex-row justify-between items-center">
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {totalCategories > 0 ? `Showing ${safeCategories.length} of ${totalCategories} categories` : `${safeCategories.length} categories`}
+          </Text>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Page {currentPage}/{lastPage}
+          </Text>
+        </View>
+
         {/* Category List */}
-        <View className="px-4 pb-24">
+        <View className="px-4 pb-4">
           <CategoryList 
-            categories={categories} 
+            categories={safeCategories} 
             viewMode={viewMode} 
             sortBy={sortBy} 
-            loading={loading} 
+            loading={loading && safeCategories.length === 0} 
             onEdit={handleEditCategory} 
             onDelete={handleDeleteCategory} 
           />
         </View>
 
-        {/* End of list indicator */}
-        {currentPage >= lastPage && categories.length > 0 && (
+        {/* Loading More Indicator */}
+        {(isLoadingMore || loadingMore) && (
+          <View className="py-6 items-center">
+            <ActivityIndicator size="small" color="#3b82f6" />
+            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading more categories...
+            </Text>
+          </View>
+        )}
+
+        {/* No More Categories */}
+        {!hasMore && safeCategories.length > 0 && safeCategories.length === totalCategories && (
           <View className="py-4 items-center">
-            <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-              Showing all {categories.length} categories
+            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              No more categories to load
             </Text>
           </View>
         )}

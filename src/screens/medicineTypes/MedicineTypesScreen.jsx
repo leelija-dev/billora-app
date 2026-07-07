@@ -1,3 +1,4 @@
+// screens/medicineTypes/MedicineTypesScreen.js
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import {
   SuccessModal,
 } from "../../components/common/CustomModal";
 import Header from "../../components/common/Header";
+import StatsCard from "../../components/dashboard/StatsCard";
 import { useAuthStore } from "../../store/authStore";
 import useMedicineTypeStore from "../../store/medicineTypeStore";
 import { useThemeStore } from "../../store/themeStore";
@@ -35,8 +37,12 @@ const MedicineTypesScreen = ({ navigation }) => {
     medicineTypes,
     totalMedicineTypes,
     loading,
-    error,
+    loadingMore,
+    hasMore,
+    currentPage,
+    lastPage,
     fetchMedicineTypes,
+    loadMoreMedicineTypes,
     createMedicineType,
     updateMedicineType,
     deleteMedicineType,
@@ -51,29 +57,35 @@ const MedicineTypesScreen = ({ navigation }) => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
+  // Infinite scroll states
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
+  const scrollViewRef = useRef(null);
+
   // Modal states
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [confirmationModalVisible, setConfirmationModalVisible] =
-    useState(false);
+  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
     name: "",
-    is_active: true,
   });
   const [formSubmitting, setFormSubmitting] = useState(false);
+
+  // Get safe medicine types array
+  const safeMedicineTypes = useMemo(() => Array.isArray(medicineTypes) ? medicineTypes : [], [medicineTypes]);
 
   // Load medicine types on mount
   useFocusEffect(
     useCallback(() => {
       setInitialLoading(true);
       if (user?.id) {
-        fetchMedicineTypes(user.id).finally(() => {
+        fetchMedicineTypes(user.id, 1, "", false).finally(() => {
           setInitialLoading(false);
         });
       }
@@ -81,19 +93,19 @@ const MedicineTypesScreen = ({ navigation }) => {
     }, [user?.id, fetchMedicineTypes])
   );
 
+  // Reset trigger flag when new data is loaded or when conditions change
+  useEffect(() => {
+    if (!isLoadingMore && !loadingMore) {
+      setHasTriggeredLoadMore(false);
+    }
+  }, [isLoadingMore, loadingMore]);
+
   // Handle search with debounce
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      if (searchText !== "") {
+      if (user?.id) {
         setFilters({ search: searchText });
-        if (user?.id) {
-          fetchMedicineTypes(user.id);
-        }
-      } else if (searchText === "") {
-        setFilters({ search: "" });
-        if (user?.id) {
-          fetchMedicineTypes(user.id);
-        }
+        fetchMedicineTypes(user.id, 1, searchText, false);
       }
     }, 500);
 
@@ -104,16 +116,70 @@ const MedicineTypesScreen = ({ navigation }) => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (user?.id) {
-      await fetchMedicineTypes(user.id);
+      await fetchMedicineTypes(user.id, 1, searchText, false);
     }
     setRefreshing(false);
-  }, [fetchMedicineTypes, user?.id]);
+  }, [fetchMedicineTypes, user?.id, searchText]);
+
+  // ✅ Load more handler
+  const handleLoadMore = useCallback(async () => {
+    // Check if we have more data to load
+    const hasMoreData = safeMedicineTypes.length < totalMedicineTypes;
+    
+    // Prevent loading if already loading
+    if (isLoadingMore || loadingMore || loading) {
+      console.log('⏭️ Skipping - already loading');
+      return;
+    }
+    
+    if (!hasMoreData || !hasMore) {
+      console.log('⏭️ Skipping - no more data');
+      return;
+    }
+
+    console.log(`📜 Triggering loadMoreMedicineTypes - current: ${safeMedicineTypes.length}/${totalMedicineTypes}, page: ${currentPage}/${lastPage}`);
+    setIsLoadingMore(true);
+    await loadMoreMedicineTypes(user?.id, searchText);
+    setIsLoadingMore(false);
+    setHasTriggeredLoadMore(false);
+  }, [isLoadingMore, loadingMore, loading, safeMedicineTypes.length, totalMedicineTypes, hasMore, currentPage, lastPage, loadMoreMedicineTypes, user?.id, searchText]);
+
+  // ✅ Scroll handler for infinite scroll
+  const handleScroll = useCallback((event) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const currentScrollPosition = contentOffset.y;
+    const scrollViewHeight = layoutMeasurement.height;
+    const totalContentHeight = contentSize.height;
+    
+    // Calculate scroll percentage
+    const maxScroll = totalContentHeight - scrollViewHeight;
+    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+    
+    // Check distance from bottom
+    const distanceFromBottom = totalContentHeight - currentScrollPosition - scrollViewHeight;
+    const isNearBottom = distanceFromBottom < 300;
+    
+    // Check if we have more data
+    const hasMoreData = safeMedicineTypes.length < totalMedicineTypes && hasMore;
+    
+    // Trigger when scrolled 50% or near bottom
+    if ((scrollPercentage >= 50 || isNearBottom) && 
+        !hasTriggeredLoadMore && 
+        !isLoadingMore && 
+        !loadingMore && 
+        hasMoreData && 
+        !loading) {
+      console.log(`🎯 Triggering load more - scroll: ${Math.floor(scrollPercentage)}%, ${safeMedicineTypes.length}/${totalMedicineTypes}`);
+      setHasTriggeredLoadMore(true);
+      handleLoadMore();
+    }
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, loading, safeMedicineTypes.length, totalMedicineTypes, hasMore, handleLoadMore]);
 
   // Navigate to create medicine type
   const handleCreateMedicineType = () => {
     setIsEditMode(false);
     setSelectedMedicineType(null);
-    setFormData({ name: "", is_active: true });
+    setFormData({ name: "" });
     setModalVisible(true);
   };
 
@@ -123,7 +189,6 @@ const MedicineTypesScreen = ({ navigation }) => {
     setSelectedMedicineType(medicineType);
     setFormData({
       name: medicineType.name || "",
-      is_active: medicineType.is_active === 1 || medicineType.is_active === true,
     });
     setModalVisible(true);
   };
@@ -144,7 +209,7 @@ const MedicineTypesScreen = ({ navigation }) => {
         setSuccessMessage("Medicine type deleted successfully");
         setSuccessModalVisible(true);
         if (user?.id) {
-          await fetchMedicineTypes(user.id);
+          await fetchMedicineTypes(user.id, 1, searchText, false);
         }
       } else {
         setErrorMessage(result.error || "Failed to delete medicine type");
@@ -173,6 +238,7 @@ const MedicineTypesScreen = ({ navigation }) => {
       const dataWithUser = {
         ...formData,
         user_id: user.id,
+        is_active: 1, // Default active since backend expects it
       };
 
       if (isEditMode && selectedMedicineType) {
@@ -191,7 +257,7 @@ const MedicineTypesScreen = ({ navigation }) => {
 
       setModalVisible(false);
       if (user?.id) {
-        await fetchMedicineTypes(user.id);
+        await fetchMedicineTypes(user.id, 1, searchText, false);
       }
     } catch (err) {
       setErrorMessage(err.message || "An unexpected error occurred");
@@ -205,7 +271,7 @@ const MedicineTypesScreen = ({ navigation }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     if (user?.id) {
-      await fetchMedicineTypes(user.id);
+      await fetchMedicineTypes(user.id, 1, searchText, false);
     }
     setRefreshing(false);
   };
@@ -220,6 +286,27 @@ const MedicineTypesScreen = ({ navigation }) => {
       year: "numeric",
     });
   };
+
+  // Calculate stats
+  const safeList = safeMedicineTypes;
+  const totalCount = totalMedicineTypes || safeList.length;
+
+  // Calculate unique creators
+  const uniqueCreators = useMemo(() => {
+    const creators = new Set();
+    safeList.forEach(t => {
+      if (t.created_by) creators.add(t.created_by);
+      else if (t.user_id) creators.add(`User ${t.user_id}`);
+    });
+    return creators.size;
+  }, [safeList]);
+
+  // Get latest update date
+  const latestUpdate = useMemo(() => {
+    if (safeList.length === 0) return "N/A";
+    const dates = safeList.map(t => t.updated_at ? new Date(t.updated_at).getTime() : 0);
+    return new Date(Math.max(...dates)).toLocaleDateString();
+  }, [safeList]);
 
   // Loading state
   if (initialLoading) {
@@ -332,25 +419,10 @@ const MedicineTypesScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Page Indicator */}
-      <View
-        className={`px-4 py-2 flex-row justify-between items-center border-b ${
-          isDarkMode ? "border-gray-800" : "border-gray-100"
-        }`}
-      >
-        <Text
-          className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-        >
-          {totalMedicineTypes > 0
-            ? `${totalMedicineTypes} medicine types`
-            : `${medicineTypes.length} medicine types`}
-        </Text>
-      </View>
-
-      {/* Medicine Types List with RefreshControl */}
       <ScrollView
+        ref={scrollViewRef}
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -359,19 +431,85 @@ const MedicineTypesScreen = ({ navigation }) => {
             tintColor={isDarkMode ? "#F9FAFB" : "#3B82F6"}
           />
         }
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        {loading && medicineTypes.length === 0 ? (
+        {/* Stats Cards - Brand Style (Without Active/Inactive) */}
+        <View className="flex-row flex-wrap px-4 py-3">
+          <View className="w-[48%] mr-[2%] mb-3">
+            <StatsCard
+              title="Total Types"
+              value={totalCount}
+              icon="medical-bag"
+              color="#3b82f6"
+              style={{ width: "100%" }}
+            />
+          </View>
+
+          <View className="w-[48%] ml-[2%] mb-3">
+            <StatsCard
+              title="Creators"
+              value={uniqueCreators}
+              icon="account-group"
+              color="#8b5cf6"
+              style={{ width: "100%" }}
+            />
+          </View>
+
+          <View className="w-[48%] mr-[2%] mb-3">
+            <StatsCard
+              title="Latest Update"
+              value={latestUpdate}
+              icon="calendar"
+              color="#f59e0b"
+              style={{ width: "100%" }}
+            />
+          </View>
+
+          <View className="w-[48%] ml-[2%] mb-3">
+            <StatsCard
+              title="Total Records"
+              value={safeList.length}
+              icon="format-list-bulleted"
+              color="#10b981"
+              style={{ width: "100%" }}
+            />
+          </View>
+        </View>
+
+        {/* Filter Chips */}
+        {searchText.length > 0 && (
+          <View className="px-4 mb-3 flex-row flex-wrap">
+            <View className={`flex-row items-center mr-2 mb-2 px-3 py-1.5 rounded-full ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+              <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Search: {searchText}</Text>
+              <TouchableOpacity onPress={() => setSearchText("")} className="ml-2">
+                <Icon name="close" size={16} color={isDarkMode ? "#9CA3AF" : "#6b7280"} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Page Indicator */}
+        <View className="px-4 py-2 flex-row justify-between items-center">
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            {totalCount > 0 ? `Showing ${safeList.length} of ${totalCount} types` : `${safeList.length} types`}
+          </Text>
+          <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            Page {currentPage}/{lastPage}
+          </Text>
+        </View>
+
+        {/* Medicine Types List */}
+        {loading && safeList.length === 0 ? (
           <View className="py-12 items-center">
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text
-              className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-            >
+            <Text className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
               Loading medicine types...
             </Text>
           </View>
-        ) : medicineTypes.length === 0 ? (
-          <View className="py-20 items-center">
+        ) : safeList.length === 0 ? (
+          <View className="py-20 items-center px-4">
             <Icon
               name="medical-bag"
               size={80}
@@ -395,11 +533,11 @@ const MedicineTypesScreen = ({ navigation }) => {
             </Text>
           </View>
         ) : (
-          medicineTypes.map((medicineType) => (
+          safeList.map((medicineType) => (
             <TouchableOpacity
               key={medicineType.id}
               onPress={() => handleEditMedicineType(medicineType)}
-              className={`rounded-2xl p-4 mb-3 border ${
+              className={`mx-4 rounded-2xl p-4 mb-3 border ${
                 isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
               }`}
               activeOpacity={0.7}
@@ -420,8 +558,9 @@ const MedicineTypesScreen = ({ navigation }) => {
                         isDarkMode ? "text-gray-400" : "text-gray-500"
                       }`}
                     >
-                      Created: {formatDate(medicineType.created_at)}
+                       Created: {formatDate(medicineType.created_at)}
                     </Text>
+                    
                   </View>
                   <View className="flex-row items-center gap-2">
                     <TouchableOpacity
@@ -456,32 +595,28 @@ const MedicineTypesScreen = ({ navigation }) => {
                     </TouchableOpacity>
                   </View>
                 </View>
-
-                {/* Status Badge */}
-                <View className="mt-3">
-                  <View
-                    className={`px-3 py-1 rounded-full self-start ${
-                      medicineType.is_active === 1 || medicineType.is_active === true
-                        ? "bg-green-100 dark:bg-green-900/20"
-                        : "bg-gray-100 dark:bg-gray-700"
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-medium ${
-                        medicineType.is_active === 1 || medicineType.is_active === true
-                          ? "text-green-700 dark:text-green-400"
-                          : "text-gray-600 dark:text-gray-400"
-                      }`}
-                    >
-                      {medicineType.is_active === 1 || medicineType.is_active === true
-                        ? "Active"
-                        : "Inactive"}
-                    </Text>
-                  </View>
-                </View>
               </View>
             </TouchableOpacity>
           ))
+        )}
+
+        {/* Loading More Indicator */}
+        {(isLoadingMore || loadingMore) && (
+          <View className="py-6 items-center">
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Loading more types...
+            </Text>
+          </View>
+        )}
+
+        {/* No More Types */}
+        {!hasMore && safeList.length > 0 && safeList.length === totalCount && (
+          <View className="py-4 items-center">
+            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              No more types to load
+            </Text>
+          </View>
         )}
       </ScrollView>
 
@@ -533,33 +668,6 @@ const MedicineTypesScreen = ({ navigation }) => {
                 onChangeText={(text) => setFormData({ ...formData, name: text })}
               />
             </View>
-
-            {/* Active Toggle */}
-            <TouchableOpacity
-              onPress={() => setFormData({ ...formData, is_active: !formData.is_active })}
-              className={`flex-row items-center justify-between p-4 rounded-xl mb-6 border ${
-                isDarkMode ? "bg-gray-700 border-gray-600" : "bg-gray-50 border-gray-200"
-              }`}
-            >
-              <Text
-                className={`text-sm font-medium ${
-                  isDarkMode ? "text-white" : "text-gray-800"
-                }`}
-              >
-                Active Status
-              </Text>
-              <View
-                className={`w-12 h-7 rounded-full p-1 ${
-                  formData.is_active ? "bg-blue-500" : "bg-gray-300"
-                }`}
-              >
-                <View
-                  className={`w-5 h-5 rounded-full bg-white shadow ${
-                    formData.is_active ? "ml-auto" : ""
-                  }`}
-                />
-              </View>
-            </TouchableOpacity>
 
             {/* Buttons */}
             <View className="flex-row gap-3">

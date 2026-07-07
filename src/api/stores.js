@@ -1,5 +1,5 @@
 // api/stores.js
-import apiClient from "./client";
+import apiClient, { unwrapApiResponse } from "./client";
 import * as FileSystem from 'expo-file-system';
 
 export const storesAPI = {
@@ -14,7 +14,11 @@ export const storesAPI = {
       console.log('🏪 Fetching stores for user:', userId, 'params:', params);
       const response = await apiClient.get(`/store/${userId}`, { params });
       console.log('🏪 Stores fetched successfully');
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('🏪 Stores unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error('❌ Failed to fetch stores:', error);
       throw error.response?.data || error.message;
@@ -66,7 +70,11 @@ export const storesAPI = {
         },
       });
       console.log('🏪 Store created successfully');
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('🏪 Store created unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error('❌ Failed to create store:', error);
       throw error.response?.data || error.message;
@@ -79,7 +87,11 @@ export const storesAPI = {
       console.log('🏪 Fetching edit data for user:', userId);
       const response = await apiClient.get(`/store/edit/${userId}`);
       console.log('🏪 Edit data fetched successfully');
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('🏪 Edit data unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error('❌ Failed to fetch edit data:', error);
       throw error.response?.data || error.message;
@@ -139,7 +151,11 @@ export const storesAPI = {
         },
       });
       console.log('🏪 Store updated successfully');
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('🏪 Store updated unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to update store ${id}:`, error);
       throw error.response?.data || error.message;
@@ -152,7 +168,11 @@ export const storesAPI = {
       console.log(`🏪 Deleting store with ID: ${id}`);
       const response = await apiClient.delete(`/store/${id}`);
       console.log('🏪 Store deleted successfully');
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('🏪 Store deleted unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to delete store ${id}:`, error);
       throw error.response?.data || error.message;

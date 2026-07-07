@@ -1,4 +1,4 @@
-// store/invoiceStore.js - COMPLETE FIXED VERSION (matching order store pattern)
+// store/invoiceStore.js - COMPLETE FIXED VERSION
 import { create } from 'zustand';
 import { invoiceAPI } from '../api';
 import Toast from 'react-native-toast-message';
@@ -100,9 +100,8 @@ export const useInvoiceStore = create((set, get) => ({
     }
   },
 
-  // Fetch invoices/bills history with pagination and search - MATCHING ORDER STORE PATTERN
+  // Fetch invoices/bills history with pagination and search
   fetchInvoices: async (page = 1, filters = {}, append = false) => {
-    // If not appending, set loading; if appending, use loadingMore
     if (append && page > 1) {
       set({ loadingMore: true, error: null });
     } else {
@@ -114,60 +113,14 @@ export const useInvoiceStore = create((set, get) => ({
       const response = await invoiceAPI.getAll(page, filters);
       console.log('📦 Invoices API response:', response);
 
-      const responseData = response.data || response;
+      // Now response.data has the full structure: { status, data: { current_page, data: [...] } }
+      const responseData = response.data;
       
-      // Parse the paginated response - handle the nested structure (same as order store)
-      let invoicesData = [];
-      let paginationInfo = {
-        currentPage: 1,
-        lastPage: 1,
-        total: 0,
-        perPage: 8,
-        nextPageUrl: null,
-      };
+      // Extract paginated data from response.data.data
+      const paginatedData = responseData?.data || {};
+      let invoicesData = paginatedData?.data || [];
 
-      // The API returns: { status: true, data: { current_page, data: [...], last_page, ... } }
-      // OR directly: { data: { current_page, data: [...], last_page, ... } }
-      if (responseData?.data?.data && Array.isArray(responseData.data.data)) {
-        // Nested structure: response.data.data.data
-        invoicesData = responseData.data.data;
-        paginationInfo = {
-          currentPage: responseData.data.current_page || 1,
-          lastPage: responseData.data.last_page || 1,
-          total: responseData.data.total || 0,
-          perPage: responseData.data.per_page || 8,
-          nextPageUrl: responseData.data.next_page_url || null,
-        };
-        console.log('📦 Extracted from responseData.data.data');
-      } else if (responseData?.data && Array.isArray(responseData.data)) {
-        // response.data.data is the array
-        invoicesData = responseData.data;
-        paginationInfo = {
-          currentPage: responseData.current_page || 1,
-          lastPage: responseData.last_page || 1,
-          total: responseData.total || invoicesData.length,
-          perPage: responseData.per_page || 8,
-          nextPageUrl: responseData.next_page_url || null,
-        };
-        console.log('📦 Extracted from responseData.data');
-      } else if (responseData?.data && responseData?.data?.data && Array.isArray(responseData.data.data)) {
-        // Another nested structure
-        invoicesData = responseData.data.data;
-        paginationInfo = {
-          currentPage: responseData.data.current_page || 1,
-          lastPage: responseData.data.last_page || 1,
-          total: responseData.data.total || 0,
-          perPage: responseData.data.per_page || 8,
-          nextPageUrl: responseData.data.next_page_url || null,
-        };
-        console.log('📦 Extracted from responseData.data.data (alternate)');
-      } else if (Array.isArray(responseData)) {
-        invoicesData = responseData;
-        console.log('📦 Extracted from responseData (array)');
-      }
-
-      console.log(`✅ Fetched ${invoicesData.length} invoices, page ${paginationInfo.currentPage}/${paginationInfo.lastPage}`);
-      console.log(`📊 Total invoices: ${paginationInfo.total}, Has more: ${paginationInfo.currentPage < paginationInfo.lastPage}`);
+      console.log(`📦 Extracted ${invoicesData.length} invoices from page ${page}`);
 
       // Batch fetch unique customers and stores
       const uniqueCustomerIds = [
@@ -180,7 +133,6 @@ export const useInvoiceStore = create((set, get) => ({
       console.log('🔄 Fetching data for customers:', uniqueCustomerIds);
       console.log('🔄 Fetching data for stores:', uniqueStoreIds);
 
-      // Use Promise.allSettled to prevent one failure from blocking others
       const [customersResult, storesResult] = await Promise.allSettled([
         Promise.all(
           uniqueCustomerIds.map(async (customerId) => {
@@ -228,7 +180,6 @@ export const useInvoiceStore = create((set, get) => ({
         ),
       ]);
 
-      // Create lookup maps from successful results
       const customerMap = {};
       const storeMap = {};
 
@@ -270,23 +221,26 @@ export const useInvoiceStore = create((set, get) => ({
         };
       });
 
-      const hasMore = paginationInfo.currentPage < paginationInfo.lastPage;
+      const currentPage = paginatedData.current_page || 1;
+      const lastPage = paginatedData.last_page || 1;
+      const total = paginatedData.total || 0;
+      const perPage = paginatedData.per_page || 8;
+      const hasMore = currentPage < lastPage;
 
-      // Update state - matching order store pattern
       set((state) => ({
         invoices: append ? [...state.invoices, ...enrichedInvoices] : enrichedInvoices,
-        currentPage: paginationInfo.currentPage,
-        lastPage: paginationInfo.lastPage,
-        totalInvoices: paginationInfo.total,
+        currentPage: currentPage,
+        lastPage: lastPage,
+        totalInvoices: total,
         hasMore: hasMore,
-        pageSize: paginationInfo.perPage || 8,
+        pageSize: perPage,
         loading: false,
         loadingMore: false,
         error: null,
       }));
 
-      console.log(`✅ Invoices loaded: ${enrichedInvoices.length} invoices, page ${paginationInfo.currentPage}/${paginationInfo.lastPage}, hasMore: ${hasMore}`);
-      return { success: true, data: enrichedInvoices, pagination: paginationInfo };
+      console.log(`✅ Invoices loaded: ${enrichedInvoices.length} invoices, page ${currentPage}/${lastPage}, hasMore: ${hasMore}`);
+      return { success: true, data: enrichedInvoices };
     } catch (error) {
       console.error('❌ Failed to fetch invoices:', error);
       Toast.show({
@@ -304,13 +258,12 @@ export const useInvoiceStore = create((set, get) => ({
     }
   },
 
-  // Load more invoices - matching order store pattern
+  // Load more invoices
   loadMoreInvoices: async () => {
     const { hasMore, loadingMore, loading, currentPage, lastPage, filters } = get();
     
     console.log(`🔄 Load more: hasMore=${hasMore}, loadingMore=${loadingMore}, loading=${loading}, currentPage=${currentPage}, lastPage=${lastPage}`);
     
-    // Prevent loading if already loading, no more invoices, or reached last page
     if (loadingMore || loading || !hasMore || currentPage >= lastPage) {
       console.log('⏭️ Skipping load more - conditions not met');
       return;
@@ -322,57 +275,29 @@ export const useInvoiceStore = create((set, get) => ({
 
     try {
       const response = await invoiceAPI.getAll(nextPage, filters);
-      
-      const responseData = response.data || response;
-      let invoicesData = [];
-      let paginationInfo = {
-        currentPage: 1,
-        lastPage: 1,
-        total: 0,
-        perPage: 8,
-        nextPageUrl: null,
-      };
+      const responseData = response.data;
+      const paginatedData = responseData?.data || {};
+      let invoicesData = paginatedData?.data || [];
 
-      // Parse the paginated response - handle the nested structure
-      if (responseData?.data?.data && Array.isArray(responseData.data.data)) {
-        invoicesData = responseData.data.data;
-        paginationInfo = {
-          currentPage: responseData.data.current_page || 1,
-          lastPage: responseData.data.last_page || 1,
-          total: responseData.data.total || 0,
-          perPage: responseData.data.per_page || 8,
-          nextPageUrl: responseData.data.next_page_url || null,
-        };
-      } else if (responseData?.data && Array.isArray(responseData.data)) {
-        invoicesData = responseData.data;
-        paginationInfo = {
-          currentPage: responseData.current_page || 1,
-          lastPage: responseData.last_page || 1,
-          total: responseData.total || invoicesData.length,
-          perPage: responseData.per_page || 8,
-          nextPageUrl: responseData.next_page_url || null,
-        };
-      } else if (Array.isArray(responseData)) {
-        invoicesData = responseData;
-      }
+      console.log(`✅ Loaded ${invoicesData.length} more invoices, page ${nextPage}`);
 
-      console.log(`✅ Loaded ${invoicesData.length} more invoices, page ${paginationInfo.currentPage}/${paginationInfo.lastPage}`);
-      console.log(`📊 Total invoices: ${paginationInfo.total}, Has more: ${paginationInfo.currentPage < paginationInfo.lastPage}`);
-
-      const hasMore = paginationInfo.currentPage < paginationInfo.lastPage;
+      const currentPage = paginatedData.current_page || 1;
+      const lastPage = paginatedData.last_page || 1;
+      const total = paginatedData.total || 0;
+      const perPage = paginatedData.per_page || 8;
+      const hasMore = currentPage < lastPage;
 
       set((state) => {
-        // Create a Set of existing invoice IDs to avoid duplicates
         const existingIds = new Set(state.invoices.map(inv => inv.id));
         const newInvoices = invoicesData.filter(inv => !existingIds.has(inv.id));
         
         return {
           invoices: [...state.invoices, ...newInvoices],
-          currentPage: paginationInfo.currentPage,
-          lastPage: paginationInfo.lastPage,
-          totalInvoices: paginationInfo.total,
+          currentPage: currentPage,
+          lastPage: lastPage,
+          totalInvoices: total,
           hasMore: hasMore,
-          pageSize: paginationInfo.per_page || 8,
+          pageSize: perPage,
           loadingMore: false,
         };
       });
@@ -423,7 +348,6 @@ export const useInvoiceStore = create((set, get) => ({
       const responseData = response.data;
       if (responseData?.status === true) {
         set({ loading: false });
-        // Refresh invoices after creation - reset to page 1
         await get().fetchInvoices(1, get().filters, false);
         Toast.show({
           type: 'success',
@@ -552,44 +476,73 @@ export const useInvoiceStore = create((set, get) => ({
     }
   },
 
-  // Pay invoice due
+  // ✅ FIXED: Pay invoice due - handles full response with status
   payInvoiceDue: async (id, payload) => {
+    console.log('💳 payInvoiceDue called with:', { id, payload });
     set({ loading: true, error: null });
+    
     try {
       const response = await invoiceAPI.invoiceDuePay(id, payload);
-      if (response.data?.status === true) {
+      console.log('💳 Payment response:', response.data);
+      
+      // Now response.data has the full structure: { status, message, data }
+      const responseData = response.data;
+      
+      // Check if the response has status true
+      if (responseData?.status === true) {
+        const message = responseData?.message || 'Payment recorded successfully';
+        
         Toast.show({
           type: 'success',
           text1: 'Success',
-          text2: response.data?.message || 'Payment recorded successfully',
+          text2: message,
         });
+        
+        // Update the invoice in the store with new payment info
+        const paidAmount = parseFloat(payload.paid_amount || 0);
         set((state) => ({
           invoices: state.invoices.map((inv) =>
             inv.id === id
-              ? { ...inv, paid_amount: (parseFloat(inv.paid_amount) || 0) + parseFloat(payload.paid_amount) }
+              ? { 
+                  ...inv, 
+                  paid_amount: String((parseFloat(inv.paid_amount || 0) + paidAmount))
+                }
               : inv,
           ),
           loading: false,
         }));
-        return { success: true, data: response.data };
+        
+        return { 
+          success: true, 
+          data: responseData,
+          message: message
+        };
       } else {
+        const errorMsg = responseData?.message || 'Payment failed';
         Toast.show({
           type: 'error',
           text1: 'Error',
-          text2: response.data?.message || 'Payment failed',
+          text2: errorMsg,
         });
         set({ loading: false });
-        return { success: false, error: response.data };
+        return { 
+          success: false, 
+          error: errorMsg 
+        };
       }
     } catch (error) {
-      console.error('Failed to pay invoice due:', error);
+      console.error('❌ Failed to pay invoice due:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Payment failed';
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error.response?.data?.message || 'Payment failed',
+        text2: errorMessage,
       });
       set({ loading: false });
-      return { success: false, error: error.response?.data };
+      return { 
+        success: false, 
+        error: errorMessage 
+      };
     }
   },
 
@@ -608,12 +561,11 @@ export const useInvoiceStore = create((set, get) => ({
     }
   },
 
-  // Set filters - matching order store pattern
+  // Set filters
   setFilters: (filters, userId) => {
     set((state) => ({
       filters: { ...state.filters, ...filters },
     }));
-    // Reset to page 1 and fetch
     get().fetchInvoices(1, get().filters, false);
   },
 
@@ -637,7 +589,7 @@ export const useInvoiceStore = create((set, get) => ({
   // Clear error
   clearError: () => set({ error: null }),
 
-  // Reset store - matching order store pattern
+  // Reset store
   reset: () => {
     set({
       invoices: [],

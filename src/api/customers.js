@@ -1,5 +1,5 @@
 // api/customers.js
-import apiClient from "./client";
+import apiClient, { unwrapApiResponse } from "./client";
 
 export const customersAPI = {
   // Get all customers for a user
@@ -10,13 +10,18 @@ export const customersAPI = {
       console.log("👥 Fetching customers for user:", userId, "params:", params);
       const response = await apiClient.get(`/customer/${userId}`, { params });
       console.log("👥 Customers fetched successfully");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customers unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error("❌ Failed to fetch customers:", error);
       throw error.response?.data || error.message;
     }
   },
-   // Get due customers (like web version)
+
+  // Get due customers (like web version)
   getDueCustomers: async (userId, search = "", page = 1) => {
     try {
       console.log("💰 Fetching due customers for user:", userId);
@@ -29,7 +34,11 @@ export const customersAPI = {
         },
       });
       console.log("💰 Due customers fetched:", response.data);
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("💰 Due customers unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error("❌ Failed to fetch due customers:", error);
       throw error.response?.data || error.message;
@@ -42,14 +51,18 @@ export const customersAPI = {
       console.log("🏙️ Fetching customers with city information");
       const response = await apiClient.get(`/customer/${userId}`, {
         params: {
-          city: 1, // Pass 1 to get customers with city
+          city: 1,
           search: search || undefined,
           page: page,
           per_page: 15,
         },
       });
       console.log("🏙️ Customers with city fetched:", response.data);
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("🏙️ Customers with city unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error("❌ Failed to fetch customers with city:", error);
       throw error.response?.data || error.message;
@@ -62,7 +75,11 @@ export const customersAPI = {
       console.log("🏙️ Fetching unique cities for user:", userId);
       const response = await apiClient.get(`/customer/${userId}/cities`);
       console.log("🏙️ Unique cities fetched:", response.data);
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("🏙️ Unique cities unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error("❌ Failed to fetch unique cities:", error);
       throw error.response?.data || error.message;
@@ -75,8 +92,11 @@ export const customersAPI = {
       console.log(`👥 Fetching customer with ID: ${id}`);
       const response = await apiClient.get(`/customer/show/${id}`);
       console.log("👥 Customer fetched successfully");
-      console.log(response);
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customer unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to fetch customer ${id}:`, error);
       throw error.response?.data || error.message;
@@ -89,8 +109,11 @@ export const customersAPI = {
       console.log("👥 Creating customer with data:", customerData);
       const response = await apiClient.post("/customer/store", customerData);
       console.log("👥 Customer created successfully");
-      console.log(response);
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customer created unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error("❌ Failed to create customer:", error);
       throw error.response?.data || error.message;
@@ -103,7 +126,11 @@ export const customersAPI = {
       console.log(`👥 Updating customer ${id} with data:`, customerData);
       const response = await apiClient.put(`/customer/${id}`, customerData);
       console.log("👥 Customer updated successfully");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customer updated unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to update customer ${id}:`, error);
       throw error.response?.data || error.message;
@@ -118,7 +145,11 @@ export const customersAPI = {
         data: { user_id: userId },
       });
       console.log("👥 Customer deleted successfully");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customer deleted unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to delete customer ${id}:`, error);
       throw error.response?.data || error.message;
@@ -134,7 +165,11 @@ export const customersAPI = {
         params,
       });
       console.log("👥 Trashed customers fetched");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Trashed customers unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error("❌ Failed to fetch trashed customers:", error);
       throw error.response?.data || error.message;
@@ -149,7 +184,11 @@ export const customersAPI = {
         user_id: userId,
       });
       console.log("👥 Customer restored successfully");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customer restored unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to restore customer ${id}:`, error);
       throw error.response?.data || error.message;
@@ -164,7 +203,11 @@ export const customersAPI = {
         data: { user_id: userId },
       });
       console.log("👥 Customer permanently deleted");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("👥 Customer permanently deleted unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to permanently delete customer ${id}:`, error);
       throw error.response?.data || error.message;
@@ -180,7 +223,11 @@ export const customersAPI = {
         due_payment: amount,
       });
       console.log("💳 Due payment added successfully");
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("💳 Due payment added unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to add due payment:`, error);
       throw error.response?.data || error.message;
@@ -197,7 +244,12 @@ export const customersAPI = {
       const response = await apiClient.get(`/customer/payment-history/${id}`, {
         params,
       });
-      return response;
+      console.log("💳 Payment history fetched");
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log("💳 Payment history unwrapped:", unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error(`❌ Failed to fetch payment history:`, error);
       throw error.response?.data || error.message;

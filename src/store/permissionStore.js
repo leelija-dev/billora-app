@@ -1,4 +1,4 @@
-// store/permissionStore.js
+// store/permissionStore.js - UPDATED for new client response
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -254,6 +254,24 @@ export const usePermissionStore = create(
       retryCount: 0,
       maxRetries: 3,
 
+      // Helper to extract data from response (since interceptor no longer unwraps)
+      _extractDataFromResponse: (response) => {
+        const responseData = response?.data || response;
+        
+        // If response has status and data structure
+        if (responseData?.status === true && responseData?.data) {
+          return responseData.data;
+        }
+        
+        // If response has data property
+        if (responseData?.data) {
+          return responseData.data;
+        }
+        
+        // If response is the data itself
+        return responseData;
+      },
+
       setUser: (userData) => {
         set({ 
           user: userData,
@@ -286,9 +304,13 @@ export const usePermissionStore = create(
           console.log(`🔐 Fetching permissions (attempt ${retryAttempt + 1}/${state.maxRetries + 1})`);
           
           const response = await authAPI.getUserPermissions(userId, planId);
-          const data = response.data;
+          console.log('📦 Permissions API Response:', response);
           
-          if (data.status) {
+          // ✅ Extract data from response using helper
+          const data = get()._extractDataFromResponse(response);
+          
+          // Check if we have valid data
+          if (data && typeof data === 'object') {
             // Get permissions from API
             let permissions = data.permissionNames || [];
             

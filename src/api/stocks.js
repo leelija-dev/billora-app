@@ -1,5 +1,5 @@
 // api/stocks.js
-import apiClient from './client';
+import apiClient, { unwrapApiResponse } from './client';
 
 export const stocksAPI = {
   // Get all stocks with search and pagination
@@ -10,7 +10,11 @@ export const stocksAPI = {
       console.log('📦 Stocks API getAll called with params:', params);
       const response = await apiClient.get('/stocks', { params });
       console.log('✅ Stocks API getAll response status:', response.status);
-      return response;
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Stocks API getAll unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
       console.error('❌ Stocks API getAll error:', error);
       throw error.response?.data || error.message;
@@ -22,8 +26,14 @@ export const stocksAPI = {
     try {
       console.log('📦 Stocks API getById called with id:', id);
       const response = await apiClient.get(`/stocks/${id}`);
-      return response;
+      console.log('✅ Stocks API getById response status:', response.status);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Stocks API getById unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Stocks API getById error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -33,8 +43,14 @@ export const stocksAPI = {
     try {
       console.log('📦 Stocks API create called with:', stockData);
       const response = await apiClient.post('/stocks/store', stockData);
-      return response;
+      console.log('✅ Stocks API create response status:', response.status);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Stocks API create unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Stocks API create error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -44,8 +60,14 @@ export const stocksAPI = {
     try {
       console.log('📦 Stocks API update called with id:', id, stockData);
       const response = await apiClient.put(`/stocks/${id}`, stockData);
-      return response;
+      console.log('✅ Stocks API update response status:', response.status);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Stocks API update unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Stocks API update error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -57,8 +79,14 @@ export const stocksAPI = {
       const response = await apiClient.delete(`/stocks/${id}`, { 
         data: { user_id: userId }
       });
-      return response;
+      console.log('✅ Stocks API delete response status:', response.status);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Stocks API delete unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Stocks API delete error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -71,8 +99,14 @@ export const stocksAPI = {
         user_id: userId, 
         quantity: quantity 
       });
-      return response;
+      console.log('✅ Stocks API addStock response status:', response.status);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Stocks API addStock unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Stocks API addStock error:', error);
       throw error.response?.data || error.message;
     }
   },

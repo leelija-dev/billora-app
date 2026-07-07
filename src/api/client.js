@@ -1,4 +1,4 @@
-// api/client.js - COMPLETE FIXED VERSION
+// api/client.js - COMPLETE FIXED VERSION (DO NOT UNWRAP)
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Platform } from "react-native";
@@ -36,9 +36,9 @@ console.log("🚀 API Base URL:", API_BASE_URL);
 // Create axios instance with increased limits
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // Increased to 60 seconds
-  maxContentLength: 50 * 1024 * 1024, // 50MB max response size
-  maxBodyLength: 50 * 1024 * 1024, // 50MB max body size
+  timeout: 60000,
+  maxContentLength: 50 * 1024 * 1024,
+  maxBodyLength: 50 * 1024 * 1024,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -178,10 +178,9 @@ apiClient.interceptors.request.use(
   },
 );
 
-// ✅ FIX: Enhanced response interceptor with better error handling
+// ✅ FIXED: Response interceptor - KEEP original structure (DO NOT UNWRAP)
 apiClient.interceptors.response.use(
   async (response) => {
-    console.log("checking the response:", response);
     console.log("✅ API Response:", {
       status: response.status,
       url: response.config.url,
@@ -198,7 +197,6 @@ apiClient.interceptors.response.use(
         console.log("✅ Parsed string response to JSON");
       } catch (e) {
         console.warn("⚠️ Could not parse response as JSON:", e.message);
-        // If parsing fails, keep as string
       }
     }
 
@@ -207,60 +205,10 @@ apiClient.interceptors.response.use(
       response.data = {};
     }
 
-    // Check if it's the custom API format
-    if (response.data && typeof response.data === "object") {
-      // Check if it's your custom API response format
-      if ("status" in response.data && "data" in response.data) {
-        console.log("📦 Custom API response detected");
-
-        // If status is true or "success", unwrap the data
-        if (
-          response.data.status === true ||
-          response.data.status === "success"
-        ) {
-          const actualData = response.data.data;
-
-          // Ensure actualData is an object
-          if (actualData && typeof actualData === "object") {
-            response.data = actualData;
-            console.log("✅ Unwrapped API response");
-          } else {
-            // If actualData is not an object, keep it as is but wrap in data property
-            response.data = { data: actualData };
-            console.log("⚠️ Wrapped non-object data");
-          }
-        } else {
-          // API returned error status
-          const errorData = {
-            status: response.data.status,
-            message: response.data.message || "API returned error",
-            errors: response.data.errors || null,
-            data: response.data.data || null,
-          };
-
-          throw {
-            response: {
-              status: response.status || 400,
-              data: errorData,
-              config: response.config,
-            },
-          };
-        }
-      }
-    }
-
-    // ✅ Ensure response.data is always an object with proper structure
-    if (
-      response.data &&
-      typeof response.data === "object" &&
-      !Array.isArray(response.data)
-    ) {
-      // If it has a data property that's an array, keep it
-      // If it doesn't have a data property, wrap it
-      if (!("data" in response.data) && !("current_page" in response.data)) {
-        response.data = { data: response.data };
-      }
-    }
+    // ✅ DON'T UNWRAP - let the store handle the data extraction
+    // This preserves the original response structure with status, message, etc.
+    console.log("📦 Keeping response structure intact for store to handle");
+    console.log("📦 Response data keys:", Object.keys(response.data || {}));
 
     return response;
   },
@@ -331,7 +279,6 @@ export const unwrapApiResponse = (response) => {
 // ✅ FIXED: getPaginatedData - handles already unwrapped data without double parsing
 export const getPaginatedData = (response) => {
   try {
-    // If response is null or undefined
     if (!response) {
       return {
         data: [],
@@ -349,10 +296,8 @@ export const getPaginatedData = (response) => {
       };
     }
 
-    // Get the data from response
     let dataObj = response.data || response;
 
-    // If dataObj is a string, try to parse it
     if (typeof dataObj === 'string') {
       try {
         dataObj = JSON.parse(dataObj);
@@ -375,16 +320,13 @@ export const getPaginatedData = (response) => {
       }
     }
 
-    // If dataObj is already paginated data structure
     if (dataObj && typeof dataObj === 'object' && dataObj.current_page !== undefined) {
-      // Ensure data is an array
       if (!Array.isArray(dataObj.data)) {
         dataObj.data = [];
       }
       return dataObj;
     }
 
-    // If dataObj has a data property that is the paginated structure
     if (dataObj && dataObj.data && dataObj.data.current_page !== undefined) {
       if (!Array.isArray(dataObj.data.data)) {
         dataObj.data.data = [];
@@ -392,7 +334,6 @@ export const getPaginatedData = (response) => {
       return dataObj.data;
     }
 
-    // If dataObj has a data property that's an array
     if (dataObj && dataObj.data && Array.isArray(dataObj.data)) {
       return {
         data: dataObj.data,
@@ -410,7 +351,6 @@ export const getPaginatedData = (response) => {
       };
     }
 
-    // If dataObj is an array directly
     if (Array.isArray(dataObj)) {
       return {
         data: dataObj,
@@ -428,7 +368,6 @@ export const getPaginatedData = (response) => {
       };
     }
 
-    // If dataObj has a data property that's an object with data array
     if (dataObj && dataObj.data && typeof dataObj.data === 'object') {
       const nestedData = dataObj.data;
       if (nestedData.data && Array.isArray(nestedData.data)) {
@@ -449,7 +388,6 @@ export const getPaginatedData = (response) => {
       }
     }
 
-    // If nothing matches, return empty paginated data
     return {
       data: [],
       current_page: 1,
@@ -488,10 +426,8 @@ export const getEntityData = (response) => {
   try {
     if (!response) return null;
 
-    // Get the data from response
     let dataObj = response.data || response;
 
-    // If dataObj is a string, try to parse it
     if (typeof dataObj === 'string') {
       try {
         dataObj = JSON.parse(dataObj);
@@ -501,43 +437,34 @@ export const getEntityData = (response) => {
       }
     }
 
-    // If dataObj is already the entity
     if (dataObj && typeof dataObj === 'object') {
-      // If it has an id, it's likely the entity
       if (dataObj.id !== undefined) {
         return dataObj;
       }
 
-      // If it has a data property that has an id
       if (dataObj.data && dataObj.data.id !== undefined) {
         return dataObj.data;
       }
 
-      // If it has a data property that's the entity
       if (dataObj.data && typeof dataObj.data === 'object') {
         return dataObj.data;
       }
 
-      // If it has a data property that's an array with one item
       if (dataObj.data && Array.isArray(dataObj.data) && dataObj.data.length === 1) {
         return dataObj.data[0];
       }
 
-      // If it has a data property that's an array with multiple items
       if (dataObj.data && Array.isArray(dataObj.data) && dataObj.data.length > 1) {
         return dataObj.data;
       }
 
-      // If it's the data object itself
       return dataObj;
     }
 
-    // If dataObj is an array with one item
     if (Array.isArray(dataObj) && dataObj.length === 1) {
       return dataObj[0];
     }
 
-    // If dataObj is an array with multiple items
     if (Array.isArray(dataObj)) {
       return dataObj;
     }
@@ -575,7 +502,6 @@ export const debugApiResponse = async (url) => {
       text.substring(Math.max(0, text.length - 200)),
     );
 
-    // Check if response is complete
     const trimmed = text.trim();
     const lastChar = trimmed.charAt(trimmed.length - 1);
     const isComplete = lastChar === "}" || lastChar === "]";

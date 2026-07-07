@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { stocksAPI } from '../api/stocks';
 import { productsAPI } from '../api/products';
+import { getPaginatedData, getEntityData } from '../api/client';
 
 const useStockStore = create((set, get) => ({
   stocks: [],
@@ -13,6 +14,7 @@ const useStockStore = create((set, get) => ({
   loadingMore: false,
   hasMore: true,
   error: null,
+  pagination: null,
   filters: {
     search: '',
     product_id: '',
@@ -26,48 +28,41 @@ const useStockStore = create((set, get) => ({
     sortOrder: 'asc',
   },
 
-  // Fetch stocks with pagination
+  // ✅ FIXED: Fetch stocks with pagination
   fetchStocks: async (page = 1, search = '', append = false) => {
-    console.log('🔄 fetchStocks called with page:', page, 'search:', search, 'append:', append);
-    set({ loading: true, error: null });
+    console.log('🔄 fetchStocks called:', { page, search, append });
+    
+    if (append && page > 1) {
+      set({ loadingMore: true, error: null });
+    } else {
+      set({ loading: true, error: null });
+    }
 
     try {
       const response = await stocksAPI.getAll(search, page, get().perPage);
       console.log('📦 Stocks API Full Response:', response);
       
-      // Handle desktop API response structure
-      // Desktop returns: { data: { data: { data: [...], current_page, total, last_page } } }
-      let stocksArray = [];
-      let paginationData = {};
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('📊 Extracted paginated data:', paginatedData);
+
+      // Extract stocks array
+      let stocksArray = paginatedData.data || [];
       
-      // Check different possible response structures
-      if (response?.data?.data?.data) {
-        // Desktop structure: response.data.data.data
-        stocksArray = response.data.data.data;
-        paginationData = response.data.data;
-        console.log('✅ Using desktop structure (data.data.data)');
-      } else if (response?.data?.data) {
-        // Alternative: response.data.data
-        stocksArray = Array.isArray(response.data.data) ? response.data.data : [];
-        paginationData = response.data;
-        console.log('✅ Using structure (data.data)');
-      } else if (response?.data) {
-        // Simple: response.data
-        stocksArray = Array.isArray(response.data) ? response.data : [];
-        console.log('✅ Using structure (data)');
-      } else if (Array.isArray(response)) {
-        // Direct array
-        stocksArray = response;
-        console.log('✅ Using direct array structure');
+      // Ensure it's an array
+      if (!Array.isArray(stocksArray)) {
+        console.error('❌ stocksArray is not an array:', stocksArray);
+        set({
+          stocks: [],
+          totalStocks: 0,
+          loading: false,
+          loadingMore: false,
+          error: 'Invalid response format',
+        });
+        return { success: false, error: 'Invalid response format' };
       }
       
       console.log('📊 Raw stocks array length:', stocksArray.length);
-      
-      // If stocksArray is not an array, set to empty array
-      if (!Array.isArray(stocksArray)) {
-        console.error('❌ stocksArray is not an array:', stocksArray);
-        stocksArray = [];
-      }
       
       // Fetch products to enrich stock data
       let productsArray = [];
@@ -75,13 +70,9 @@ const useStockStore = create((set, get) => ({
         const productsResponse = await productsAPI.getAll();
         console.log('📦 Products API Response:', productsResponse);
         
-        if (productsResponse?.data?.data?.data) {
-          productsArray = productsResponse.data.data.data;
-        } else if (productsResponse?.data?.data) {
-          productsArray = Array.isArray(productsResponse.data.data) ? productsResponse.data.data : [];
-        } else if (productsResponse?.data) {
-          productsArray = Array.isArray(productsResponse.data) ? productsResponse.data : [];
-        }
+        // ✅ Use helper to extract paginated data for products
+        const productsPaginated = getPaginatedData(productsResponse);
+        productsArray = productsPaginated.data || [];
         console.log('📊 Products array length:', productsArray.length);
       } catch (productError) {
         console.error('❌ Failed to fetch products:', productError);
@@ -103,172 +94,45 @@ const useStockStore = create((set, get) => ({
 
       console.log('✅ Enriched stocks count:', enrichedStocks.length);
 
-      const hasMore = (paginationData.current_page || page) < (paginationData.last_page || 1);
+      // If append is true and page > 1, append to existing stocks
+      const { stocks: existingStocks } = get();
+      const finalStocks = append && page > 1 
+        ? [...existingStocks, ...enrichedStocks]
+        : enrichedStocks;
 
-      set((state) => ({
-        stocks: append ? [...state.stocks, ...enrichedStocks] : enrichedStocks,
-        totalStocks: paginationData.total || enrichedStocks.length,
-        currentPage: paginationData.current_page || page,
-        lastPage: paginationData.last_page || 1,
-        hasMore: hasMore,
+      const hasMoreData = paginatedData.current_page < paginatedData.last_page;
+
+      set({
+        stocks: finalStocks,
+        totalStocks: paginatedData.total || finalStocks.length,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        perPage: paginatedData.per_page || 8,
+        pagination: paginatedData,
+        hasMore: hasMoreData,
         loading: false,
         loadingMore: false,
-      }));
+        error: null,
+      });
 
-      return response;
+      console.log(`✅ Stocks loaded: ${finalStocks.length}, page ${paginatedData.current_page}/${paginatedData.last_page}, hasMore: ${hasMoreData}`);
+      return { success: true, data: finalStocks, pagination: paginatedData };
+      
     } catch (error) {
       console.error('❌ Failed to fetch stocks:', error);
+      const errorMessage = error.message || 'Failed to fetch stocks';
       set({
-        stocks: [],
-        totalStocks: 0,
+        stocks: append ? get().stocks : [],
+        totalStocks: append ? get().totalStocks : 0,
         loading: false,
-        error: error.message || 'Failed to fetch stocks',
+        loadingMore: false,
+        error: errorMessage,
       });
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Get single stock
-  getStock: async (id) => {
-    console.log('🔍 getStock called with:', id);
-    try {
-      const response = await stocksAPI.getById(id);
-      let stockData = null;
-      
-      if (response?.data?.data) {
-        stockData = response.data.data;
-      } else if (response?.data) {
-        stockData = response.data;
-      } else {
-        stockData = response;
-      }
-      
-      return stockData;
-    } catch (error) {
-      console.error('❌ Failed to fetch stock:', error);
-      throw error;
-    }
-  },
-
-  // Create stock
-  createStock: async (stockData) => {
-    console.log('📝 createStock called with:', stockData);
-    set({ loading: true, error: null });
-
-    try {
-      const response = await stocksAPI.create(stockData);
-      console.log('✅ Stock created successfully:', response);
-      
-      let newStock = null;
-      if (response?.data?.data) {
-        newStock = response.data.data;
-      } else if (response?.data) {
-        newStock = response.data;
-      } else {
-        newStock = response;
-      }
-
-      await get().fetchStocks();
-      set({ loading: false });
-      return { success: true, data: newStock };
-    } catch (error) {
-      console.error('❌ Failed to create stock:', error);
-      set({
-        error: error.message || 'Failed to create stock',
-        loading: false,
-      });
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Update stock
-  updateStock: async (id, stockData) => {
-    console.log('✏️ updateStock called with:', id, stockData);
-    set({ loading: true, error: null });
-
-    try {
-      const response = await stocksAPI.update(id, stockData);
-      console.log('✅ Stock updated successfully:', response);
-      
-      let updatedStock = null;
-      if (response?.data?.data) {
-        updatedStock = response.data.data;
-      } else if (response?.data) {
-        updatedStock = response.data;
-      } else {
-        updatedStock = response;
-      }
-
-      await get().fetchStocks();
-      set({ loading: false });
-      return { success: true, data: updatedStock };
-    } catch (error) {
-      console.error('❌ Failed to update stock:', error);
-      set({
-        error: error.message || 'Failed to update stock',
-        loading: false,
-      });
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Delete stock
-  deleteStock: async (id, userId) => {
-    console.log('🗑️ deleteStock called with:', id);
-    set({ loading: true, error: null });
-
-    try {
-      await stocksAPI.delete(id, userId);
-      console.log('✅ Stock deleted successfully');
-
-      await get().fetchStocks();
-      set({ loading: false });
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Failed to delete stock:', error);
-      set({
-        error: error.message || 'Failed to delete stock',
-        loading: false,
-      });
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Add stock quantity
-  addStockQuantity: async (id, userId, quantity) => {
-    console.log('➕ addStockQuantity called with:', id, quantity);
-    set({ loading: true, error: null });
-
-    try {
-      const response = await stocksAPI.addStock(id, userId, quantity);
-      console.log('✅ Stock quantity added successfully:', response);
-
-      await get().fetchStocks();
-      set({ loading: false });
-      return { success: true, data: response?.data };
-    } catch (error) {
-      console.error('❌ Failed to add stock quantity:', error);
-      set({
-        error: error.message || 'Failed to add stock quantity',
-        loading: false,
-      });
-      return { success: false, error: error.message };
-    }
-  },
-
-  // Set filters
-  setFilters: (newFilters) => {
-    const currentFilters = get().filters;
-    const updatedFilters = { ...currentFilters, ...newFilters };
-    set({ filters: updatedFilters });
-  },
-
-  // Change page
-  setPage: (page) => {
-    const { filters } = get();
-    get().fetchStocks(page, filters.search);
-  },
-
-  // Load more stocks
+  // ✅ FIXED: Load more stocks for pagination
   loadMoreStocks: async (search = '') => {
     const { hasMore, loadingMore, loading, currentPage, lastPage } = get();
     
@@ -288,36 +152,24 @@ const useStockStore = create((set, get) => ({
       const response = await stocksAPI.getAll(search, nextPage, get().perPage);
       console.log('📦 Stocks API Full Response:', response);
       
-      let stocksArray = [];
-      let paginationData = {};
-      
-      if (response?.data?.data?.data) {
-        stocksArray = response.data.data.data;
-        paginationData = response.data.data;
-      } else if (response?.data?.data) {
-        stocksArray = Array.isArray(response.data.data) ? response.data.data : [];
-        paginationData = response.data;
-      } else if (response?.data) {
-        stocksArray = Array.isArray(response.data) ? response.data : [];
-      } else if (Array.isArray(response)) {
-        stocksArray = response;
-      }
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('📊 Load more paginated:', paginatedData);
+
+      let stocksArray = paginatedData.data || [];
       
       if (!Array.isArray(stocksArray)) {
-        stocksArray = [];
+        console.error('❌ stocksArray is not an array:', stocksArray);
+        set({ loadingMore: false });
+        return { success: false, error: 'Invalid response format' };
       }
       
       // Fetch products to enrich stock data
       let productsArray = [];
       try {
         const productsResponse = await productsAPI.getAll();
-        if (productsResponse?.data?.data?.data) {
-          productsArray = productsResponse.data.data.data;
-        } else if (productsResponse?.data?.data) {
-          productsArray = Array.isArray(productsResponse.data.data) ? productsResponse.data.data : [];
-        } else if (productsResponse?.data) {
-          productsArray = Array.isArray(productsResponse.data) ? productsResponse.data : [];
-        }
+        const productsPaginated = getPaginatedData(productsResponse);
+        productsArray = productsPaginated.data || [];
       } catch (productError) {
         console.error('❌ Failed to fetch products:', productError);
       }
@@ -336,7 +188,7 @@ const useStockStore = create((set, get) => ({
         };
       });
 
-      const hasMore = (paginationData.current_page || nextPage) < (paginationData.last_page || 1);
+      const hasMoreData = paginatedData.current_page < paginatedData.last_page;
 
       set((state) => {
         // Create a Set of existing stock IDs to avoid duplicates
@@ -345,24 +197,277 @@ const useStockStore = create((set, get) => ({
         
         return {
           stocks: [...state.stocks, ...newStocks],
-          totalStocks: paginationData.total || state.stocks.length + newStocks.length,
-          currentPage: paginationData.current_page || nextPage,
-          lastPage: paginationData.last_page || 1,
-          hasMore: hasMore,
+          totalStocks: paginatedData.total || state.stocks.length + newStocks.length,
+          currentPage: paginatedData.current_page || nextPage,
+          lastPage: paginatedData.last_page || 1,
+          perPage: paginatedData.per_page || 8,
+          pagination: paginatedData,
+          hasMore: hasMoreData,
           loadingMore: false,
+          error: null,
         };
       });
 
+      console.log(`✅ Load more completed: ${enrichedStocks.length} new stocks, total: ${get().stocks.length}, hasMore: ${hasMoreData}`);
       return { success: true, data: enrichedStocks };
+      
     } catch (error) {
       console.error('❌ Failed to load more stocks:', error);
-      set({ loadingMore: false });
-      return { success: false, error: error.message };
+      const errorMessage = error.message || 'Failed to load more stocks';
+      set({ 
+        loadingMore: false, 
+        error: errorMessage 
+      });
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Clear error
+  // ✅ FIXED: Get single stock
+  getStock: async (id) => {
+    console.log('🔍 getStock called with:', id);
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await stocksAPI.getById(id);
+      console.log('📦 getStock response:', response);
+      
+      // ✅ Use helper to extract entity data
+      const stockData = getEntityData(response);
+      console.log('📊 Extracted stock:', stockData);
+      
+      set({ loading: false, error: null });
+      return { success: true, data: stockData };
+      
+    } catch (error) {
+      console.error('❌ Failed to fetch stock:', error);
+      const errorMessage = error.message || 'Failed to fetch stock';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  // ✅ FIXED: Create stock
+  createStock: async (stockData) => {
+    console.log('📝 createStock called with:', stockData);
+    set({ loading: true, error: null });
+
+    try {
+      const response = await stocksAPI.create(stockData);
+      console.log('✅ Stock created successfully:', response);
+      
+      // ✅ Use helper to extract entity data
+      const newStock = getEntityData(response);
+      console.log('📊 Extracted new stock:', newStock);
+
+      // Optimistic update
+      if (newStock && newStock.id) {
+        const { stocks } = get();
+        set({
+          stocks: [newStock, ...stocks],
+          totalStocks: stocks.length + 1,
+          loading: false,
+          error: null,
+        });
+      } else {
+        set({ loading: false, error: null });
+      }
+
+      // Optionally refresh the list
+      // await get().fetchStocks(1, '', false);
+
+      return { success: true, data: newStock };
+      
+    } catch (error) {
+      console.error('❌ Failed to create stock:', error);
+      const errorMessage = error.message || 'Failed to create stock';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  // ✅ FIXED: Update stock
+  updateStock: async (id, stockData) => {
+    console.log('✏️ updateStock called:', { id, stockData });
+    set({ loading: true, error: null });
+
+    try {
+      const response = await stocksAPI.update(id, stockData);
+      console.log('✅ Stock updated successfully:', response);
+      
+      // ✅ Use helper to extract entity data
+      const updatedStock = getEntityData(response);
+      console.log('📊 Extracted updated stock:', updatedStock);
+
+      // Optimistic update
+      if (updatedStock && updatedStock.id) {
+        const { stocks } = get();
+        set({
+          stocks: stocks.map(stock => stock.id === id ? updatedStock : stock),
+          loading: false,
+          error: null,
+        });
+      } else {
+        set({ loading: false, error: null });
+      }
+
+      // Optionally refresh the list
+      // await get().fetchStocks(get().currentPage, get().filters.search, false);
+
+      return { success: true, data: updatedStock };
+      
+    } catch (error) {
+      console.error('❌ Failed to update stock:', error);
+      const errorMessage = error.message || 'Failed to update stock';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  // ✅ FIXED: Delete stock
+  deleteStock: async (id, userId) => {
+    console.log('🗑️ deleteStock called with:', id);
+    set({ loading: true, error: null });
+
+    try {
+      await stocksAPI.delete(id, userId);
+      console.log('✅ Stock deleted successfully');
+
+      // Remove from local state
+      const { stocks } = get();
+      set({
+        stocks: stocks.filter(stock => stock.id !== id),
+        totalStocks: Math.max(0, stocks.length - 1),
+        loading: false,
+        error: null,
+      });
+
+      // Optionally refresh the list
+      // await get().fetchStocks(get().currentPage, get().filters.search, false);
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Failed to delete stock:', error);
+      const errorMessage = error.message || 'Failed to delete stock';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  // ✅ FIXED: Add stock quantity
+  addStockQuantity: async (id, userId, quantity) => {
+    console.log('➕ addStockQuantity called:', { id, quantity });
+    set({ loading: true, error: null });
+
+    try {
+      const response = await stocksAPI.addStock(id, userId, quantity);
+      console.log('✅ Stock quantity added successfully:', response);
+
+      // ✅ Use helper to extract entity data
+      const updatedStock = getEntityData(response);
+      console.log('📊 Extracted updated stock after adding quantity:', updatedStock);
+
+      // Update local state
+      if (updatedStock && updatedStock.id) {
+        const { stocks } = get();
+        set({
+          stocks: stocks.map(stock => 
+            stock.id === id ? updatedStock : stock
+          ),
+          loading: false,
+          error: null,
+        });
+      } else {
+        // If we can't extract the updated stock, refresh the list
+        await get().fetchStocks(get().currentPage, get().filters.search, false);
+        set({ loading: false, error: null });
+      }
+
+      return { success: true, data: updatedStock };
+      
+    } catch (error) {
+      console.error('❌ Failed to add stock quantity:', error);
+      const errorMessage = error.message || 'Failed to add stock quantity';
+      set({
+        error: errorMessage,
+        loading: false,
+      });
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  // ✅ Set filters with auto-fetch
+  setFilters: (newFilters) => {
+    const currentFilters = get().filters;
+    const updatedFilters = { ...currentFilters, ...newFilters };
+    set({ 
+      filters: updatedFilters,
+      currentPage: 1,
+      hasMore: true,
+    });
+    
+    // Refetch with new filters (debounced)
+    setTimeout(() => {
+      get().fetchStocks(1, updatedFilters.search, false);
+    }, 300);
+  },
+
+  // ✅ Set page with auto-fetch
+  setPage: (page) => {
+    const { lastPage, filters } = get();
+    if (page >= 1 && page <= lastPage) {
+      set({ currentPage: page });
+      get().fetchStocks(page, filters.search, false);
+    }
+  },
+
+  // ✅ Reset to page 1
+  resetToPageOne: async (search = '') => {
+    await get().fetchStocks(1, search, false);
+  },
+
+  // ✅ Clear error
   clearError: () => set({ error: null }),
+
+  // ✅ Reset store
+  reset: () => {
+    set({
+      stocks: [],
+      totalStocks: 0,
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 8,
+      loading: false,
+      loadingMore: false,
+      hasMore: true,
+      error: null,
+      pagination: null,
+      filters: {
+        search: '',
+        product_id: '',
+        unit_id: '',
+        lowStock: false,
+        minQuantity: '',
+        maxQuantity: '',
+        dateRange: 'all',
+        createdBy: '',
+        sortBy: 'name',
+        sortOrder: 'asc',
+      },
+    });
+  },
 }));
 
 export default useStockStore;

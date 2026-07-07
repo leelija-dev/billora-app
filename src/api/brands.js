@@ -1,13 +1,19 @@
-import  apiClient  from './client';
+// api/brands.js
+import apiClient, { unwrapApiResponse } from './client';
 
 export const brandsAPI = {
   // Get all brands
   getAll: async (params = {}) => {
     try {
       const response = await apiClient.get('/brands', { params });
-      console.log('Brands API Response:', response.data);
-      return response.data;
+      console.log('📦 Brands API getAll raw response:', response.data);
+      
+      // ✅ UNWRAP the response to standardize structure
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Brands API getAll unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Brands API getAll error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -16,8 +22,14 @@ export const brandsAPI = {
   getById: async (id) => {
     try {
       const response = await apiClient.get(`/brands/${id}`);
-      return response.data;
+      console.log('📦 Brands API getById raw:', response.data);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('📦 Brands API getById unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Brands API getById error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -34,11 +46,16 @@ export const brandsAPI = {
         description: brandData.description || '',
       };
       
-      console.log('Create brand API payload:', payload);
+      console.log('📝 Create brand API payload:', payload);
       const response = await apiClient.post('/brands/store', payload);
-      return response.data;
+      console.log('✅ Brands API create raw response:', response.data);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('✅ Brands API create unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
-      console.error('Create brand API error:', error.response?.data || error.message);
+      console.error('❌ Create brand API error:', error.response?.data || error.message);
       throw error;
     }
   },
@@ -58,11 +75,16 @@ export const brandsAPI = {
         payload.user_id = brandData.user_id;
       }
       
-      console.log('Update brand API payload:', payload);
+      console.log('✏️ Update brand API payload:', payload);
       const response = await apiClient.post(`/brands/${id}`, payload);
-      return response.data;
+      console.log('✅ Brands API update raw response:', response.data);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('✅ Brands API update unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
-      console.error('Update brand API error:', error.response?.data || error.message);
+      console.error('❌ Update brand API error:', error.response?.data || error.message);
       throw error;
     }
   },
@@ -71,8 +93,14 @@ export const brandsAPI = {
   delete: async (id) => {
     try {
       const response = await apiClient.delete(`/brands/${id}`);
-      return response.data;
+      console.log('✅ Brands API delete raw response:', response.data);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('✅ Brands API delete unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Brands API delete error:', error);
       throw error.response?.data || error.message;
     }
   },
@@ -83,9 +111,17 @@ export const brandsAPI = {
       const response = await apiClient.get('/brands', {
         params: { search: query, ...filters }
       });
-      return response.data;
+      console.log('🔍 Brands API search raw:', response.data);
+      
+      // ✅ UNWRAP the response
+      const unwrapped = unwrapApiResponse(response);
+      console.log('🔍 Brands API search unwrapped:', unwrapped.data);
+      return unwrapped;
     } catch (error) {
+      console.error('❌ Brands API search error:', error);
       throw error.response?.data || error.message;
     }
   },
 };
+
+export default brandsAPI;

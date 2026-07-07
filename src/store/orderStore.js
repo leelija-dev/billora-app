@@ -1,5 +1,7 @@
+// store/orderStore.js
 import { create } from 'zustand';
 import { ordersAPI } from '../api/orders';
+import { getPaginatedData, getEntityData } from '../api/client';
 import Toast from 'react-native-toast-message';
 
 export const useOrderStore = create((set, get) => ({
@@ -11,18 +13,13 @@ export const useOrderStore = create((set, get) => ({
   currentPage: 1,
   lastPage: 1,
   totalOrders: 0,
+  pagination: null,
   filters: {
     search: '',
     status: '',
     paymentStatus: '',
     dateFrom: '',
     dateTo: '',
-  },
-  pagination: {
-    page: 1,
-    limit: 8,
-    total: 0,
-    hasMore: true,
   },
   stats: {
     total: 0,
@@ -35,6 +32,7 @@ export const useOrderStore = create((set, get) => ({
 
   setCurrentUserId: (userId) => set({ currentUserId: userId }),
 
+  // ✅ FIXED: Fetch orders
   fetchOrders: async (page = 1, userId, append = false) => {
     set({ loading: true });
     try {
@@ -46,63 +44,31 @@ export const useOrderStore = create((set, get) => ({
       const response = await ordersAPI.getUserOrderHistory(userId, page);
       console.log('📦 Orders API response:', response);
 
-      const responseData = response.data || response;
-      
-      // Parse the paginated response - handle the nested structure
-      let ordersData = [];
-      let paginationInfo = {
-        currentPage: 1,
-        lastPage: 1,
-        total: 0,
-        perPage: 8,
-        nextPageUrl: null,
-      };
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('📊 Extracted paginated data:', paginatedData);
 
-      // The API returns: { data: { status: true, data: { current_page, data: [...], last_page, ... } } }
-      // OR directly: { data: { current_page, data: [...], last_page, ... } }
-      if (responseData?.data?.data && Array.isArray(responseData.data.data)) {
-        // Nested structure: response.data.data.data
-        ordersData = responseData.data.data;
-        paginationInfo = {
-          currentPage: responseData.data.current_page || 1,
-          lastPage: responseData.data.last_page || 1,
-          total: responseData.data.total || 0,
-          perPage: responseData.data.per_page || 8,
-          nextPageUrl: responseData.data.next_page_url || null,
-        };
-      } else if (responseData?.data && Array.isArray(responseData.data)) {
-        // response.data.data is the array
-        ordersData = responseData.data;
-        // Check if there's pagination info at the root level
-        paginationInfo = {
-          currentPage: responseData.current_page || 1,
-          lastPage: responseData.last_page || 1,
-          total: responseData.total || ordersData.length,
-          perPage: responseData.per_page || 8,
-          nextPageUrl: responseData.next_page_url || null,
-        };
-      } else if (Array.isArray(responseData)) {
-        ordersData = responseData;
+      // Extract orders array
+      let ordersData = paginatedData.data || [];
+      
+      // Ensure it's an array
+      if (!Array.isArray(ordersData)) {
+        ordersData = [];
       }
 
-      console.log(`✅ Fetched ${ordersData.length} orders, page ${paginationInfo.currentPage}/${paginationInfo.lastPage}`);
-      console.log(`📊 Total orders: ${paginationInfo.total}, Has more: ${paginationInfo.currentPage < paginationInfo.lastPage}`);
+      console.log(`✅ Fetched ${ordersData.length} orders, page ${paginatedData.current_page}/${paginatedData.last_page}`);
+      console.log(`📊 Total orders: ${paginatedData.total}, Has more: ${paginatedData.current_page < paginatedData.last_page}`);
 
-      const hasMore = paginationInfo.currentPage < paginationInfo.lastPage;
+      const hasMore = paginatedData.current_page < paginatedData.last_page;
 
       // Update state
       set((state) => ({
         orders: append ? [...state.orders, ...ordersData] : ordersData,
-        currentPage: paginationInfo.currentPage,
-        lastPage: paginationInfo.lastPage,
-        totalOrders: paginationInfo.total,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        totalOrders: paginatedData.total || ordersData.length,
         hasMore: hasMore,
-        pagination: {
-          page: paginationInfo.currentPage,
-          limit: paginationInfo.perPage || 8,
-          total: paginationInfo.total,
-          hasMore: hasMore,
-        },
+        pagination: paginatedData,
         loading: false,
         loadingMore: false,
       }));
@@ -119,7 +85,7 @@ export const useOrderStore = create((set, get) => ({
 
         set({
           stats: {
-            total: paginationInfo.total || allOrders.length,
+            total: paginatedData.total || allOrders.length,
             pending: pendingOrders,
             processing: processingOrders,
             completed: completedOrders,
@@ -128,7 +94,8 @@ export const useOrderStore = create((set, get) => ({
         });
       }
 
-      return { success: true, data: ordersData, pagination: paginationInfo };
+      return { success: true, data: ordersData, pagination: paginatedData };
+      
     } catch (error) {
       console.error('❌ Failed to fetch orders:', error);
       Toast.show({
@@ -141,10 +108,11 @@ export const useOrderStore = create((set, get) => ({
         loadingMore: false,
         hasMore: false,
       });
-      return { success: false };
+      return { success: false, error: error.message };
     }
   },
 
+  // ✅ FIXED: Load more orders (infinite scroll)
   loadMoreOrders: async (userId) => {
     const { hasMore, loadingMore, loading, currentPage, lastPage } = get();
     
@@ -163,43 +131,20 @@ export const useOrderStore = create((set, get) => ({
     try {
       const response = await ordersAPI.getUserOrderHistory(userId, nextPage);
       
-      const responseData = response.data || response;
-      let ordersData = [];
-      let paginationInfo = {
-        currentPage: 1,
-        lastPage: 1,
-        total: 0,
-        perPage: 8,
-        nextPageUrl: null,
-      };
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('📊 Load more paginated:', paginatedData);
 
-      // Parse the paginated response - handle the nested structure
-      if (responseData?.data?.data && Array.isArray(responseData.data.data)) {
-        ordersData = responseData.data.data;
-        paginationInfo = {
-          currentPage: responseData.data.current_page || 1,
-          lastPage: responseData.data.last_page || 1,
-          total: responseData.data.total || 0,
-          perPage: responseData.data.per_page || 8,
-          nextPageUrl: responseData.data.next_page_url || null,
-        };
-      } else if (responseData?.data && Array.isArray(responseData.data)) {
-        ordersData = responseData.data;
-        paginationInfo = {
-          currentPage: responseData.current_page || 1,
-          lastPage: responseData.last_page || 1,
-          total: responseData.total || ordersData.length,
-          perPage: responseData.per_page || 8,
-          nextPageUrl: responseData.next_page_url || null,
-        };
-      } else if (Array.isArray(responseData)) {
-        ordersData = responseData;
+      let ordersData = paginatedData.data || [];
+      
+      if (!Array.isArray(ordersData)) {
+        ordersData = [];
       }
 
-      console.log(`✅ Loaded ${ordersData.length} more orders, page ${paginationInfo.currentPage}/${paginationInfo.lastPage}`);
-      console.log(`📊 Total orders: ${paginationInfo.total}, Has more: ${paginationInfo.currentPage < paginationInfo.lastPage}`);
+      console.log(`✅ Loaded ${ordersData.length} more orders, page ${paginatedData.current_page}/${paginatedData.last_page}`);
+      console.log(`📊 Total orders: ${paginatedData.total}, Has more: ${paginatedData.current_page < paginatedData.last_page}`);
 
-      const hasMore = paginationInfo.currentPage < paginationInfo.lastPage;
+      const hasMore = paginatedData.current_page < paginatedData.last_page;
 
       set((state) => {
         // Create a Set of existing order IDs to avoid duplicates
@@ -208,21 +153,17 @@ export const useOrderStore = create((set, get) => ({
         
         return {
           orders: [...state.orders, ...newOrders],
-          currentPage: paginationInfo.currentPage,
-          lastPage: paginationInfo.lastPage,
-          totalOrders: paginationInfo.total,
+          currentPage: paginatedData.current_page || nextPage,
+          lastPage: paginatedData.last_page || 1,
+          totalOrders: paginatedData.total || state.totalOrders,
           hasMore: hasMore,
-          pagination: {
-            page: paginationInfo.currentPage,
-            limit: paginationInfo.per_page || 8,
-            total: paginationInfo.total,
-            hasMore: hasMore,
-          },
+          pagination: paginatedData,
           loadingMore: false,
         };
       });
 
       return { success: true, data: ordersData };
+      
     } catch (error) {
       console.error('❌ Failed to load more orders:', error);
       Toast.show({
@@ -231,14 +172,20 @@ export const useOrderStore = create((set, get) => ({
         text2: error.message || 'Failed to load more orders',
       });
       set({ loadingMore: false });
-      return { success: false };
+      return { success: false, error: error.message };
     }
   },
 
+  // ✅ FIXED: Update order status
   updateOrderStatus: async (orderId, status) => {
     set({ loading: true });
     try {
       const response = await ordersAPI.updateOrderStatus(orderId, status);
+      console.log('✅ Order status updated:', response);
+
+      // ✅ Use helper to extract entity data
+      const updatedOrder = getEntityData(response);
+      console.log('📊 Extracted updated order:', updatedOrder);
 
       set((state) => ({
         orders: state.orders.map((o) =>
@@ -256,23 +203,30 @@ export const useOrderStore = create((set, get) => ({
         text2: 'Order status updated successfully',
       });
 
-      return { success: true, data: response.data };
+      return { success: true, data: updatedOrder };
+      
     } catch (error) {
-      console.error('Failed to update order:', error);
+      console.error('❌ Failed to update order:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
         text2: error.message || 'Failed to update order status',
       });
       set({ loading: false });
-      return { success: false };
+      return { success: false, error: error.message };
     }
   },
 
+  // ✅ FIXED: Update payment status
   updatePaymentStatus: async (orderId, paymentStatus) => {
     set({ loading: true });
     try {
       const response = await ordersAPI.updatePaymentStatus(orderId, paymentStatus);
+      console.log('✅ Payment status updated:', response);
+
+      // ✅ Use helper to extract entity data
+      const updatedOrder = getEntityData(response);
+      console.log('📊 Extracted updated order:', updatedOrder);
 
       set((state) => ({
         orders: state.orders.map((o) =>
@@ -290,19 +244,21 @@ export const useOrderStore = create((set, get) => ({
         text2: 'Payment status updated successfully',
       });
 
-      return { success: true, data: response.data };
+      return { success: true, data: updatedOrder };
+      
     } catch (error) {
-      console.error('Failed to update payment status:', error);
+      console.error('❌ Failed to update payment status:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
         text2: error.message || 'Failed to update payment status',
       });
       set({ loading: false });
-      return { success: false };
+      return { success: false, error: error.message };
     }
   },
 
+  // ✅ FIXED: Update order payment
   updateOrderPayment: async (orderId, userId, paidAmount) => {
     set({ loading: true });
     try {
@@ -319,8 +275,14 @@ export const useOrderStore = create((set, get) => ({
       const willCompletePayment = newPaidAmount >= currentDue;
 
       const response = await ordersAPI.updateOrderPayment(orderId, userId, paidAmount);
+      console.log('✅ Payment updated:', response);
+
+      // ✅ Use helper to extract entity data
+      const updatedPayment = getEntityData(response);
+      console.log('📊 Extracted payment update:', updatedPayment);
 
       if (willCompletePayment) {
+        // Also update payment status to completed
         await ordersAPI.updatePaymentStatus(orderId, 'completed');
 
         set((state) => ({
@@ -380,66 +342,216 @@ export const useOrderStore = create((set, get) => ({
         await get().fetchOrders(1, userId, false);
       }
 
-      return { success: true, data: response.data, willCompletePayment };
+      return { success: true, data: updatedPayment, willCompletePayment };
+      
     } catch (error) {
-      console.error('Failed to update payment:', error);
+      console.error('❌ Failed to update payment:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
         text2: error.message || 'Failed to update payment',
       });
       set({ loading: false });
-      return { success: false };
+      return { success: false, error: error.message };
     }
   },
 
-  setOrders: (orders) => set({ orders }),
-  appendOrders: (newOrders) => set((state) => ({
-    orders: [...state.orders, ...newOrders],
-  })),
+  // ✅ FIXED: Get order by ID
+  getOrderById: async (orderId) => {
+    set({ loading: true });
+    try {
+      const response = await ordersAPI.getOrderById(orderId);
+      console.log('✅ Order fetched:', response);
 
-  setSelectedOrder: (order) => set({ selectedOrder: order }),
+      // ✅ Use helper to extract entity data
+      const order = getEntityData(response);
+      console.log('📊 Extracted order:', order);
 
+      set({ 
+        selectedOrder: order,
+        loading: false 
+      });
+
+      return { success: true, data: order };
+      
+    } catch (error) {
+      console.error('❌ Failed to fetch order:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to fetch order',
+      });
+      set({ loading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ✅ FIXED: Create order
+  createOrder: async (orderData) => {
+    set({ loading: true });
+    try {
+      const response = await ordersAPI.createOrder(orderData);
+      console.log('✅ Order created:', response);
+
+      // ✅ Use helper to extract entity data
+      const newOrder = getEntityData(response);
+      console.log('📊 Extracted new order:', newOrder);
+
+      if (newOrder && newOrder.id) {
+        set((state) => ({
+          orders: [newOrder, ...state.orders],
+          totalOrders: state.totalOrders + 1,
+          loading: false,
+        }));
+      } else {
+        set({ loading: false });
+      }
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Order created successfully',
+      });
+
+      return { success: true, data: newOrder };
+      
+    } catch (error) {
+      console.error('❌ Failed to create order:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to create order',
+      });
+      set({ loading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ✅ FIXED: Update order
+  updateOrder: async (orderId, orderData) => {
+    set({ loading: true });
+    try {
+      const response = await ordersAPI.updateOrder(orderId, orderData);
+      console.log('✅ Order updated:', response);
+
+      // ✅ Use helper to extract entity data
+      const updatedOrder = getEntityData(response);
+      console.log('📊 Extracted updated order:', updatedOrder);
+
+      if (updatedOrder && updatedOrder.id) {
+        set((state) => ({
+          orders: state.orders.map((o) =>
+            o.id === orderId ? updatedOrder : o
+          ),
+          selectedOrder: state.selectedOrder?.id === orderId
+            ? updatedOrder
+            : state.selectedOrder,
+          loading: false,
+        }));
+      } else {
+        set({ loading: false });
+      }
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Order updated successfully',
+      });
+
+      return { success: true, data: updatedOrder };
+      
+    } catch (error) {
+      console.error('❌ Failed to update order:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to update order',
+      });
+      set({ loading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ✅ FIXED: Delete order
+  deleteOrder: async (orderId) => {
+    set({ loading: true });
+    try {
+      await ordersAPI.deleteOrder(orderId);
+      console.log('✅ Order deleted successfully');
+
+      set((state) => ({
+        orders: state.orders.filter((o) => o.id !== orderId),
+        totalOrders: Math.max(0, state.totalOrders - 1),
+        selectedOrder: state.selectedOrder?.id === orderId ? null : state.selectedOrder,
+        loading: false,
+      }));
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Order deleted successfully',
+      });
+
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Failed to delete order:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to delete order',
+      });
+      set({ loading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ✅ Set filters with auto-fetch
   setFilters: (filters, userId) => {
     set((state) => ({
       filters: { ...state.filters, ...filters },
+      currentPage: 1,
+      hasMore: true,
     }));
+    
     if (userId) {
-      get().fetchOrders(1, userId, false);
+      // Debounced fetch
+      setTimeout(() => {
+        get().fetchOrders(1, userId, false);
+      }, 300);
     }
   },
 
-  clearFilters: () => set({
-    filters: {
-      search: '',
-      status: '',
-      paymentStatus: '',
-      dateFrom: '',
-      dateTo: '',
-    },
-  }),
+  // ✅ Clear filters
+  clearFilters: () => {
+    set({
+      filters: {
+        search: '',
+        status: '',
+        paymentStatus: '',
+        dateFrom: '',
+        dateTo: '',
+      },
+      currentPage: 1,
+      hasMore: true,
+    });
+  },
 
-  setPagination: (pagination) => set((state) => ({
-    pagination: { ...state.pagination, ...pagination },
-  })),
-
+  // ✅ Reset pagination
   resetPagination: () => set({
     currentPage: 1,
     lastPage: 1,
     hasMore: true,
     totalOrders: 0,
-    pagination: {
-      page: 1,
-      limit: 8,
-      total: 0,
-      hasMore: true,
-    },
+    pagination: null,
   }),
 
+  // ✅ Set stats
   setStats: (stats) => set((state) => ({
     stats: { ...state.stats, ...stats },
   })),
 
+  // ✅ Update single order
   updateOrder: (orderId, updates) => set((state) => ({
     orders: state.orders.map(order =>
       order.id === orderId ? { ...order, ...updates } : order
@@ -449,19 +561,23 @@ export const useOrderStore = create((set, get) => ({
       : state.selectedOrder,
   })),
 
+  // ✅ Remove order
   removeOrder: (orderId) => set((state) => ({
     orders: state.orders.filter(order => order.id !== orderId),
+    totalOrders: Math.max(0, state.totalOrders - 1),
     selectedOrder: state.selectedOrder?.id === orderId ? null : state.selectedOrder,
   })),
 
+  // ✅ Add order
   addOrder: (order) => set((state) => ({
     orders: [order, ...state.orders],
-    pagination: {
-      ...state.pagination,
-      total: state.pagination.total + 1,
-    },
+    totalOrders: state.totalOrders + 1,
   })),
 
+  // ✅ Set selected order
+  setSelectedOrder: (order) => set({ selectedOrder: order }),
+
+  // ✅ Reset store
   reset: () => set({
     orders: [],
     selectedOrder: null,
@@ -471,18 +587,13 @@ export const useOrderStore = create((set, get) => ({
     currentPage: 1,
     lastPage: 1,
     totalOrders: 0,
+    pagination: null,
     filters: {
       search: '',
       status: '',
       paymentStatus: '',
       dateFrom: '',
       dateTo: '',
-    },
-    pagination: {
-      page: 1,
-      limit: 8,
-      total: 0,
-      hasMore: true,
     },
     stats: {
       total: 0,

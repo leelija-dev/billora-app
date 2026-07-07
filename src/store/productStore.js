@@ -1,6 +1,7 @@
-// store/productStore.js - COMPLETE WITH PAGINATION
+// store/productStore.js
 import { create } from "zustand";
 import { productsAPI } from "../api/products";
+import { getPaginatedData, getEntityData } from "../api/client";
 
 const useProductStore = create((set, get) => ({
   // State
@@ -13,19 +14,7 @@ const useProductStore = create((set, get) => ({
   loadingMore: false,
   hasMore: true,
   error: null,
-  pagination: {
-    current_page: 1,
-    last_page: 1,
-    per_page: 8,
-    total: 0,
-    next_page_url: null,
-    prev_page_url: null,
-    first_page_url: null,
-    last_page_url: null,
-    path: null,
-    from: null,
-    to: null,
-  },
+  pagination: null,
   filters: {
     search: "",
     category_id: null,
@@ -52,13 +41,12 @@ const useProductStore = create((set, get) => ({
     return product.stocks;
   },
 
-  // Fetch products with pagination
-  fetchProducts: async (page = 1, forceRefresh = false, append = false) => {
+  // ✅ FIXED: Fetch products with pagination
+  fetchProducts: async (page = 1, append = false) => {
     const { filters, perPage, products: existingProducts } = get();
 
-    console.log("🔄 fetchProducts called with page:", page, "forceRefresh:", forceRefresh, "append:", append);
+    console.log("🔄 fetchProducts called:", { page, append, filters });
     
-    // If not appending, set loading; if appending, use loadingMore
     if (append && page > 1) {
       set({ loadingMore: true, error: null });
     } else {
@@ -69,46 +57,40 @@ const useProductStore = create((set, get) => ({
       const response = await productsAPI.getAll(filters.search, page, perPage);
       console.log("📦 Products API Response received");
 
-      const paginatedData = response.data || {};
-      const productsData = paginatedData.data || [];
-      const newProducts = Array.isArray(productsData) ? productsData : [];
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("📊 Extracted paginated data:", paginatedData);
 
-      console.log(`📦 Extracted ${newProducts.length} products`);
+      // Extract products array
+      let productsData = paginatedData.data || [];
+      
+      // Ensure it's an array
+      if (!Array.isArray(productsData)) {
+        productsData = [];
+      }
 
-      const pagination = {
-        current_page: paginatedData.current_page || 1,
-        last_page: paginatedData.last_page || 1,
-        per_page: paginatedData.per_page || perPage,
-        total: paginatedData.total || 0,
-        next_page_url: paginatedData.next_page_url || null,
-        prev_page_url: paginatedData.prev_page_url || null,
-        first_page_url: paginatedData.first_page_url || null,
-        last_page_url: paginatedData.last_page_url || null,
-        path: paginatedData.path || null,
-        from: paginatedData.from || null,
-        to: paginatedData.to || null,
-      };
+      console.log(`📦 Extracted ${productsData.length} products`);
 
-      const hasMoreData = pagination.current_page < pagination.last_page;
+      const hasMoreData = paginatedData.current_page < paginatedData.last_page;
 
       // If append is true, append to existing products (with duplicate prevention)
       let finalProducts;
-      if (append && page > 1 && !forceRefresh) {
+      if (append && page > 1) {
         const existingIds = new Set(existingProducts.map(p => p.id));
-        const uniqueNewProducts = newProducts.filter(p => !existingIds.has(p.id));
+        const uniqueNewProducts = productsData.filter(p => !existingIds.has(p.id));
         finalProducts = [...existingProducts, ...uniqueNewProducts];
         console.log(`📦 Appended ${uniqueNewProducts.length} new products, total: ${finalProducts.length}`);
       } else {
-        finalProducts = newProducts;
+        finalProducts = productsData;
       }
 
       set({
         products: finalProducts,
-        totalProducts: pagination.total,
-        currentPage: pagination.current_page,
-        lastPage: pagination.last_page,
-        perPage: pagination.per_page,
-        pagination: pagination,
+        totalProducts: paginatedData.total || finalProducts.length,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        perPage: paginatedData.per_page || perPage,
+        pagination: paginatedData,
         hasMore: hasMoreData,
         loading: false,
         loadingMore: false,
@@ -116,7 +98,8 @@ const useProductStore = create((set, get) => ({
       });
 
       console.log(`✅ Products loaded successfully: ${finalProducts.length} products, hasMore: ${hasMoreData}`);
-      return response.data;
+      return { success: true, data: finalProducts, pagination: paginatedData };
+      
     } catch (error) {
       console.error("❌ Failed to fetch products:", error);
       
@@ -128,80 +111,73 @@ const useProductStore = create((set, get) => ({
         loadingMore: false,
         error: errorMessage,
       });
-      throw error;
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Load more products for pagination
-  loadMoreProducts: async (page) => {
-    const { filters, perPage, products: existingProducts, hasMore, loading, loadingMore } = get();
+  // ✅ FIXED: Load more products for pagination
+  loadMoreProducts: async () => {
+    const { hasMore, loading, loadingMore, currentPage, lastPage, filters, perPage } = get();
 
-    // Prevent loading if already loading or no more data
-    if (loading || loadingMore || !hasMore) {
-      console.log('⏭️ Skipping load more - already loading or no more data');
+    if (loading || loadingMore || !hasMore || currentPage >= lastPage) {
+      console.log('⏭️ Skipping load more - conditions not met');
       return;
     }
 
-    console.log(`🔄 loadMoreProducts called with page: ${page}`);
-    set({ loadingMore: true, error: null });
-
+    const nextPage = currentPage + 1;
+    console.log(`🔄 loadMoreProducts called with page: ${nextPage}`);
+    
     try {
-      const response = await productsAPI.getAll(filters.search, page, perPage);
-      console.log("📦 Products API Response received for page:", page);
+      const response = await productsAPI.getAll(filters.search, nextPage, perPage);
+      console.log("📦 Products API Response received for page:", nextPage);
 
-      const paginatedData = response.data || {};
-      const productsData = paginatedData.data || [];
-      const newProducts = Array.isArray(productsData) ? productsData : [];
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("📊 Load more paginated:", paginatedData);
 
-      console.log(`📦 Extracted ${newProducts.length} products from page ${page}`);
+      let productsData = paginatedData.data || [];
+      
+      if (!Array.isArray(productsData)) {
+        productsData = [];
+      }
 
+      console.log(`📦 Extracted ${productsData.length} products from page ${nextPage}`);
+
+      const { products: existingProducts } = get();
       // Create a Set of existing product IDs to avoid duplicates
       const existingIds = new Set(existingProducts.map(p => p.id));
-      const uniqueNewProducts = newProducts.filter(p => !existingIds.has(p.id));
+      const uniqueNewProducts = productsData.filter(p => !existingIds.has(p.id));
 
-      const pagination = {
-        current_page: paginatedData.current_page || 1,
-        last_page: paginatedData.last_page || 1,
-        per_page: paginatedData.per_page || perPage,
-        total: paginatedData.total || 0,
-        next_page_url: paginatedData.next_page_url || null,
-        prev_page_url: paginatedData.prev_page_url || null,
-        first_page_url: paginatedData.first_page_url || null,
-        last_page_url: paginatedData.last_page_url || null,
-        path: paginatedData.path || null,
-        from: paginatedData.from || null,
-        to: paginatedData.to || null,
-      };
-
-      const hasMoreData = pagination.current_page < pagination.last_page;
+      const hasMoreData = paginatedData.current_page < paginatedData.last_page;
 
       set({
         products: [...existingProducts, ...uniqueNewProducts],
-        totalProducts: pagination.total,
-        currentPage: pagination.current_page,
-        lastPage: pagination.last_page,
-        perPage: pagination.per_page,
-        pagination: pagination,
+        totalProducts: paginatedData.total || get().totalProducts,
+        currentPage: paginatedData.current_page || nextPage,
+        lastPage: paginatedData.last_page || 1,
+        perPage: paginatedData.per_page || perPage,
+        pagination: paginatedData,
         hasMore: hasMoreData,
         loadingMore: false,
         error: null,
       });
 
       console.log(`✅ Load more completed: ${uniqueNewProducts.length} new products, total: ${get().products.length}, hasMore: ${hasMoreData}`);
-      return response.data;
+      return { success: true, data: uniqueNewProducts };
+      
     } catch (error) {
-      console.error(`❌ Failed to load more products page ${page}:`, error);
+      console.error(`❌ Failed to load more products:`, error);
       
       const errorMessage = error.message || "Failed to load more products";
       set({
         loadingMore: false,
         error: errorMessage,
       });
-      throw error;
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Fetch products by URL (for pagination)
+  // ✅ FIXED: Fetch products by URL (for pagination)
   fetchProductsByUrl: async (url) => {
     if (!url) {
       console.warn("⚠️ fetchProductsByUrl called with null URL");
@@ -214,46 +190,36 @@ const useProductStore = create((set, get) => ({
     try {
       const response = await productsAPI.getByUrl(url);
       
-      const paginatedData = response.data || {};
-      const productsData = paginatedData.data || [];
-      const newProducts = Array.isArray(productsData) ? productsData : [];
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("📊 Products by URL paginated:", paginatedData);
 
-      console.log(`📦 Extracted ${newProducts.length} products from URL`);
+      let productsData = paginatedData.data || [];
+      
+      if (!Array.isArray(productsData)) {
+        productsData = [];
+      }
 
-      const pagination = {
-        current_page: paginatedData.current_page || 1,
-        last_page: paginatedData.last_page || 1,
-        per_page: paginatedData.per_page || get().perPage,
-        total: paginatedData.total || 0,
-        next_page_url: paginatedData.next_page_url || null,
-        prev_page_url: paginatedData.prev_page_url || null,
-        first_page_url: paginatedData.first_page_url || null,
-        last_page_url: paginatedData.last_page_url || null,
-        path: paginatedData.path || null,
-        from: paginatedData.from || null,
-        to: paginatedData.to || null,
-      };
-
-      const hasMoreData = pagination.current_page < pagination.last_page;
+      const hasMoreData = paginatedData.current_page < paginatedData.last_page;
 
       set({
-        products: newProducts,
-        totalProducts: pagination.total,
-        currentPage: pagination.current_page,
-        lastPage: pagination.last_page,
-        perPage: pagination.per_page,
-        pagination: pagination,
+        products: productsData,
+        totalProducts: paginatedData.total || productsData.length,
+        currentPage: paginatedData.current_page || 1,
+        lastPage: paginatedData.last_page || 1,
+        perPage: paginatedData.per_page || get().perPage,
+        pagination: paginatedData,
         hasMore: hasMoreData,
         loading: false,
         error: null,
       });
 
-      console.log(`✅ Products by URL loaded: ${newProducts.length} products`);
-      return response.data;
+      console.log(`✅ Products by URL loaded: ${productsData.length} products`);
+      return { success: true, data: productsData, pagination: paginatedData };
+      
     } catch (error) {
       console.error("❌ Failed to fetch products by URL:", error);
       
-      // Fallback to regular fetch
       let page = 1;
       try {
         const urlObj = new URL(url);
@@ -266,40 +232,66 @@ const useProductStore = create((set, get) => ({
       }
 
       set({ loading: false, error: error.message });
-      return get().fetchProducts(page, true, false);
+      return get().fetchProducts(page, false);
     }
   },
 
-  // Get single product
+  // ✅ FIXED: Get single product
   getProduct: async (id) => {
     console.log(`🔍 getProduct called with ID: ${id}`);
+    set({ loading: true, error: null });
+    
     try {
       const response = await productsAPI.getById(id);
-      const productData = response.data;
       console.log(`✅ Product ${id} fetched successfully`);
-      return productData;
+      
+      // ✅ Use helper to extract entity data
+      const productData = getEntityData(response);
+      console.log("📊 Extracted product:", productData);
+      
+      set({ loading: false, error: null });
+      return { success: true, data: productData };
+      
     } catch (error) {
       console.error(`❌ Failed to fetch product ${id}:`, error);
-      throw error;
+      set({ 
+        loading: false, 
+        error: error.message || 'Failed to fetch product' 
+      });
+      return { success: false, error: error.message };
     }
   },
 
-  // Create product
+  // ✅ FIXED: Create product
   createProduct: async (productData) => {
     console.log("📝 createProduct called");
     set({ loading: true, error: null });
 
     try {
       const response = await productsAPI.create(productData);
-      console.log("✅ Product created successfully");
+      console.log("✅ Product created successfully:", response);
 
-      const newProduct = response.data;
+      // ✅ Use helper to extract entity data
+      const newProduct = getEntityData(response);
+      console.log("📊 Extracted new product:", newProduct);
 
-      // Refresh products list - reset to page 1
-      await get().fetchProducts(1, true, false);
+      // Optimistic update
+      if (newProduct && newProduct.id) {
+        const { products } = get();
+        set({
+          products: [newProduct, ...products],
+          totalProducts: products.length + 1,
+          loading: false,
+          error: null,
+        });
+      }
 
-      set({ loading: false });
+      // Optionally refresh the list
+      // await get().fetchProducts(1, false);
+
+      set({ loading: false, error: null });
       return { success: true, data: newProduct };
+      
     } catch (error) {
       console.error("❌ Failed to create product:", error);
       
@@ -312,22 +304,37 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Update product
+  // ✅ FIXED: Update product
   updateProduct: async (id, productData) => {
     console.log(`✏️ updateProduct called for ID: ${id}`);
     set({ loading: true, error: null });
 
     try {
       const response = await productsAPI.update(id, productData);
-      console.log(`✅ Product ${id} updated successfully`);
+      console.log(`✅ Product ${id} updated successfully:`, response);
 
-      const updatedProduct = response.data;
+      // ✅ Use helper to extract entity data
+      const updatedProduct = getEntityData(response);
+      console.log("📊 Extracted updated product:", updatedProduct);
 
-      // Refresh products list at current page
-      await get().fetchProducts(get().currentPage, true, false);
+      // Optimistic update
+      if (updatedProduct && updatedProduct.id) {
+        const { products } = get();
+        set({
+          products: products.map(p => 
+            p.id === id ? updatedProduct : p
+          ),
+          loading: false,
+          error: null,
+        });
+      }
 
-      set({ loading: false });
+      // Optionally refresh the list
+      // await get().fetchProducts(get().currentPage, false);
+
+      set({ loading: false, error: null });
       return { success: true, data: updatedProduct };
+      
     } catch (error) {
       console.error(`❌ Failed to update product ${id}:`, error);
       
@@ -340,7 +347,7 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Delete product (soft delete)
+  // ✅ FIXED: Delete product (soft delete)
   deleteProduct: async (id) => {
     console.log(`🗑️ deleteProduct called for ID: ${id}`);
     set({ loading: true, error: null });
@@ -349,11 +356,21 @@ const useProductStore = create((set, get) => ({
       await productsAPI.delete(id);
       console.log(`✅ Product ${id} deleted successfully`);
 
-      // Refresh products list at current page
-      await get().fetchProducts(get().currentPage, true, false);
+      // Remove from local state
+      const { products } = get();
+      set({
+        products: products.filter(p => p.id !== id),
+        totalProducts: Math.max(0, products.length - 1),
+        loading: false,
+        error: null,
+      });
 
-      set({ loading: false });
+      // Optionally refresh the list
+      // await get().fetchProducts(get().currentPage, false);
+
+      set({ loading: false, error: null });
       return { success: true };
+      
     } catch (error) {
       console.error(`❌ Failed to delete product ${id}:`, error);
       
@@ -366,7 +383,7 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Restore product
+  // ✅ FIXED: Restore product
   restoreProduct: async (id) => {
     console.log(`♻️ restoreProduct called for ID: ${id}`);
     set({ loading: true, error: null });
@@ -376,10 +393,11 @@ const useProductStore = create((set, get) => ({
       console.log(`✅ Product ${id} restored successfully`);
 
       // Refresh products list at current page
-      await get().fetchProducts(get().currentPage, true, false);
+      await get().fetchProducts(get().currentPage, false);
 
-      set({ loading: false });
+      set({ loading: false, error: null });
       return { success: true };
+      
     } catch (error) {
       console.error(`❌ Failed to restore product ${id}:`, error);
       
@@ -392,7 +410,7 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Permanently delete product
+  // ✅ FIXED: Permanently delete product
   forceDeleteProduct: async (id) => {
     console.log(`💥 forceDeleteProduct called for ID: ${id}`);
     set({ loading: true, error: null });
@@ -401,11 +419,20 @@ const useProductStore = create((set, get) => ({
       await productsAPI.forceDelete(id);
       console.log(`✅ Product ${id} permanently deleted`);
 
-      // Refresh products list at current page
-      await get().fetchProducts(get().currentPage, true, false);
+      // Remove from local state
+      const { products } = get();
+      set({
+        products: products.filter(p => p.id !== id),
+        totalProducts: Math.max(0, products.length - 1),
+        loading: false,
+        error: null,
+      });
 
-      set({ loading: false });
+      // Optionally refresh the list
+      // await get().fetchProducts(get().currentPage, false);
+
       return { success: true };
+      
     } catch (error) {
       console.error(`❌ Failed to permanently delete product ${id}:`, error);
       
@@ -418,7 +445,7 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Bulk delete products
+  // ✅ FIXED: Bulk delete products
   bulkDeleteProducts: async (ids) => {
     console.log(`📦 Bulk delete called for ${ids.length} products`);
     set({ loading: true, error: null });
@@ -427,11 +454,21 @@ const useProductStore = create((set, get) => ({
       await productsAPI.bulkDelete(ids);
       console.log(`✅ ${ids.length} products bulk deleted successfully`);
 
-      // Refresh products list at current page
-      await get().fetchProducts(get().currentPage, true, false);
+      // Remove from local state
+      const { products } = get();
+      const idsSet = new Set(ids);
+      set({
+        products: products.filter(p => !idsSet.has(p.id)),
+        totalProducts: Math.max(0, products.length - ids.length),
+        loading: false,
+        error: null,
+      });
 
-      set({ loading: false });
+      // Optionally refresh the list
+      // await get().fetchProducts(get().currentPage, false);
+
       return { success: true };
+      
     } catch (error) {
       console.error("❌ Failed to bulk delete products:", error);
       
@@ -444,7 +481,7 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Bulk force delete products
+  // ✅ FIXED: Bulk force delete products
   bulkForceDeleteProducts: async (ids) => {
     console.log(`💥 Bulk force delete called for ${ids.length} products`);
     set({ loading: true, error: null });
@@ -453,11 +490,21 @@ const useProductStore = create((set, get) => ({
       await productsAPI.bulkForceDelete(ids);
       console.log(`✅ ${ids.length} products bulk permanently deleted`);
 
-      // Refresh products list at current page
-      await get().fetchProducts(get().currentPage, true, false);
+      // Remove from local state
+      const { products } = get();
+      const idsSet = new Set(ids);
+      set({
+        products: products.filter(p => !idsSet.has(p.id)),
+        totalProducts: Math.max(0, products.length - ids.length),
+        loading: false,
+        error: null,
+      });
 
-      set({ loading: false });
+      // Optionally refresh the list
+      // await get().fetchProducts(get().currentPage, false);
+
       return { success: true };
+      
     } catch (error) {
       console.error("❌ Failed to bulk force delete products:", error);
       
@@ -470,7 +517,7 @@ const useProductStore = create((set, get) => ({
     }
   },
 
-  // Set filters
+  // ✅ FIXED: Set filters with auto-fetch
   setFilters: (newFilters) => {
     const currentFilters = get().filters;
     const updatedFilters = { ...currentFilters, ...newFilters };
@@ -482,25 +529,23 @@ const useProductStore = create((set, get) => ({
       hasMore: true,
     });
 
-    // Debounce the fetch
     if (get()._filterTimeout) {
       clearTimeout(get()._filterTimeout);
     }
     
     const timeoutId = setTimeout(() => {
-      get().fetchProducts(1, true, false);
+      get().fetchProducts(1, false);
     }, 300);
 
     set({ _filterTimeout: timeoutId });
   },
 
-  // Set page with proper pagination
+  // ✅ FIXED: Set page with proper pagination
   setPage: (page) => {
     const { lastPage, currentPage, pagination } = get();
 
     console.log(`📄 setPage called with: ${page}, current: ${currentPage}, last: ${lastPage}`);
 
-    // Validate page number
     if (page < 1) page = 1;
     if (page > lastPage) page = lastPage;
 
@@ -508,41 +553,34 @@ const useProductStore = create((set, get) => ({
       console.log(`📄 Changing page from ${currentPage} to ${page}`);
       set({ currentPage: page });
 
-      // Use the pagination URLs from the API response
       let pageUrl = null;
       
-      // Try to use the exact URL from pagination data
-      if (page === 1 && pagination.first_page_url) {
-        pageUrl = pagination.first_page_url;
-        console.log("📄 Using first_page_url:", pageUrl);
-      } else if (page === pagination.last_page && pagination.last_page_url) {
-        pageUrl = pagination.last_page_url;
-        console.log("📄 Using last_page_url:", pageUrl);
-      } else if (pagination.next_page_url && page === currentPage + 1) {
-        pageUrl = pagination.next_page_url;
-        console.log("📄 Using next_page_url:", pageUrl);
-      } else if (pagination.prev_page_url && page === currentPage - 1) {
-        pageUrl = pagination.prev_page_url;
-        console.log("📄 Using prev_page_url:", pageUrl);
+      if (pagination) {
+        if (page === 1 && pagination.first_page_url) {
+          pageUrl = pagination.first_page_url;
+        } else if (page === pagination.last_page && pagination.last_page_url) {
+          pageUrl = pagination.last_page_url;
+        } else if (pagination.next_page_url && page === currentPage + 1) {
+          pageUrl = pagination.next_page_url;
+        } else if (pagination.prev_page_url && page === currentPage - 1) {
+          pageUrl = pagination.prev_page_url;
+        } else {
+          const basePath = pagination.path || "/products";
+          pageUrl = `${basePath}?page=${page}`;
+        }
       } else {
-        // Construct URL for pages in between
-        const basePath = pagination.path || "/products";
-        pageUrl = `${basePath}?page=${page}`;
-        console.log("📄 Constructed page URL:", pageUrl);
+        pageUrl = `/products?page=${page}`;
       }
 
-      // If we have a URL, fetch it
       if (pageUrl) {
         get().fetchProductsByUrl(pageUrl);
       } else {
-        // Fallback to regular fetch
-        console.log("📄 No URL available, using regular fetch");
-        get().fetchProducts(page, true, false);
+        get().fetchProducts(page, false);
       }
     }
   },
 
-  // Search products
+  // ✅ FIXED: Search products
   searchProducts: async (query) => {
     console.log(`🔍 Searching products with query: "${query}"`);
     set({ loading: true, error: null });
@@ -550,40 +588,33 @@ const useProductStore = create((set, get) => ({
     try {
       const response = await productsAPI.search(query);
       
-      const paginatedData = response.data || {};
-      const productsData = paginatedData.data || [];
-      const newProducts = Array.isArray(productsData) ? productsData : [];
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("🔍 Search results paginated:", paginatedData);
 
-      const pagination = {
-        current_page: paginatedData.current_page || 1,
-        last_page: paginatedData.last_page || 1,
-        per_page: paginatedData.per_page || get().perPage,
-        total: paginatedData.total || 0,
-        next_page_url: paginatedData.next_page_url || null,
-        prev_page_url: paginatedData.prev_page_url || null,
-        first_page_url: paginatedData.first_page_url || null,
-        last_page_url: paginatedData.last_page_url || null,
-        path: paginatedData.path || null,
-        from: paginatedData.from || null,
-        to: paginatedData.to || null,
-      };
+      let productsData = paginatedData.data || [];
+      
+      if (!Array.isArray(productsData)) {
+        productsData = [];
+      }
 
-      const hasMoreData = pagination.current_page < pagination.last_page;
+      const hasMoreData = paginatedData.current_page < paginatedData.last_page;
 
       set({
-        products: newProducts,
-        totalProducts: pagination.total,
-        currentPage: pagination.current_page,
-        lastPage: pagination.last_page,
-        perPage: pagination.per_page,
-        pagination: pagination,
+        products: productsData,
+        totalProducts: paginatedData.total || productsData.length,
+        currentPage: paginatedData.current_page || 1,
+        lastPage: paginatedData.last_page || 1,
+        perPage: paginatedData.per_page || get().perPage,
+        pagination: paginatedData,
         hasMore: hasMoreData,
         loading: false,
         error: null,
       });
 
-      console.log(`✅ Search completed: ${newProducts.length} products found`);
-      return response.data;
+      console.log(`✅ Search completed: ${productsData.length} products found`);
+      return { success: true, data: productsData, pagination: paginatedData };
+      
     } catch (error) {
       console.error("❌ Failed to search products:", error);
       
@@ -592,14 +623,19 @@ const useProductStore = create((set, get) => ({
         loading: false,
         error: errorMessage,
       });
-      throw error;
+      return { success: false, error: errorMessage };
     }
   },
 
-  // Clear error
+  // ✅ Reset to page 1
+  resetToPageOne: async () => {
+    await get().fetchProducts(1, false);
+  },
+
+  // ✅ Clear error
   clearError: () => set({ error: null }),
 
-  // Reset store
+  // ✅ Reset store
   reset: () => {
     console.log("🔄 Resetting product store");
     if (get()._filterTimeout) {
@@ -615,19 +651,7 @@ const useProductStore = create((set, get) => ({
       loadingMore: false,
       hasMore: true,
       error: null,
-      pagination: {
-        current_page: 1,
-        last_page: 1,
-        per_page: 8,
-        total: 0,
-        next_page_url: null,
-        prev_page_url: null,
-        first_page_url: null,
-        last_page_url: null,
-        path: null,
-        from: null,
-        to: null,
-      },
+      pagination: null,
       filters: {
         search: "",
         category_id: null,

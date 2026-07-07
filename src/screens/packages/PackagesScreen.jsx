@@ -21,6 +21,7 @@ import {
   SuccessModal,
 } from "../../components/common/CustomModal";
 import Header from "../../components/common/Header";
+import StatsCard from "../../components/dashboard/StatsCard";
 import { useAuthStore } from "../../store/authStore";
 import { usePackageStore } from "../../store/packageStore";
 import { useThemeStore } from "../../store/themeStore";
@@ -62,21 +63,22 @@ const PackagesScreen = ({ navigation }) => {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [confirmationModalVisible, setConfirmationModalVisible] =
-    useState(false);
+  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Form state
+  // Form state - removed is_active
   const [formData, setFormData] = useState({
     package_name: "",
     package_price: "",
     package_size: "",
-    is_active: true,
   });
   const [formSubmitting, setFormSubmitting] = useState(false);
 
   const scrollViewRef = useRef(null);
+
+  // Get safe packages array
+  const safePackages = useMemo(() => Array.isArray(packages) ? packages : [], [packages]);
 
   // Load packages on mount
   useFocusEffect(
@@ -101,16 +103,9 @@ const PackagesScreen = ({ navigation }) => {
   // Handle search with debounce
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      if (searchText !== "") {
+      if (user?.id) {
         setFilters({ search: searchText });
-        if (user?.id) {
-          fetchPackages(1, user.id, false);
-        }
-      } else if (searchText === "") {
-        setFilters({ search: "" });
-        if (user?.id) {
-          fetchPackages(1, user.id, false);
-        }
+        fetchPackages(1, user.id, false);
       }
     }, 500);
 
@@ -162,22 +157,31 @@ const PackagesScreen = ({ navigation }) => {
     const maxScroll = totalContentHeight - scrollViewHeight;
     const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
     
-    // Check if user has scrolled 50% of the screen height
-    const triggerThreshold = 50;
-    const shouldLoadMore = scrollPercentage >= triggerThreshold;
+    // Check distance from bottom
+    const distanceFromBottom = totalContentHeight - currentScrollPosition - scrollViewHeight;
+    const isNearBottom = distanceFromBottom < 300;
     
-    if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
-      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
+    // Check if we have more data
+    const hasMoreData = safePackages.length < totalPackages && hasMore;
+    
+    // Trigger when scrolled 50% or near bottom
+    if ((scrollPercentage >= 50 || isNearBottom) && 
+        !hasTriggeredLoadMore && 
+        !isLoadingMore && 
+        !loadingMore && 
+        hasMoreData && 
+        !loading) {
+      console.log(`🎯 Triggering load more - scroll: ${Math.floor(scrollPercentage)}%, ${safePackages.length}/${totalPackages}`);
       setHasTriggeredLoadMore(true);
       handleLoadMore();
     }
-  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
+  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, loading, safePackages.length, totalPackages, hasMore, handleLoadMore]);
 
   // Navigate to create package
   const handleCreatePackage = () => {
     setIsEditMode(false);
     setSelectedPackage(null);
-    setFormData({ package_name: "", package_price: "", package_size: "", is_active: true });
+    setFormData({ package_name: "", package_price: "", package_size: "" });
     setModalVisible(true);
   };
 
@@ -189,7 +193,6 @@ const PackagesScreen = ({ navigation }) => {
       package_name: pkg.package_name || "",
       package_price: pkg.package_price?.toString() || "",
       package_size: pkg.package_size || "",
-      is_active: pkg.is_active === 1 || pkg.is_active === true,
     });
     setModalVisible(true);
   };
@@ -209,6 +212,9 @@ const PackagesScreen = ({ navigation }) => {
       if (result.success) {
         setSuccessMessage("Package deleted successfully");
         setSuccessModalVisible(true);
+        if (user?.id) {
+          await fetchPackages(1, user.id, false);
+        }
       } else {
         setErrorMessage(result.error || "Failed to delete package");
         setErrorModalVisible(true);
@@ -242,6 +248,7 @@ const PackagesScreen = ({ navigation }) => {
       const dataWithUser = {
         ...formData,
         package_price: parseFloat(formData.package_price),
+        is_active: 1, // Default active for backend
       };
 
       if (isEditMode && selectedPackage) {
@@ -259,6 +266,9 @@ const PackagesScreen = ({ navigation }) => {
       }
 
       setModalVisible(false);
+      if (user?.id) {
+        await fetchPackages(1, user.id, false);
+      }
     } catch (err) {
       setErrorMessage(err.message || "An unexpected error occurred");
       setErrorModalVisible(true);
@@ -281,6 +291,32 @@ const PackagesScreen = ({ navigation }) => {
     if (!price) return "₹0.00";
     return `₹${parseFloat(price).toFixed(2)}`;
   };
+
+  // Calculate stats
+  const safeList = safePackages;
+  const totalCount = totalPackages || safeList.length;
+
+  // Calculate unique creators
+  const uniqueCreators = useMemo(() => {
+    const creators = new Set();
+    safeList.forEach(p => {
+      if (p.created_by) creators.add(p.created_by);
+      else if (p.user_id) creators.add(`User ${p.user_id}`);
+    });
+    return creators.size;
+  }, [safeList]);
+
+  // Get latest update date
+  const latestUpdate = useMemo(() => {
+    if (safeList.length === 0) return "N/A";
+    const dates = safeList.map(p => p.updated_at ? new Date(p.updated_at).getTime() : 0);
+    return new Date(Math.max(...dates)).toLocaleDateString();
+  }, [safeList]);
+
+  // Calculate total price
+  const totalPrice = useMemo(() => {
+    return safeList.reduce((sum, p) => sum + parseFloat(p.package_price || 0), 0);
+  }, [safeList]);
 
   // Loading state
   if (initialLoading) {
@@ -393,6 +429,61 @@ const PackagesScreen = ({ navigation }) => {
         </View>
       </View>
 
+      {/* Stats Cards */}
+      <View className="flex-row flex-wrap px-4 py-3">
+        <View className="w-[48%] mr-[2%] mb-3">
+          <StatsCard
+            title="Total Packages"
+            value={totalCount}
+            icon="package-variant"
+            color="#3b82f6"
+            style={{ width: "100%" }}
+          />
+        </View>
+
+        <View className="w-[48%] ml-[2%] mb-3">
+          <StatsCard
+            title="Total Value"
+            value={`₹${totalPrice.toFixed(0)}`}
+            icon="currency-inr"
+            color="#10b981"
+            style={{ width: "100%" }}
+          />
+        </View>
+
+        <View className="w-[48%] mr-[2%] mb-3">
+          <StatsCard
+            title="Creators"
+            value={uniqueCreators}
+            icon="account-group"
+            color="#8b5cf6"
+            style={{ width: "100%" }}
+          />
+        </View>
+
+        <View className="w-[48%] ml-[2%] mb-3">
+          <StatsCard
+            title="Latest Update"
+            value={latestUpdate}
+            icon="calendar"
+            color="#f59e0b"
+            style={{ width: "100%" }}
+          />
+        </View>
+      </View>
+
+      {/* Filter Chips */}
+      {searchText.length > 0 && (
+        <View className="px-4 mb-3 flex-row flex-wrap">
+          <View className={`flex-row items-center mr-2 mb-2 px-3 py-1.5 rounded-full ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+            <Text className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>Search: {searchText}</Text>
+            <TouchableOpacity onPress={() => setSearchText("")} className="ml-2">
+              <Icon name="close" size={16} color={isDarkMode ? "#9CA3AF" : "#6b7280"} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Page Indicator */}
       <View
         className={`px-4 py-2 flex-row justify-between items-center border-b ${
@@ -403,8 +494,8 @@ const PackagesScreen = ({ navigation }) => {
           className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
         >
           {totalPackages > 0
-            ? `Showing ${packages.length} of ${totalPackages} packages`
-            : `${packages.length} packages`}
+            ? `Showing ${safePackages.length} of ${totalPackages} packages`
+            : `${safePackages.length} packages`}
         </Text>
         <Text
           className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
@@ -430,7 +521,7 @@ const PackagesScreen = ({ navigation }) => {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        {loading && packages.length === 0 ? (
+        {loading && safePackages.length === 0 ? (
           <View className="py-12 items-center">
             <ActivityIndicator size="large" color="#3B82F6" />
             <Text
@@ -439,7 +530,7 @@ const PackagesScreen = ({ navigation }) => {
               Loading packages...
             </Text>
           </View>
-        ) : packages.length === 0 ? (
+        ) : safePackages.length === 0 ? (
           <View className="py-20 items-center">
             <Icon
               name="package-variant"
@@ -464,7 +555,7 @@ const PackagesScreen = ({ navigation }) => {
             </Text>
           </View>
         ) : (
-          packages.map((pkg) => (
+          safePackages.map((pkg) => (
             <TouchableOpacity
               key={pkg.id}
               onPress={() => handleEditPackage(pkg)}
@@ -484,13 +575,7 @@ const PackagesScreen = ({ navigation }) => {
                     >
                       {pkg.package_name || "Unnamed Package"}
                     </Text>
-                    <Text
-                      className={`text-xs mt-1 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-500"
-                      }`}
-                    >
-                      {pkg.package_size || "N/A"}
-                    </Text>
+                   
                   </View>
                   <View className="flex-row items-center gap-2">
                     <TouchableOpacity
@@ -527,35 +612,28 @@ const PackagesScreen = ({ navigation }) => {
                 </View>
 
                 {/* Price */}
-                <View className="mt-3">
+                <View className="mt-3 flex-row items-center justify-between">
                   <Text
                     className={`text-xl font-bold text-green-600 dark:text-green-400`}
                   >
                     {formatPrice(pkg.package_price)}
                   </Text>
+                  {pkg.package_size && (
+                    <Text
+                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                    >
+                      Size: {pkg.package_size}
+                    </Text>
+                  )}
                 </View>
 
-                {/* Status Badge */}
-                <View className="mt-3">
-                  <View
-                    className={`px-3 py-1 rounded-full self-start ${
-                      pkg.is_active === 1 || pkg.is_active === true
-                        ? "bg-green-100 dark:bg-green-900/20"
-                        : "bg-gray-100 dark:bg-gray-700"
-                    }`}
+                {/* Created info */}
+                <View className="mt-2">
+                  <Text
+                    className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
                   >
-                    <Text
-                      className={`text-xs font-medium ${
-                        pkg.is_active === 1 || pkg.is_active === true
-                          ? "text-green-700 dark:text-green-400"
-                          : "text-gray-600 dark:text-gray-400"
-                      }`}
-                    >
-                      {pkg.is_active === 1 || pkg.is_active === true
-                        ? "Active"
-                        : "Inactive"}
-                    </Text>
-                  </View>
+                    Created: {pkg.created_at ? new Date(pkg.created_at).toLocaleDateString() : "N/A"}
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -575,7 +653,7 @@ const PackagesScreen = ({ navigation }) => {
         )}
 
         {/* No More Packages */}
-        {!hasMore && packages.length > 0 && packages.length === totalPackages && (
+        {!hasMore && safePackages.length > 0 && safePackages.length === totalPackages && (
           <View className="py-4 items-center">
             <Text
               className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
@@ -679,33 +757,6 @@ const PackagesScreen = ({ navigation }) => {
                 onChangeText={(text) => setFormData({ ...formData, package_size: text })}
               />
             </View>
-
-            {/* Active Toggle */}
-            <TouchableOpacity
-              onPress={() => setFormData({ ...formData, is_active: !formData.is_active })}
-              className={`flex-row items-center justify-between p-4 rounded-xl mb-6 border ${
-                isDarkMode ? "bg-gray-700 border-gray-600" : "bg-gray-50 border-gray-200"
-              }`}
-            >
-              <Text
-                className={`text-sm font-medium ${
-                  isDarkMode ? "text-white" : "text-gray-800"
-                }`}
-              >
-                Active Status
-              </Text>
-              <View
-                className={`w-12 h-7 rounded-full p-1 ${
-                  formData.is_active ? "bg-blue-500" : "bg-gray-300"
-                }`}
-              >
-                <View
-                  className={`w-5 h-5 rounded-full bg-white shadow ${
-                    formData.is_active ? "ml-auto" : ""
-                  }`}
-                />
-              </View>
-            </TouchableOpacity>
 
             {/* Buttons */}
             <View className="flex-row gap-3">

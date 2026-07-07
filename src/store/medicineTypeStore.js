@@ -1,61 +1,55 @@
+// store/medicineTypeStore.js
 import { create } from 'zustand';
 import { medicineTypeAPI } from '../api/medicineType';
+import { getPaginatedData, getEntityData } from '../api/client';
 
 const useMedicineTypeStore = create((set, get) => ({
   medicineTypes: [],
   totalMedicineTypes: 0,
+  currentPage: 1,
+  lastPage: 1,
+  perPage: 15,
   loading: false,
+  loadingMore: false,
+  hasMore: true,
   error: null,
+  pagination: null,
   filters: {
     search: '',
     sortBy: 'name',
     sortOrder: 'asc',
   },
 
-  // Fetch medicine types for a user
-  fetchMedicineTypes: async (userId) => {
-    console.log('🔄 fetchMedicineTypes called with userId:', userId);
-    set({ loading: true, error: null });
+  // ✅ FIXED: Fetch medicine types for a user
+  fetchMedicineTypes: async (userId, page = 1, search = "", append = false) => {
+    console.log('🔄 fetchMedicineTypes called:', { userId, page, search, append });
+    
+    if (append && page > 1) {
+      set({ loadingMore: true, error: null });
+    } else {
+      set({ loading: true, error: null });
+    }
 
     try {
-      const response = await medicineTypeAPI.getAll(userId);
+      const response = await medicineTypeAPI.getAll(userId, page, search);
       console.log('📦 Medicine Types API Response:', response);
       
-      // Extract medicine types array from response
-      let medicineTypesArray = [];
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('📊 Extracted paginated data:', paginatedData);
+
+      let medicineTypesArray = paginatedData.data || [];
       
-      // Handle different response structures
-      if (response?.data?.data?.data) {
-        medicineTypesArray = response.data.data.data;
-      } else if (response?.data?.data) {
-        if (Array.isArray(response.data.data)) {
-          medicineTypesArray = response.data.data;
-        } else if (typeof response.data.data === 'object' && response.data.data !== null) {
-          medicineTypesArray = Object.values(response.data.data);
-        }
-      } else if (Array.isArray(response?.data)) {
-        medicineTypesArray = response.data;
-      } else if (response?.data && typeof response.data === 'object') {
-        medicineTypesArray = Object.values(response.data);
-      } else if (Array.isArray(response)) {
-        medicineTypesArray = response;
+      // Ensure it's an array
+      if (!Array.isArray(medicineTypesArray)) {
+        medicineTypesArray = [];
       }
       
-      console.log('📊 Processed medicine types:', medicineTypesArray.length);
-      
-      // Apply search filter
-      const { search } = get().filters;
-      let filteredTypes = [...medicineTypesArray];
-      if (search) {
-        const searchLower = search.toLowerCase();
-        filteredTypes = filteredTypes.filter(type => 
-          type.name?.toLowerCase().includes(searchLower)
-        );
-      }
-      
-      // Apply sorting
+      console.log(`📊 Extracted ${medicineTypesArray.length} medicine types`);
+
+      // ✅ Apply client-side sorting
       const { sortBy, sortOrder } = get().filters;
-      filteredTypes.sort((a, b) => {
+      const sortedTypes = [...medicineTypesArray].sort((a, b) => {
         let valA, valB;
         if (sortBy === 'name') {
           valA = (a.name || '').toLowerCase();
@@ -75,68 +69,103 @@ const useMedicineTypeStore = create((set, get) => ({
         }
       });
       
+      // ✅ Build pagination info
+      const pageData = {
+        current_page: paginatedData.current_page || page,
+        last_page: paginatedData.last_page || 1,
+        per_page: paginatedData.per_page || 15,
+        total: paginatedData.total || sortedTypes.length,
+        next_page_url: paginatedData.next_page_url || null,
+        prev_page_url: paginatedData.prev_page_url || null,
+        first_page_url: paginatedData.first_page_url || null,
+        last_page_url: paginatedData.last_page_url || null,
+        path: paginatedData.path || null,
+        from: paginatedData.from || null,
+        to: paginatedData.to || null,
+      };
+
+      // If append is true and page > 1, append to existing types
+      const { medicineTypes: existingTypes } = get();
+      const finalTypes = append && page > 1 
+        ? [...existingTypes, ...sortedTypes]
+        : sortedTypes;
+      
+      const hasMoreData = pageData.current_page < pageData.last_page;
+
       set({
-        medicineTypes: filteredTypes,
-        totalMedicineTypes: filteredTypes.length,
+        medicineTypes: finalTypes,
+        totalMedicineTypes: pageData.total,
+        currentPage: pageData.current_page,
+        lastPage: pageData.last_page,
+        perPage: pageData.per_page || 15,
+        pagination: pageData,
+        hasMore: hasMoreData,
         loading: false,
+        loadingMore: false,
+        error: null,
       });
       
-      return response;
+      console.log(`✅ Medicine types loaded: ${finalTypes.length}, page ${pageData.current_page}/${pageData.last_page}, hasMore: ${hasMoreData}`);
+      return { success: true, data: finalTypes, pagination: pageData };
+      
     } catch (error) {
       console.error('❌ Failed to fetch medicine types:', error);
       set({
-        medicineTypes: [],
+        medicineTypes: append ? get().medicineTypes : [],
         totalMedicineTypes: 0,
         loading: false,
+        loadingMore: false,
         error: error.message || 'Failed to fetch medicine types',
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Force refresh medicine types
+  // ✅ Load more medicine types (for infinite scroll)
+  loadMoreMedicineTypes: async (userId, search = "") => {
+    const { currentPage, lastPage, hasMore, loading, loadingMore } = get();
+    
+    if (loading || loadingMore || !hasMore || currentPage >= lastPage) {
+      console.log('⏭️ Skipping load more - conditions not met');
+      return;
+    }
+
+    console.log(`📜 loadMoreMedicineTypes - currentPage: ${currentPage}, lastPage: ${lastPage}`);
+    set({ loadingMore: true });
+
+    try {
+      const nextPage = currentPage + 1;
+      await get().fetchMedicineTypes(userId, nextPage, search, true);
+    } catch (error) {
+      console.error('❌ Failed to load more medicine types:', error);
+      set({ loadingMore: false });
+    }
+  },
+
+  // ✅ Force refresh medicine types
   forceRefreshMedicineTypes: async (userId) => {
     console.log('🔄 forceRefreshMedicineTypes called for user:', userId);
     set({ loading: true, error: null });
     
     try {
-      const response = await medicineTypeAPI.getAll(userId);
+      const response = await medicineTypeAPI.getAll(userId, 1, get().filters.search);
       console.log('📦 Force refresh API Response:', response);
       
-      // Extract medicine types array from response
-      let medicineTypesArray = [];
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('📊 Force refresh paginated:', paginatedData);
+
+      let medicineTypesArray = paginatedData.data || [];
       
-      if (response?.data?.data?.data) {
-        medicineTypesArray = response.data.data.data;
-      } else if (response?.data?.data) {
-        if (Array.isArray(response.data.data)) {
-          medicineTypesArray = response.data.data;
-        } else if (typeof response.data.data === 'object' && response.data.data !== null) {
-          medicineTypesArray = Object.values(response.data.data);
-        }
-      } else if (Array.isArray(response?.data)) {
-        medicineTypesArray = response.data;
-      } else if (response?.data && typeof response.data === 'object') {
-        medicineTypesArray = Object.values(response.data);
-      } else if (Array.isArray(response)) {
-        medicineTypesArray = response;
+      if (!Array.isArray(medicineTypesArray)) {
+        medicineTypesArray = [];
       }
       
-      console.log('📊 Force refresh medicine types:', medicineTypesArray.length);
+      console.log(`📊 Force refresh: ${medicineTypesArray.length} medicine types`);
       
-      // Apply search filter
-      const { search } = get().filters;
-      let filteredTypes = [...medicineTypesArray];
-      if (search) {
-        const searchLower = search.toLowerCase();
-        filteredTypes = filteredTypes.filter(type => 
-          type.name?.toLowerCase().includes(searchLower)
-        );
-      }
-      
-      // Apply sorting
+      // ✅ Apply sorting
       const { sortBy, sortOrder } = get().filters;
-      filteredTypes.sort((a, b) => {
+      const sortedTypes = [...medicineTypesArray].sort((a, b) => {
         let valA, valB;
         if (sortBy === 'name') {
           valA = (a.name || '').toLowerCase();
@@ -156,54 +185,73 @@ const useMedicineTypeStore = create((set, get) => ({
         }
       });
       
+      const pageData = {
+        current_page: paginatedData.current_page || 1,
+        last_page: paginatedData.last_page || 1,
+        per_page: paginatedData.per_page || 15,
+        total: paginatedData.total || sortedTypes.length,
+        next_page_url: paginatedData.next_page_url || null,
+        prev_page_url: paginatedData.prev_page_url || null,
+        first_page_url: paginatedData.first_page_url || null,
+        last_page_url: paginatedData.last_page_url || null,
+        path: paginatedData.path || null,
+        from: paginatedData.from || null,
+        to: paginatedData.to || null,
+      };
+      
+      const hasMoreData = pageData.current_page < pageData.last_page;
+
       set({
-        medicineTypes: filteredTypes,
-        totalMedicineTypes: filteredTypes.length,
+        medicineTypes: sortedTypes,
+        totalMedicineTypes: pageData.total,
+        currentPage: pageData.current_page,
+        lastPage: pageData.last_page,
+        perPage: pageData.per_page || 15,
+        pagination: pageData,
+        hasMore: hasMoreData,
         loading: false,
+        error: null,
       });
       
-      return response;
+      return { success: true, data: sortedTypes, pagination: pageData };
+      
     } catch (error) {
       console.error('❌ Force refresh failed:', error);
       set({
         error: error.message || 'Failed to fetch medicine types',
         loading: false,
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Get single medicine type
+  // ✅ FIXED: Get single medicine type
   getMedicineType: async (id) => {
     console.log('🔍 getMedicineType called with:', id);
     set({ loading: true, error: null });
     
     try {
       const response = await medicineTypeAPI.getById(id);
-      console.log('✅ Medicine type fetched successfully:', response);
+      console.log('📦 getMedicineType response:', response);
       
-      let medicineType = null;
-      if (response?.data?.data) {
-        medicineType = response.data.data;
-      } else if (response?.data) {
-        medicineType = response.data;
-      } else {
-        medicineType = response;
-      }
+      // ✅ Use helper to extract entity data
+      const medicineType = getEntityData(response);
+      console.log('📊 Extracted medicine type:', medicineType);
       
-      set({ loading: false });
-      return medicineType;
+      set({ loading: false, error: null });
+      return { success: true, data: medicineType };
+      
     } catch (error) {
       console.error('❌ Failed to fetch medicine type:', error);
       set({
         error: error.message || 'Failed to fetch medicine type',
         loading: false,
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Create medicine type
+  // ✅ FIXED: Create medicine type
   createMedicineType: async (medicineTypeData) => {
     console.log('📝 createMedicineType called with:', medicineTypeData);
     set({ loading: true, error: null });
@@ -212,73 +260,75 @@ const useMedicineTypeStore = create((set, get) => ({
       const response = await medicineTypeAPI.create(medicineTypeData);
       console.log('✅ Medicine type created successfully:', response);
       
-      let newMedicineType = null;
-      if (response?.data?.data) {
-        newMedicineType = response.data.data;
-      } else if (response?.data) {
-        newMedicineType = response.data;
+      // ✅ Use helper to extract entity data
+      const newMedicineType = getEntityData(response);
+      console.log('📊 Extracted new medicine type:', newMedicineType);
+      
+      // Optimistic update
+      if (newMedicineType && newMedicineType.id) {
+        const { medicineTypes } = get();
+        set({
+          medicineTypes: [newMedicineType, ...medicineTypes],
+          totalMedicineTypes: medicineTypes.length + 1,
+          loading: false,
+          error: null,
+        });
       } else {
-        newMedicineType = response;
+        set({ loading: false, error: null });
       }
       
-      // Update local state immediately for better UX
-      const { medicineTypes } = get();
-      set({
-        medicineTypes: [newMedicineType, ...medicineTypes],
-        totalMedicineTypes: medicineTypes.length + 1,
-        loading: false,
-      });
+      return { success: true, data: newMedicineType };
       
-      return newMedicineType;
     } catch (error) {
       console.error('❌ Failed to create medicine type:', error);
       set({
         error: error.message || 'Failed to create medicine type',
         loading: false,
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Update medicine type
+  // ✅ FIXED: Update medicine type
   updateMedicineType: async (id, medicineTypeData) => {
-    console.log('✏️ updateMedicineType called with:', id, medicineTypeData);
+    console.log('✏️ updateMedicineType called:', { id, medicineTypeData });
     set({ loading: true, error: null });
     
     try {
       const response = await medicineTypeAPI.update(id, medicineTypeData);
       console.log('✅ Medicine type updated successfully:', response);
       
-      let updatedMedicineType = null;
-      if (response?.data?.data) {
-        updatedMedicineType = response.data.data;
-      } else if (response?.data) {
-        updatedMedicineType = response.data;
+      // ✅ Use helper to extract entity data
+      const updatedMedicineType = getEntityData(response);
+      console.log('📊 Extracted updated medicine type:', updatedMedicineType);
+      
+      // Optimistic update
+      if (updatedMedicineType && updatedMedicineType.id) {
+        const { medicineTypes } = get();
+        set({
+          medicineTypes: medicineTypes.map(type => 
+            type.id === id ? updatedMedicineType : type
+          ),
+          loading: false,
+          error: null,
+        });
       } else {
-        updatedMedicineType = response;
+        set({ loading: false, error: null });
       }
       
-      // Update local state immediately for better UX
-      const { medicineTypes } = get();
-      set({
-        medicineTypes: medicineTypes.map(type => 
-          type.id === id ? updatedMedicineType : type
-        ),
-        loading: false,
-      });
+      return { success: true, data: updatedMedicineType };
       
-      return updatedMedicineType;
     } catch (error) {
       console.error('❌ Failed to update medicine type:', error);
       set({
         error: error.message || 'Failed to update medicine type',
         loading: false,
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Delete medicine type
+  // ✅ FIXED: Delete medicine type
   deleteMedicineType: async (id) => {
     console.log('🗑️ deleteMedicineType called with:', id);
     set({ loading: true, error: null });
@@ -287,59 +337,48 @@ const useMedicineTypeStore = create((set, get) => ({
       await medicineTypeAPI.delete(id);
       console.log('✅ Medicine type deleted successfully');
       
-      // Update local state immediately for better UX
+      // Optimistic update
       const { medicineTypes } = get();
       set({
         medicineTypes: medicineTypes.filter(type => type.id !== id),
-        totalMedicineTypes: medicineTypes.length - 1,
+        totalMedicineTypes: Math.max(0, medicineTypes.length - 1),
         loading: false,
+        error: null,
       });
       
       return { success: true };
+      
     } catch (error) {
       console.error('❌ Failed to delete medicine type:', error);
       set({
         error: error.message || 'Failed to delete medicine type',
         loading: false,
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Search medicine types
+  // ✅ FIXED: Search medicine types
   searchMedicineTypes: async (userId, query) => {
     console.log('🔍 searchMedicineTypes called with:', query);
     set({ loading: true, error: null });
     
     try {
-      const response = await medicineTypeAPI.getAll(userId);
+      const response = await medicineTypeAPI.getAll(userId, 1, query);
       
-      let medicineTypesArray = [];
-      if (response?.data?.data?.data) {
-        medicineTypesArray = response.data.data.data;
-      } else if (response?.data?.data) {
-        if (Array.isArray(response.data.data)) {
-          medicineTypesArray = response.data.data;
-        } else if (typeof response.data.data === 'object' && response.data.data !== null) {
-          medicineTypesArray = Object.values(response.data.data);
-        }
-      } else if (Array.isArray(response?.data)) {
-        medicineTypesArray = response.data;
-      } else if (response?.data && typeof response.data === 'object') {
-        medicineTypesArray = Object.values(response.data);
-      } else if (Array.isArray(response)) {
-        medicineTypesArray = response;
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log('🔍 Search results paginated:', paginatedData);
+
+      let medicineTypesArray = paginatedData.data || [];
+      
+      if (!Array.isArray(medicineTypesArray)) {
+        medicineTypesArray = [];
       }
       
-      // Filter by search query
-      const searchLower = query.toLowerCase();
-      const filteredTypes = medicineTypesArray.filter(type => 
-        type.name?.toLowerCase().includes(searchLower)
-      );
-      
-      // Apply sorting
+      // ✅ Apply sorting
       const { sortBy, sortOrder } = get().filters;
-      filteredTypes.sort((a, b) => {
+      const sortedTypes = [...medicineTypesArray].sort((a, b) => {
         let valA, valB;
         if (sortBy === 'name') {
           valA = (a.name || '').toLowerCase();
@@ -356,37 +395,104 @@ const useMedicineTypeStore = create((set, get) => ({
         }
       });
       
+      const pageData = {
+        current_page: paginatedData.current_page || 1,
+        last_page: paginatedData.last_page || 1,
+        per_page: paginatedData.per_page || 15,
+        total: paginatedData.total || sortedTypes.length,
+        next_page_url: paginatedData.next_page_url || null,
+        prev_page_url: paginatedData.prev_page_url || null,
+        first_page_url: paginatedData.first_page_url || null,
+        last_page_url: paginatedData.last_page_url || null,
+        path: paginatedData.path || null,
+        from: paginatedData.from || null,
+        to: paginatedData.to || null,
+      };
+      
+      const hasMoreData = pageData.current_page < pageData.last_page;
+
       set({
-        medicineTypes: filteredTypes,
-        totalMedicineTypes: filteredTypes.length,
+        medicineTypes: sortedTypes,
+        totalMedicineTypes: pageData.total,
+        currentPage: pageData.current_page,
+        lastPage: pageData.last_page,
+        perPage: pageData.per_page || 15,
+        pagination: pageData,
+        hasMore: hasMoreData,
         loading: false,
+        error: null,
       });
       
-      return filteredTypes;
+      return { success: true, data: sortedTypes, pagination: pageData };
+      
     } catch (error) {
       console.error('❌ Failed to search medicine types:', error);
       set({
         error: error.message || 'Failed to search medicine types',
         loading: false,
       });
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Set filters
+  // ✅ Set filters with auto-fetch
   setFilters: (newFilters) => {
     const currentFilters = get().filters;
     const updatedFilters = { ...currentFilters, ...newFilters };
-    set({ filters: updatedFilters });
+    set({ 
+      filters: updatedFilters,
+      currentPage: 1,
+      hasMore: true,
+    });
     
-    // Refetch with new filters
+    // Auto-fetch with new filters (debounced)
     setTimeout(() => {
       const { useAuthStore } = require('../store/authStore');
       const user = useAuthStore.getState().user;
       if (user?.id) {
-        get().fetchMedicineTypes(user.id);
+        get().fetchMedicineTypes(user.id, 1, updatedFilters.search, false);
       }
-    }, 100);
+    }, 300);
+  },
+
+  // ✅ Set page with auto-fetch
+  setPage: (page) => {
+    const { lastPage } = get();
+    if (page >= 1 && page <= lastPage) {
+      set({ currentPage: page });
+      const { useAuthStore } = require('../store/authStore');
+      const user = useAuthStore.getState().user;
+      const { filters } = get();
+      if (user?.id) {
+        get().fetchMedicineTypes(user.id, page, filters.search, false);
+      }
+    }
+  },
+
+  // ✅ Reset to page 1
+  resetToPageOne: async (userId, search = "") => {
+    await get().fetchMedicineTypes(userId, 1, search, false);
+  },
+
+  // ✅ Reset state
+  reset: () => {
+    set({
+      medicineTypes: [],
+      totalMedicineTypes: 0,
+      currentPage: 1,
+      lastPage: 1,
+      perPage: 15,
+      loading: false,
+      loadingMore: false,
+      hasMore: true,
+      error: null,
+      pagination: null,
+      filters: {
+        search: '',
+        sortBy: 'name',
+        sortOrder: 'asc',
+      },
+    });
   },
 
   // Clear error

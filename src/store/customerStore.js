@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { customersAPI } from "../api/customers";
 import { useAuthStore } from "./authStore";
+import { getPaginatedData, getEntityData } from "../api/client";
 
 const useCustomerStore = create((set, get) => ({
   customers: [],
@@ -11,12 +12,7 @@ const useCustomerStore = create((set, get) => ({
   perPage: 8,
   loading: false,
   error: null,
-  pagination: {
-    current_page: 1,
-    last_page: 1,
-    per_page: 8,
-    total: 0,
-  },
+  pagination: null,
   filters: {
     search: "",
     status: "",
@@ -24,7 +20,7 @@ const useCustomerStore = create((set, get) => ({
     dueStatus: "all",
   },
   
-  // New filter states (like web version)
+  // Filter states
   activeFilterType: "all", // 'all', 'due', 'city'
   filteredCustomers: [],
   filteredTotal: 0,
@@ -32,14 +28,15 @@ const useCustomerStore = create((set, get) => ({
   citiesLoading: false,
   selectedCity: "",
 
-  // Fetch due customers (like web version)
+  // ✅ FIXED: Fetch due customers
   fetchDueCustomers: async (search = "", page = 1, append = false) => {
-    console.log("💰 fetchDueCustomers called with search:", search, "page:", page, "append:", append);
+    console.log("💰 fetchDueCustomers called:", { search, page, append });
     set({ loading: true, error: null, activeFilterType: "due" });
 
     try {
       const { user } = useAuthStore.getState();
       const { customers: existingCustomers } = get();
+      
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
@@ -47,39 +44,12 @@ const useCustomerStore = create((set, get) => ({
       const response = await customersAPI.getDueCustomers(user.id, search, page);
       console.log("📦 Due Customers API Response:", response);
 
-      let customersArray = [];
-      let total = 0;
-      let paginationData = {};
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("💰 Due customers paginated:", paginatedData);
 
-      // Handle nested response structure (same as web version)
-      if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
-        customersArray = response.data.data.data;
-        total = response.data.data.total || customersArray.length;
-        paginationData = response.data.data;
-      } else if (response?.data?.data && Array.isArray(response.data.data)) {
-        customersArray = response.data.data;
-        total = response.data.data.total || customersArray.length;
-        paginationData = response.data;
-      } else if (Array.isArray(response?.data)) {
-        customersArray = response.data;
-        total = customersArray.length;
-      } else if (response?.data && typeof response.data === "object") {
-        for (const key in response.data) {
-          if (Array.isArray(response.data[key])) {
-            customersArray = response.data[key];
-            total = customersArray.length;
-            break;
-          }
-        }
-      }
-
-      if (!Array.isArray(customersArray)) {
-        customersArray = [];
-        total = 0;
-      }
-
-      console.log("💰 Due customers extracted:", customersArray.length);
-
+      const customersArray = paginatedData.data || [];
+      
       // If append is true and page > 1, append to existing customers
       const finalCustomers = append && page > 1 
         ? [...existingCustomers, ...customersArray]
@@ -88,14 +58,16 @@ const useCustomerStore = create((set, get) => ({
       set({
         customers: finalCustomers,
         filteredCustomers: finalCustomers,
-        filteredTotal: total,
-        totalCustomers: total,
-        currentPage: paginationData.current_page || page,
-        lastPage: paginationData.last_page || 1,
+        filteredTotal: paginatedData.total || customersArray.length,
+        totalCustomers: paginatedData.total || customersArray.length,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        pagination: paginatedData,
         loading: false,
+        error: null,
       });
       
-      return { success: true, data: finalCustomers, total };
+      return { success: true, data: finalCustomers, pagination: paginatedData };
     } catch (error) {
       console.error("❌ Failed to fetch due customers:", error);
       set({
@@ -110,14 +82,15 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Fetch customers with city (like web version)
+  // ✅ FIXED: Fetch customers with city
   fetchCityCustomers: async (search = "", page = 1, append = false) => {
-    console.log("🏙️ fetchCityCustomers called with search:", search, "page:", page, "append:", append);
+    console.log("🏙️ fetchCityCustomers called:", { search, page, append });
     set({ loading: true, error: null, activeFilterType: "city" });
 
     try {
       const { user } = useAuthStore.getState();
       const { customers: existingCustomers } = get();
+      
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
@@ -125,38 +98,11 @@ const useCustomerStore = create((set, get) => ({
       const response = await customersAPI.getCustomersByCity(user.id, search, page);
       console.log("📦 City Customers API Response:", response);
 
-      let customersArray = [];
-      let total = 0;
-      let paginationData = {};
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("🏙️ City customers paginated:", paginatedData);
 
-      // Handle nested response structure (same as web version)
-      if (response?.data?.data?.data && Array.isArray(response.data.data.data)) {
-        customersArray = response.data.data.data;
-        total = response.data.data.total || customersArray.length;
-        paginationData = response.data.data;
-      } else if (response?.data?.data && Array.isArray(response.data.data)) {
-        customersArray = response.data.data;
-        total = response.data.data.total || customersArray.length;
-        paginationData = response.data;
-      } else if (Array.isArray(response?.data)) {
-        customersArray = response.data;
-        total = customersArray.length;
-      } else if (response?.data && typeof response.data === "object") {
-        for (const key in response.data) {
-          if (Array.isArray(response.data[key])) {
-            customersArray = response.data[key];
-            total = customersArray.length;
-            break;
-          }
-        }
-      }
-
-      if (!Array.isArray(customersArray)) {
-        customersArray = [];
-        total = 0;
-      }
-
-      console.log("🏙️ City customers extracted:", customersArray.length);
+      const customersArray = paginatedData.data || [];
 
       // If append is true and page > 1, append to existing customers
       const finalCustomers = append && page > 1 
@@ -166,14 +112,16 @@ const useCustomerStore = create((set, get) => ({
       set({
         customers: finalCustomers,
         filteredCustomers: finalCustomers,
-        filteredTotal: total,
-        totalCustomers: total,
-        currentPage: paginationData.current_page || page,
-        lastPage: paginationData.last_page || 1,
+        filteredTotal: paginatedData.total || customersArray.length,
+        totalCustomers: paginatedData.total || customersArray.length,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        pagination: paginatedData,
         loading: false,
+        error: null,
       });
       
-      return { success: true, data: finalCustomers, total };
+      return { success: true, data: finalCustomers, pagination: paginatedData };
     } catch (error) {
       console.error("❌ Failed to fetch city customers:", error);
       set({
@@ -188,7 +136,7 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Fetch unique cities (like web version)
+  // ✅ FIXED: Fetch available cities
   fetchAvailableCities: async () => {
     console.log("🏙️ fetchAvailableCities called");
     set({ citiesLoading: true });
@@ -202,19 +150,9 @@ const useCustomerStore = create((set, get) => ({
       const response = await customersAPI.getUniqueCities(user.id);
       console.log("📦 Cities API Response:", response);
 
-      let citiesArray = [];
-      if (response?.data?.data && Array.isArray(response.data.data)) {
-        citiesArray = response.data.data;
-      } else if (Array.isArray(response?.data)) {
-        citiesArray = response.data;
-      } else if (response?.data && typeof response.data === "object") {
-        for (const key in response.data) {
-          if (Array.isArray(response.data[key])) {
-            citiesArray = response.data[key];
-            break;
-          }
-        }
-      }
+      // ✅ Use helper to extract entity data (or just get the array)
+      const citiesData = getEntityData(response);
+      const citiesArray = Array.isArray(citiesData) ? citiesData : [];
 
       set({ availableCities: citiesArray, citiesLoading: false });
       return citiesArray;
@@ -225,14 +163,14 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Reset to all customers (like web version)
+  // ✅ Reset to all customers
   resetToAllCustomers: async (page = 1, search = "") => {
     console.log("🔄 resetToAllCustomers called");
     set({ activeFilterType: "all", selectedCity: "" });
-    await get().fetchCustomers(page, true);
+    await get().fetchCustomers(page, false);
   },
 
-  // Clear all filters (like web version)
+  // ✅ Clear all filters
   clearAllFilters: () => {
     console.log("🧹 clearAllFilters called");
     set({
@@ -247,17 +185,17 @@ const useCustomerStore = create((set, get) => ({
     });
   },
 
-  // Fetch customers (updated to handle filter type)
-  fetchCustomers: async (page = 1, forceRefresh = false, append = false) => {
+  // ✅ FIXED: Fetch customers
+  fetchCustomers: async (page = 1, append = false) => {
     const { filters, perPage, activeFilterType, customers: existingCustomers } = get();
     const { user } = useAuthStore.getState();
 
     if (!user?.id) {
-      console.error("No user authenticated");
-      return;
+      console.error("❌ No user authenticated");
+      return { success: false, error: "User not authenticated" };
     }
 
-    console.log("🔄 fetchCustomers called with page:", page, "activeFilterType:", activeFilterType, "append:", append);
+    console.log("🔄 fetchCustomers called:", { page, activeFilterType, append });
     
     // If we're in a filtered mode, use the appropriate API
     if (activeFilterType === "due") {
@@ -278,76 +216,55 @@ const useCustomerStore = create((set, get) => ({
       );
       console.log("📦 Customers API Response:", response);
 
-      let customersArray = [];
-      let paginationData = {};
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("📊 Extracted paginated data:", paginatedData);
 
-      if (response?.data?.data?.data) {
-        customersArray = response.data.data.data;
-        paginationData = response.data.data;
-      } else if (response?.data?.data) {
-        customersArray = Array.isArray(response.data.data)
-          ? response.data.data
-          : [];
-        paginationData = response.data;
-      } else if (response?.data) {
-        customersArray = Array.isArray(response.data) ? response.data : [];
-      }
+      let customersArray = paginatedData.data || [];
 
-      if (!Array.isArray(customersArray)) {
-        customersArray = [];
-      }
-
-      // Apply local filters
-      let filteredCustomers = [...customersArray];
+      // ✅ Apply local filters
       const { status, city, dueStatus } = filters;
 
       if (status && status !== "all") {
-        filteredCustomers = filteredCustomers.filter(
-          (c) => c.status === status,
-        );
+        customersArray = customersArray.filter((c) => c.status === status);
       }
 
       if (city && city !== "all") {
-        filteredCustomers = filteredCustomers.filter((c) => c.city === city);
+        customersArray = customersArray.filter((c) => c.city === city);
       }
 
       if (dueStatus !== "all") {
         if (dueStatus === "hasDue") {
-          filteredCustomers = filteredCustomers.filter(
+          customersArray = customersArray.filter(
             (c) => parseFloat(c.due_amount || 0) > 0,
           );
         } else if (dueStatus === "noDue") {
-          filteredCustomers = filteredCustomers.filter(
+          customersArray = customersArray.filter(
             (c) => parseFloat(c.due_amount || 0) === 0,
           );
         }
       }
 
-      const pageData = {
-        current_page: paginationData.current_page || page,
-        last_page: paginationData.last_page || 1,
-        per_page: paginationData.per_page || perPage,
-        total: paginationData.total || filteredCustomers.length,
-      };
-
-      // If append is true and not force refresh and page > 1, append to existing customers
-      const finalCustomers = append && !forceRefresh && page > 1 
-        ? [...existingCustomers, ...filteredCustomers]
-        : filteredCustomers;
+      // If append is true and page > 1, append to existing customers
+      const finalCustomers = append && page > 1 
+        ? [...existingCustomers, ...customersArray]
+        : customersArray;
 
       set({
         customers: finalCustomers,
         filteredCustomers: finalCustomers,
-        filteredTotal: pageData.total,
-        totalCustomers: pageData.total,
-        currentPage: pageData.current_page,
-        lastPage: pageData.last_page,
-        pagination: pageData,
+        filteredTotal: paginatedData.total || customersArray.length,
+        totalCustomers: paginatedData.total || customersArray.length,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        pagination: paginatedData,
         loading: false,
+        error: null,
       });
 
-      console.log("✅ Customers loaded:", finalCustomers.length);
-      return response;
+      console.log(`✅ Customers loaded: ${finalCustomers.length}`);
+      return { success: true, data: finalCustomers, pagination: paginatedData };
+      
     } catch (error) {
       console.error("❌ Failed to fetch customers:", error);
       set({
@@ -358,22 +275,23 @@ const useCustomerStore = create((set, get) => ({
         loading: false,
         error: error.message || "Failed to fetch customers",
       });
+      return { success: false, error: error.message };
     }
   },
 
-  // Get current display customers (like web version)
+  // ✅ Get current display customers
   getDisplayCustomers: () => {
     const { customers, filteredCustomers, activeFilterType } = get();
     return activeFilterType === "all" ? customers : filteredCustomers;
   },
 
-  // Get display total (like web version)
+  // ✅ Get display total
   getDisplayTotal: () => {
     const { totalCustomers, filteredTotal, activeFilterType } = get();
     return activeFilterType === "all" ? totalCustomers : filteredTotal;
   },
 
-  // Get stats for display (like web version)
+  // ✅ Get display stats
   getDisplayStats: () => {
     const displayCustomers = get().getDisplayCustomers();
     return {
@@ -385,51 +303,43 @@ const useCustomerStore = create((set, get) => ({
     };
   },
 
-  // Get single customer - FIXED for correct API structure
+  // ✅ FIXED: Get single customer
   getCustomer: async (id) => {
     console.log("🔍 getCustomer called with:", id);
     try {
       const response = await customersAPI.getById(id);
-      console.log("📦 Raw API Response:", response?.data);
-      
-      let customerData = null;
+      console.log("📦 Raw API Response:", response);
+
+      // ✅ Use helper to extract entity data
+      const customerData = getEntityData(response);
+      console.log("📊 Extracted customer:", customerData);
+
+      // Extract payment history if available
       let paymentHistory = [];
-      
-      if (response?.data?.data) {
-        customerData = response.data.data;
-        console.log("✅ Extracted customer from response.data.data");
-      } else if (response?.data) {
-        customerData = response.data;
-        console.log("✅ Extracted customer from response.data");
-      } else {
-        customerData = response;
-        console.log("✅ Extracted customer from response");
+      if (customerData?.bill_payment_history && Array.isArray(customerData.bill_payment_history)) {
+        paymentHistory = customerData.bill_payment_history;
       }
-      
-      if (response?.data?.bill_payment_history && Array.isArray(response.data.bill_payment_history)) {
-        paymentHistory = response.data.bill_payment_history;
-        console.log("✅ Extracted payment history:", paymentHistory.length);
-      }
-      
-      if (customerData) {
-        customerData.bill_payment_history = paymentHistory;
-      }
-      
+
+      const finalData = {
+        ...customerData,
+        bill_payment_history: paymentHistory,
+      };
+
       console.log("📊 Final Customer Data:", {
-        id: customerData?.id,
-        name: customerData?.name,
-        due_amount: customerData?.due_amount,
-        paymentHistoryCount: customerData?.bill_payment_history?.length || 0
+        id: finalData?.id,
+        name: finalData?.name,
+        due_amount: finalData?.due_amount,
+        paymentHistoryCount: paymentHistory.length,
       });
-      
-      return customerData;
+
+      return { success: true, data: finalData };
     } catch (error) {
       console.error("❌ Failed to fetch customer:", error);
-      throw error;
+      return { success: false, error: error.message };
     }
   },
 
-  // Create customer
+  // ✅ FIXED: Create customer
   createCustomer: async (customerData) => {
     console.log("📝 createCustomer called with:", customerData);
     set({ loading: true, error: null });
@@ -448,17 +358,22 @@ const useCustomerStore = create((set, get) => ({
       };
 
       const response = await customersAPI.create(payload);
+      console.log("✅ Customer created:", response);
 
-      let newCustomer = null;
-      if (response?.data?.data) {
-        newCustomer = response.data.data;
-      } else if (response?.data) {
-        newCustomer = response.data;
-      } else {
-        newCustomer = response;
+      // ✅ Use helper to extract entity data
+      const newCustomer = getEntityData(response);
+      console.log("📊 Extracted new customer:", newCustomer);
+
+      // Optimistic update
+      if (newCustomer && newCustomer.id) {
+        const { customers } = get();
+        set({
+          customers: [newCustomer, ...customers],
+          totalCustomers: customers.length + 1,
+          loading: false,
+          error: null,
+        });
       }
-
-      await get().fetchCustomers(get().currentPage, true);
 
       set({ loading: false });
       return { success: true, data: newCustomer };
@@ -472,9 +387,9 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Update customer
+  // ✅ FIXED: Update customer
   updateCustomer: async (id, customerData) => {
-    console.log("✏️ updateCustomer called with:", id, customerData);
+    console.log("✏️ updateCustomer called:", { id, customerData });
     set({ loading: true, error: null });
 
     try {
@@ -490,17 +405,21 @@ const useCustomerStore = create((set, get) => ({
       };
 
       const response = await customersAPI.update(id, payload);
+      console.log("✅ Customer updated:", response);
 
-      let updatedCustomer = null;
-      if (response?.data?.data) {
-        updatedCustomer = response.data.data;
-      } else if (response?.data) {
-        updatedCustomer = response.data;
-      } else {
-        updatedCustomer = response;
+      // ✅ Use helper to extract entity data
+      const updatedCustomer = getEntityData(response);
+      console.log("📊 Extracted updated customer:", updatedCustomer);
+
+      // Optimistic update
+      if (updatedCustomer && updatedCustomer.id) {
+        const { customers } = get();
+        set({
+          customers: customers.map(c => c.id === id ? updatedCustomer : c),
+          loading: false,
+          error: null,
+        });
       }
-
-      await get().fetchCustomers(get().currentPage, true);
 
       set({ loading: false });
       return { success: true, data: updatedCustomer };
@@ -514,7 +433,7 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Delete customer (soft delete)
+  // ✅ FIXED: Delete customer
   deleteCustomer: async (id) => {
     console.log("🗑️ deleteCustomer called with:", id);
     set({ loading: true, error: null });
@@ -523,9 +442,15 @@ const useCustomerStore = create((set, get) => ({
       const { user } = useAuthStore.getState();
       await customersAPI.delete(id, user?.id);
 
-      await get().fetchCustomers(get().currentPage, true);
+      // Remove from local state
+      const { customers } = get();
+      set({
+        customers: customers.filter(c => c.id !== id),
+        totalCustomers: Math.max(0, customers.length - 1),
+        loading: false,
+        error: null,
+      });
 
-      set({ loading: false });
       return { success: true };
     } catch (error) {
       console.error("❌ Failed to delete customer:", error);
@@ -537,47 +462,48 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Fetch trashed customers
+  // ✅ FIXED: Fetch trashed customers
   fetchTrashedCustomers: async (page = 1) => {
     console.log("🗑️ fetchTrashedCustomers called with page:", page);
     set({ loading: true, error: null });
 
     try {
       const { user } = useAuthStore.getState();
-      const response = await customersAPI.getTrashed(user?.id, page);
-
-      let customersArray = [];
-      let paginationData = {};
-
-      if (response?.data?.data?.data) {
-        customersArray = response.data.data.data;
-        paginationData = response.data.data;
-      } else if (response?.data?.data) {
-        customersArray = Array.isArray(response.data.data)
-          ? response.data.data
-          : [];
-        paginationData = response.data;
-      } else if (response?.data) {
-        customersArray = Array.isArray(response.data) ? response.data : [];
+      if (!user?.id) {
+        throw new Error("User not authenticated");
       }
+
+      const response = await customersAPI.getTrashed(user.id, page);
+      console.log("📦 Trashed customers response:", response);
+
+      // ✅ Use helper to extract paginated data
+      const paginatedData = getPaginatedData(response);
+      console.log("🗑️ Trashed customers paginated:", paginatedData);
+
+      const customersArray = paginatedData.data || [];
 
       set({
         customers: customersArray,
-        totalCustomers: paginationData.total || customersArray.length,
-        currentPage: paginationData.current_page || page,
-        lastPage: paginationData.last_page || 1,
+        totalCustomers: paginatedData.total || customersArray.length,
+        currentPage: paginatedData.current_page || page,
+        lastPage: paginatedData.last_page || 1,
+        pagination: paginatedData,
         loading: false,
+        error: null,
       });
 
-      return { success: true, data: customersArray };
+      return { success: true, data: customersArray, pagination: paginatedData };
     } catch (error) {
       console.error("❌ Failed to fetch trashed customers:", error);
-      set({ loading: false, error: error.message });
+      set({
+        loading: false,
+        error: error.message || "Failed to fetch trashed customers",
+      });
       return { success: false, error: error.message };
     }
   },
 
-  // Restore customer
+  // ✅ FIXED: Restore customer
   restoreCustomer: async (id) => {
     console.log("🔄 restoreCustomer called with:", id);
     set({ loading: true, error: null });
@@ -586,9 +512,10 @@ const useCustomerStore = create((set, get) => ({
       const { user } = useAuthStore.getState();
       await customersAPI.restore(id, user?.id);
 
-      await get().fetchCustomers(get().currentPage, true);
+      // Refresh the list
+      await get().fetchCustomers(get().currentPage, false);
 
-      set({ loading: false });
+      set({ loading: false, error: null });
       return { success: true };
     } catch (error) {
       console.error("❌ Failed to restore customer:", error);
@@ -600,7 +527,7 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Permanently delete customer
+  // ✅ FIXED: Permanently delete customer
   forceDeleteCustomer: async (id) => {
     console.log("💀 forceDeleteCustomer called with:", id);
     set({ loading: true, error: null });
@@ -609,9 +536,15 @@ const useCustomerStore = create((set, get) => ({
       const { user } = useAuthStore.getState();
       await customersAPI.forceDelete(id, user?.id);
 
-      await get().fetchCustomers(get().currentPage, true);
+      // Remove from local state
+      const { customers } = get();
+      set({
+        customers: customers.filter(c => c.id !== id),
+        totalCustomers: Math.max(0, customers.length - 1),
+        loading: false,
+        error: null,
+      });
 
-      set({ loading: false });
       return { success: true };
     } catch (error) {
       console.error("❌ Failed to permanently delete customer:", error);
@@ -623,9 +556,9 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Add due payment
+  // ✅ FIXED: Add due payment
   addDuePayment: async (id, amount) => {
-    console.log("💰 addDuePayment called with:", id, amount);
+    console.log("💰 addDuePayment called:", { id, amount });
     set({ loading: true, error: null });
 
     try {
@@ -639,10 +572,10 @@ const useCustomerStore = create((set, get) => ({
       } else if (activeFilterType === "city") {
         await get().fetchCityCustomers(filters.search, get().currentPage);
       } else {
-        await get().fetchCustomers(get().currentPage, true);
+        await get().fetchCustomers(get().currentPage, false);
       }
 
-      set({ loading: false });
+      set({ loading: false, error: null });
       return { success: true };
     } catch (error) {
       console.error("❌ Failed to add due payment:", error);
@@ -654,44 +587,40 @@ const useCustomerStore = create((set, get) => ({
     }
   },
 
-  // Get customer payment history with date filters
+  // ✅ FIXED: Get customer payment history
   getCustomerPaymentHistory: async (id, startDate = "", endDate = "") => {
-    console.log("💳 getCustomerPaymentHistory called with:", id, startDate, endDate);
+    console.log("💳 getCustomerPaymentHistory called:", { id, startDate, endDate });
     set({ loading: true, error: null });
 
     try {
       const response = await customersAPI.getPaymentHistory(id, startDate, endDate);
-      console.log("📦 Payment History Response:", response?.data);
-      
-      let historyArray = [];
-      
-      if (response?.data?.bill_payment_history && Array.isArray(response.data.bill_payment_history)) {
-        historyArray = response.data.bill_payment_history;
-      } else if (response?.data?.data?.bill_payment_history && Array.isArray(response.data.data.bill_payment_history)) {
-        historyArray = response.data.data.bill_payment_history;
-      } else if (response?.data?.data && Array.isArray(response.data.data)) {
-        historyArray = response.data.data;
-      } else if (Array.isArray(response?.data)) {
-        historyArray = response.data;
-      }
-      
+      console.log("📦 Payment History Response:", response);
+
+      // ✅ Use helper to extract entity data
+      const historyData = getEntityData(response);
+      const historyArray = Array.isArray(historyData) ? historyData : [];
+
       console.log("💳 Payment history processed:", historyArray.length, "records");
-      
-      set({ loading: false });
+
+      set({ loading: false, error: null });
       return { success: true, data: historyArray };
     } catch (error) {
       console.error("❌ Failed to fetch payment history:", error);
-      set({ loading: false, error: error.message });
+      set({
+        loading: false,
+        error: error.message || "Failed to fetch payment history",
+      });
       return { success: false, error: error.message };
     }
   },
 
-  // Set filters
+  // ✅ Set filters with auto-fetch
   setFilters: (newFilters) => {
     const currentFilters = get().filters;
     const updatedFilters = { ...currentFilters, ...newFilters };
     set({ filters: updatedFilters });
 
+    // Auto-fetch with new filters (debounced)
     setTimeout(() => {
       const { activeFilterType } = get();
       if (activeFilterType === "due") {
@@ -699,12 +628,12 @@ const useCustomerStore = create((set, get) => ({
       } else if (activeFilterType === "city") {
         get().fetchCityCustomers(updatedFilters.search, 1);
       } else {
-        get().fetchCustomers(1, true);
+        get().fetchCustomers(1, false);
       }
-    }, 100);
+    }, 300);
   },
 
-  // Change page
+  // ✅ Set page with auto-fetch
   setPage: (page) => {
     const { lastPage, activeFilterType, filters } = get();
     if (page >= 1 && page <= lastPage) {
@@ -713,9 +642,52 @@ const useCustomerStore = create((set, get) => ({
       } else if (activeFilterType === "city") {
         get().fetchCityCustomers(filters.search, page);
       } else {
-        get().fetchCustomers(page, true);
+        get().fetchCustomers(page, false);
       }
     }
+  },
+
+  // ✅ Load next page (append for infinite scrolling)
+  loadNextPage: async () => {
+    const { currentPage, lastPage, loading } = get();
+    if (loading || currentPage >= lastPage) {
+      console.log('⏭️ No more pages to load or already loading');
+      return;
+    }
+    
+    console.log('⏬ Loading next page:', currentPage + 1);
+    const { activeFilterType, filters } = get();
+    
+    if (activeFilterType === "due") {
+      await get().fetchDueCustomers(filters.search, currentPage + 1, true);
+    } else if (activeFilterType === "city") {
+      await get().fetchCityCustomers(filters.search, currentPage + 1, true);
+    } else {
+      await get().fetchCustomers(currentPage + 1, true);
+    }
+  },
+
+  // ✅ Reset state
+  reset: () => {
+    set({
+      customers: [],
+      totalCustomers: 0,
+      currentPage: 1,
+      lastPage: 1,
+      pagination: null,
+      loading: false,
+      error: null,
+      filteredCustomers: [],
+      filteredTotal: 0,
+      activeFilterType: "all",
+      selectedCity: "",
+      filters: {
+        search: "",
+        status: "",
+        city: "",
+        dueStatus: "all",
+      },
+    });
   },
 
   // Clear error

@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useThemeStore } from "../../store/themeStore";
+import Toast from "react-native-toast-message";
 
 const DuePaymentModal = ({ 
   seller, 
@@ -103,20 +104,43 @@ const DuePaymentModal = ({
     return Object.keys(newErrors).length === 0;
   };
 
+  // ✅ FIXED: Properly handle submit and call onSuccess
   const handleSubmit = async () => {
     if (!validateForm()) return;
     
     const amount = parseFloat(paidAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please enter a valid amount',
+      });
+      return;
+    }
+    
+    console.log("💰 Submitting payment of:", amount);
     setIsSubmitting(true);
     
     try {
-      // Call onSuccess with the amount
       if (onSuccess) {
+        // Call onSuccess with the amount and wait for it to complete
         await onSuccess(amount);
+        // The parent will handle closing the modal
+      } else {
+        console.warn("⚠️ onSuccess callback not provided");
+        // If no onSuccess, close modal ourselves
+        if (onClose) {
+          onClose();
+        }
       }
-      // The modal will be closed by the parent after successful payment
     } catch (error) {
       console.error("Payment error:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Payment failed',
+      });
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -135,6 +159,8 @@ const DuePaymentModal = ({
   const numericValue = parseFloat(paidAmount) || 0;
   const remainingAmount = dueAmount - numericValue;
   const isValid = paidAmount && !errors.paidAmount && numericValue > 0 && numericValue <= dueAmount;
+
+  const isProcessing = processing || isSubmitting;
 
   return (
     <Modal
@@ -240,7 +266,7 @@ const DuePaymentModal = ({
                     keyboardType="numeric"
                     value={paidAmount}
                     onChangeText={handleAmountChange}
-                    editable={!processing && !isSubmitting && dueAmount > 0}
+                    editable={!isProcessing && dueAmount > 0}
                     autoFocus
                   />
                 </View>
@@ -253,7 +279,7 @@ const DuePaymentModal = ({
                   <View className="mt-2 flex-row items-center space-x-3">
                     <TouchableOpacity
                       onPress={handleMaxPayment}
-                      disabled={processing || isSubmitting}
+                      disabled={isProcessing}
                       className="px-3 py-1 rounded-lg bg-blue-100 dark:bg-blue-900/30"
                     >
                       <Text className="text-xs text-blue-600 dark:text-blue-400">
@@ -298,7 +324,7 @@ const DuePaymentModal = ({
               <View className="flex-row space-x-3 pt-2">
                 <TouchableOpacity
                   onPress={handleClose}
-                  disabled={processing || isSubmitting}
+                  disabled={isProcessing}
                   className={`flex-1 py-3 rounded-xl border ${
                     isDarkMode ? "border-gray-600" : "border-gray-300"
                   }`}
@@ -309,14 +335,14 @@ const DuePaymentModal = ({
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleSubmit}
-                  disabled={processing || isSubmitting || dueAmount <= 0 || !paidAmount || !isValid}
+                  disabled={isProcessing || dueAmount <= 0 || !paidAmount || !isValid}
                   className={`flex-1 py-3 rounded-xl flex-row items-center justify-center ${
-                    processing || isSubmitting || dueAmount <= 0 || !paidAmount || !isValid
+                    isProcessing || dueAmount <= 0 || !paidAmount || !isValid
                       ? "bg-gray-400"
                       : "bg-blue-500"
                   }`}
                 >
-                  {(processing || isSubmitting) ? (
+                  {isProcessing ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <>
