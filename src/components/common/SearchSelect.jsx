@@ -26,17 +26,28 @@ const SearchSelect = ({
   loading = false,
   displayKey = 'label',
   valueKey = 'value',
+  onSearch,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
+  // Call onSearch when searchTerm changes (for API-based search)
+  useEffect(() => {
+    if (onSearch) {
+      onSearch(searchTerm);
+    }
+  }, [searchTerm, onSearch]);
+
   // Find selected option
   const selectedOption = options.find(opt => opt[valueKey] === value);
   const displayValue = selectedOption ? selectedOption[displayKey] : '';
 
-  // Filter options based on search term
+  // Filter options based on search term (only if onSearch is not provided)
   const filteredOptions = React.useMemo(() => {
+    // If onSearch is provided, assume options are already filtered externally
+    if (onSearch) return options;
+    
     if (!searchTerm.trim()) return options;
     const searchLower = searchTerm.toLowerCase();
     return options.filter(option => {
@@ -44,7 +55,7 @@ const SearchSelect = ({
       const descriptionMatch = option.description?.toLowerCase().includes(searchLower);
       return labelMatch || descriptionMatch;
     });
-  }, [options, searchTerm, displayKey]);
+  }, [options, searchTerm, displayKey, onSearch]);
 
   const handleSelect = (selectedValue, selectedOption) => {
     onSelect(selectedValue, selectedOption);

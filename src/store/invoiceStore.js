@@ -113,8 +113,10 @@ export const useInvoiceStore = create((set, get) => ({
       const response = await invoiceAPI.getAll(page, filters);
       console.log('📦 Invoices API response:', response);
 
-      // Now response.data has the full structure: { status, data: { current_page, data: [...] } }
-      const responseData = response.data;
+      // response.data might be a string, so parse it if needed
+      const responseData = typeof response.data === 'string' 
+        ? JSON.parse(response.data) 
+        : response.data;
       
       // Extract paginated data from response.data.data
       const paginatedData = responseData?.data || {};
