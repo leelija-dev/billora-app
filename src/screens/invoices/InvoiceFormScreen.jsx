@@ -1,4 +1,4 @@
-// screens/invoices/InvoiceFormScreen.js - COMPLETE WORKING VERSION (Modal Product Search)
+// screens/invoices/InvoiceFormScreen.js - COMPLETE UPDATED VERSION WITH PROPER DATA FORMATTING
 
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,6 +32,10 @@ import { usePermissionStore } from "../../store/permissionStore";
 import useProductStore from "../../store/productStore";
 import useStoreStore from "../../store/storeStore";
 import { useThemeStore } from "../../store/themeStore";
+import { generateA4InvoiceHTML, generateThermalInvoiceHTML } from "../../templates/invoiceTemplates"
+import { printAsync } from "expo-print";
+import { shareAsync } from "expo-sharing";
+import * as FileSystem from "expo-file-system";
 
 const { width } = Dimensions.get("window");
 
@@ -45,7 +49,7 @@ const InvoiceFormScreen = () => {
   const { createInvoice, updateInvoice, getInvoiceById } = useInvoiceStore();
   const { customers, fetchCustomers, createCustomer } = useCustomerStore();
   const { stores, fetchStores, createStore } = useStoreStore();
-  const { products, fetchProducts } = useProductStore();
+  const { products, fetchProducts, getProduct } = useProductStore();
   const { packages, fetchPackages } = usePackageStore();
 
   const { invoiceId, isEdit } = route.params || {};
@@ -662,6 +666,27 @@ const InvoiceFormScreen = () => {
 
   // Handle adding item with multiple stock variants
   const handleAddItem = async (product) => {
+    // Fetch full product details if GST is 0 to get correct GST from database
+    let productWithGST = product;
+    if (parseFloat(product.gst_percentage) === 0) {
+      try {
+        const result = await getProduct(product.id);
+        if (result.success && result.data) {
+          const fullProduct = result.data;
+          if (parseFloat(fullProduct.gst_percentage) > 0) {
+            productWithGST = { ...product, gst_percentage: fullProduct.gst_percentage };
+            console.log('Updated GST from full product:', {
+              productName: product.name,
+              oldGST: product.gst_percentage,
+              newGST: fullProduct.gst_percentage
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch full product details:', error);
+      }
+    }
+
     const existingItemIndex = lineItems.findIndex(
       (item) =>
         !item.is_package &&
@@ -743,8 +768,20 @@ const InvoiceFormScreen = () => {
     const unit = product.unit;
     const sellingPrice = product.price;
     const purchasePrice = product.purchase_price;
-    const gst = product.gst_percentage;
-    const discount = product.discount_percentage;
+    let gst = parseFloat(productWithGST.gst_percentage) || 0;
+    const discount = parseFloat(product.discount_percentage) || 0;
+
+    // Fallback: if GST is 0 but product has stock details with GST, use that
+    if (gst === 0 && product.stock_details?.selling_gst_percentage) {
+      gst = parseFloat(product.stock_details.selling_gst_percentage) || 0;
+    }
+
+    console.log('Adding product GST:', {
+      productName: product.name,
+      gst_percentage: productWithGST.gst_percentage,
+      stock_gst: product.stock_details?.selling_gst_percentage,
+      final_gst: gst
+    });
     const quantity = 1;
     const totalPrice = calculateItemTotal(
       sellingPrice,
@@ -1197,26 +1234,255 @@ const InvoiceFormScreen = () => {
     }
   };
 
-  const handleInvoiceSuccess = (invoiceData) => {
-    setCreatedInvoiceData(invoiceData);
-    setShowInvoiceSuccess(true);
+  // ============ TRANSFORM INVOICE DATA FOR PRINT TEMPLATES ============
+  // This function formats data exactly like the React web version
+  const transformInvoiceForTemplate = (invoice) => {
+    if (!invoice) return null;
+
+    // Extract customer data from various possible structures
+    const customerData = invoice.customer || {};
+    const customerName = customerData.name || 
+                         invoice.customer_name || 
+                         invoice.customerName || 
+                         "Walk-in Customer";
+    const customerPhone = customerData.phone || 
+                          invoice.customer_phone || 
+                          invoice.customerPhone || 
+                          "N/A";
+    const customerEmail = customerData.email || 
+                          invoice.customer_email || 
+                          invoice.customerEmail || 
+                          "N/A";
+    const customerAddress = customerData.address || 
+                            invoice.customer_address || 
+                            invoice.customerAddress || 
+                            "N/A";
+    const customerGst = customerData.gst || 
+                        customerData.gst_number || 
+                        invoice.customer_gst || 
+                        invoice.customerGst || 
+                        "N/A";
+
+    // Extract store data from various possible structures
+    const storeData = invoice.store || {};
+    const storeName = storeData.name || 
+                      invoice.store_name || 
+                      invoice.storeName || 
+                      "Your Store Name";
+    const storeAddress = storeData.address || 
+                         invoice.store_address || 
+                         invoice.storeAddress || 
+                         "123 Business Street, City";
+    const storeGst = storeData.gst || 
+                     storeData.gst_number || 
+                     invoice.store_gst || 
+                     invoice.storeGst || 
+                     "GSTIN123456";
+    const storeEmail = storeData.email || 
+                       invoice.store_email || 
+                       invoice.storeEmail || 
+                       "store@business.com";
+    const storePhone = storeData.mobile || 
+                       storeData.phone || 
+                       invoice.store_phone || 
+                       invoice.storePhone || 
+                       "123-456-7890";
+
+    // Transform items to have nested product structure (matching web version)
+    const items = invoice.items || invoice.invoice_items || [];
+    const transformedItems = items.map(item => {
+      // Calculate totals if not present
+      const quantity = parseFloat(item.quantity || item.item_count || 1);
+      const price = parseFloat(item.price || 0);
+      const gst = parseFloat(item.gst || 0);
+      const discount = parseFloat(item.discount || 0);
+      
+      // Calculate total price if not present
+      let totalPrice = item.total_price || item.totalPrice || 0;
+      if (!item.total_price && !item.totalPrice) {
+        const basePrice = price * quantity;
+        const discountAmount = basePrice * (discount / 100);
+        const gstAmount = (basePrice - discountAmount) * (gst / 100);
+        totalPrice = basePrice - discountAmount + gstAmount;
+      }
+
+      return {
+        ...item,
+        id: item.id || item.product_id,
+        product_id: item.product_id,
+        product_name: item.product_name || item.name || 'Product',
+        product_code: item.product_code || item.sku || '',
+        quantity: quantity,
+        item_count: quantity,
+        price: price,
+        gst: gst,
+        discount: discount,
+        total_price: totalPrice,
+        unit_name: item.unit_name || item.unit || 'pcs',
+        // Nested product object for template compatibility
+        product: {
+          id: item.product_id,
+          name: item.product_name || item.name || 'Product',
+          sku: item.sku || item.product_code || '',
+          brand: item.brand_name ? { name: item.brand_name } : null,
+          category: item.category_name ? { name: item.category_name } : null,
+          attributes: item.attributes || [],
+          unit: item.unit_name ? { code: item.unit_name, name: item.unit_name } : null,
+        },
+        // Include stock information
+        stock_quantity: item.stock_quantity || 0,
+        stock_id: item.stock_id || null,
+        variant_info: item.variant_info || null,
+        original_gst_percentage: item.original_gst_percentage || gst,
+      };
+    });
+
+    // Transform packages (matching web version)
+    const packages = invoice.packages || [];
+    const transformedPackages = packages.map(pkg => ({
+      ...pkg,
+      id: pkg.id || pkg.package_id,
+      package_id: pkg.package_id || pkg.id,
+      package_name: pkg.package_name || pkg.name || 'Package',
+      package_price: parseFloat(pkg.package_price || pkg.price || 0),
+      package_size: pkg.package_size || pkg.size || 'Standard',
+      quantity: parseFloat(pkg.quantity || 1),
+    }));
+
+    // Calculate totals if not present
+    let totalAmount = parseFloat(invoice.total_amount || invoice.totalAmount || 0);
+    let paidAmount = parseFloat(invoice.paid_amount || invoice.paidAmount || 0);
+    
+    // If totals are missing, calculate from items
+    if (!totalAmount && transformedItems.length > 0) {
+      totalAmount = transformedItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
+      // Add package totals
+      if (transformedPackages.length > 0) {
+        totalAmount += transformedPackages.reduce((sum, pkg) => sum + (pkg.package_price * pkg.quantity), 0);
+      }
+    }
+
+    // Construct final invoice object matching web version structure
+    return {
+      // Core invoice data
+      id: invoice.id || invoice.invoice_id,
+      invoice_id: invoice.invoice_id || invoice.id,
+      invoice_number: invoice.invoice_number || invoice.invoice_id || `INV-${Date.now()}`,
+      created_at: invoice.created_at || invoice.createdAt || new Date().toISOString(),
+      invoice_date: invoice.invoice_date || invoice.created_at || new Date().toISOString(),
+      
+      // Customer data (flat structure for template)
+      customer_id: invoice.customer_id,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      customer_address: customerAddress,
+      customer_gst: customerGst,
+      
+      // Customer nested object
+      customer: {
+        id: invoice.customer_id,
+        name: customerName,
+        phone: customerPhone,
+        email: customerEmail,
+        address: customerAddress,
+        gst: customerGst,
+        gst_number: customerGst,
+      },
+      
+      // Store data (flat structure for template)
+      store_id: invoice.store_id,
+      store_name: storeName,
+      store_address: storeAddress,
+      store_gst: storeGst,
+      store_email: storeEmail,
+      store_phone: storePhone,
+      store_logo: invoice.store_logo || invoice.storeLogo,
+      bank_qr: invoice.bank_qr || invoice.bankQr,
+      
+      // Store nested object
+      store: {
+        id: invoice.store_id,
+        name: storeName,
+        address: storeAddress,
+        gst: storeGst,
+        gst_number: storeGst,
+        email: storeEmail,
+        phone: storePhone,
+        mobile: storePhone,
+        logo: invoice.store_logo || invoice.storeLogo,
+        bank_qr: invoice.bank_qr || invoice.bankQr,
+      },
+      
+      // Financial data
+      total_amount: totalAmount,
+      paid_amount: paidAmount,
+      payment_method: invoice.payment_method || invoice.paymentMode || "Cash",
+      payment_status: invoice.payment_status || "paid",
+      payment_mode: invoice.payment_method || invoice.paymentMode || "Cash",
+      
+      // Items and packages
+      items: transformedItems,
+      invoice_items: transformedItems,
+      packages: transformedPackages,
+      
+      // Flags
+      hasStockPermission: invoice.hasStockPermission || false,
+    };
   };
 
+  // ============ UPDATED PRINT HANDLERS ============
+
   const handlePrintA4 = async () => {
+    if (isPrinting) return;
     setIsPrinting(true);
+
     try {
-      Toast.show({
-        type: "success",
-        text1: "Success",
-        text2: "A4 Invoice printed successfully",
+      // Get the full invoice data
+      const invoiceData = createdInvoiceData || await getInvoiceById(invoiceId);
+
+      if (!invoiceData) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Invoice data not found',
+        });
+        setIsPrinting(false);
+        return;
+      }
+
+      // Transform invoice data to match template expectations
+      const transformedInvoice = transformInvoiceForTemplate(invoiceData);
+      console.log('Transformed invoice for A4 print:', JSON.stringify(transformedInvoice, null, 2));
+
+      // Generate HTML for A4 invoice
+      const html = generateA4InvoiceHTML(transformedInvoice, false);
+      
+      // Print the invoice
+      await printAsync({
+        html: html,
+        width: 794, // A4 width in pixels
+        height: 1123, // A4 height in pixels
       });
-      setShowInvoiceSuccess(false);
-      navigation.goBack();
-    } catch (error) {
+      
       Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Failed to print invoice",
+        type: 'success',
+        text1: 'Success',
+        text2: 'A4 Invoice printed successfully',
+      });
+      
+      // Close the success modal and go back after a short delay
+      setTimeout(() => {
+        setShowInvoiceSuccess(false);
+        navigation.goBack();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Print A4 error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to print A4 invoice',
       });
     } finally {
       setIsPrinting(false);
@@ -1224,24 +1490,166 @@ const InvoiceFormScreen = () => {
   };
 
   const handlePrintThermal = async () => {
+    if (isPrinting) return;
     setIsPrinting(true);
+
     try {
-      Toast.show({
-        type: "success",
-        text1: "Success",
-        text2: "Thermal Invoice printed successfully",
+      // Get the full invoice data
+      const invoiceData = createdInvoiceData || await getInvoiceById(invoiceId);
+
+      if (!invoiceData) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Invoice data not found',
+        });
+        setIsPrinting(false);
+        return;
+      }
+
+      // Transform invoice data to match template expectations
+      const transformedInvoice = transformInvoiceForTemplate(invoiceData);
+      console.log('Transformed invoice for thermal print:', JSON.stringify(transformedInvoice, null, 2));
+
+      // Generate HTML for thermal invoice
+      const html = generateThermalInvoiceHTML(transformedInvoice, false);
+      
+      // Print the invoice with thermal settings
+      await printAsync({
+        html: html,
+        width: 288, // 76mm in pixels (3 inches)
+        height: 'auto',
       });
-      setShowInvoiceSuccess(false);
-      navigation.goBack();
-    } catch (error) {
+      
       Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Failed to print invoice",
+        type: 'success',
+        text1: 'Success',
+        text2: 'Thermal Invoice printed successfully',
+      });
+      
+      // Close the success modal and go back after a short delay
+      setTimeout(() => {
+        setShowInvoiceSuccess(false);
+        navigation.goBack();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Print thermal error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to print thermal invoice',
       });
     } finally {
       setIsPrinting(false);
     }
+  };
+
+  // Save as PDF with proper formatting
+  const handleSaveAsPDF = async (type = 'a4') => {
+    if (isPrinting) return;
+    setIsPrinting(true);
+
+    try {
+      const invoiceData = createdInvoiceData || await getInvoiceById(invoiceId);
+
+      if (!invoiceData) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Invoice data not found',
+        });
+        setIsPrinting(false);
+        return;
+      }
+
+      // Transform invoice data to match template expectations
+      const transformedInvoice = transformInvoiceForTemplate(invoiceData);
+
+      // Generate HTML based on type
+      const html = type === 'a4'
+        ? generateA4InvoiceHTML(transformedInvoice, false)
+        : generateThermalInvoiceHTML(transformedInvoice, false);
+      
+      // Generate PDF
+      const { uri } = await printAsync({
+        html: html,
+        width: type === 'a4' ? 794 : 288,
+        height: type === 'a4' ? 1123 : 'auto',
+      });
+      
+      // Share the PDF
+      await shareAsync(uri, {
+        UTI: 'com.adobe.pdf',
+        mimeType: 'application/pdf',
+      });
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Invoice saved as PDF',
+      });
+      
+    } catch (error) {
+      console.error('Save PDF error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.message || 'Failed to save PDF',
+      });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  // ============ UPDATED INVOICE SUCCESS HANDLER ============
+  const handleInvoiceSuccess = (invoiceData) => {
+    // Get selected customer and store
+    const selectedCustomer = customers.find(
+      (c) => c.id.toString() === formData.customer_id
+    );
+    const selectedStore = stores.find(
+      (s) => s.id.toString() === formData.store_id
+    );
+
+    // Transform the invoice data to include all necessary fields
+    const completeInvoiceData = {
+      ...invoiceData,
+      items: lineItems.map(item => ({
+        ...item,
+        total_price: item.total_price || calculateItemTotal(item.price, item.quantity, item.gst, item.discount),
+      })),
+      packages: lineItems
+        .filter(item => item.is_package)
+        .map(item => ({
+          package_id: item.product_id,
+          package_name: item.product_name,
+          package_price: item.price,
+          package_size: item.unit_name,
+          quantity: item.quantity,
+        })),
+      total_amount: totals.totalAmount,
+      paid_amount: effectivePaidAmount,
+      payment_method: formData.payment_method,
+      payment_status: formData.payment_status,
+      // Include customer and store details
+      customer: selectedCustomer,
+      store: selectedStore,
+      customer_name: selectedCustomer?.name || selectedCustomer?.customer_name || "Walk-in Customer",
+      customer_phone: selectedCustomer?.phone || "N/A",
+      customer_email: selectedCustomer?.email || "N/A",
+      customer_address: selectedCustomer?.address || "N/A",
+      customer_gst: selectedCustomer?.gst || "N/A",
+      store_name: selectedStore?.name || selectedStore?.store_name || "Your Store Name",
+      store_address: selectedStore?.address || "123 Business Street, City",
+      store_gst: selectedStore?.gst || "GSTIN123456",
+      store_email: selectedStore?.email || "store@business.com",
+      store_phone: selectedStore?.mobile || selectedStore?.phone || "123-456-7890",
+      hasStockPermission: hasStockPermission,
+    };
+
+    setCreatedInvoiceData(completeInvoiceData);
+    setShowInvoiceSuccess(true);
   };
 
   const handleSubmit = async () => {
@@ -1419,10 +1827,11 @@ const InvoiceFormScreen = () => {
       if (result.success) {
         handleInvoiceSuccess(result.data);
       } else {
+        console.error("Invoice creation failed:", result);
         Toast.show({
           type: "error",
           text1: "Error",
-          text2: result.error?.message || "Failed to save invoice",
+          text2: result.error?.message || result.message || "Failed to save invoice",
         });
       }
     } catch (error) {
@@ -1430,7 +1839,7 @@ const InvoiceFormScreen = () => {
       Toast.show({
         type: "error",
         text1: "Error",
-        text2: error.message || "Failed to save invoice",
+        text2: error.response?.data?.message || error.message || "Failed to save invoice",
       });
     } finally {
       setSubmitting(false);
@@ -2542,6 +2951,112 @@ const InvoiceFormScreen = () => {
         </View>
       </Modal>
 
+      {/* Invoice Success Dialog with Print Options - UPDATED */}
+      <Modal
+        visible={showInvoiceSuccess}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowInvoiceSuccess(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowInvoiceSuccess(false)}
+          className="flex-1 bg-black/50 justify-center items-center px-4"
+        >
+          <View
+            className={`rounded-2xl p-6 w-full max-w-sm ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-xl`}
+          >
+            <View className="items-center mb-4">
+              <View className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full items-center justify-center mb-3">
+                <Icon name="check-circle" size={32} color="#22c55e" />
+              </View>
+              <Text
+                className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}
+              >
+                Invoice Generated Successfully!
+              </Text>
+              <Text
+                className={`text-sm text-center mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              >
+                Invoice #{createdInvoiceData?.invoice_number || createdInvoiceData?.id || 'N/A'} 
+                for ₹{createdInvoiceData?.total_amount?.toFixed(2) || '0.00'}
+              </Text>
+            </View>
+
+            <View className="space-y-3">
+              {/* A4 Print Button */}
+              <TouchableOpacity
+                onPress={handlePrintA4}
+                disabled={isPrinting}
+                className="w-full py-3.5 bg-blue-600 rounded-xl flex-row items-center justify-center"
+              >
+                {isPrinting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Icon name="printer" size={20} color="#ffffff" />
+                    <Text className="text-white font-semibold ml-2">
+                      🖨️ Print A4 Invoice
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Thermal Print Button */}
+              <TouchableOpacity
+                onPress={handlePrintThermal}
+                disabled={isPrinting}
+                className="w-full py-3.5 bg-gray-600 rounded-xl flex-row items-center justify-center"
+              >
+                {isPrinting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Icon name="printer" size={20} color="#ffffff" />
+                    <Text className="text-white font-semibold ml-2">
+                      🧾 Print Thermal Receipt
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Save as PDF Button */}
+              <TouchableOpacity
+                onPress={() => handleSaveAsPDF('a4')}
+                disabled={isPrinting}
+                className="w-full py-3.5 bg-green-600 rounded-xl flex-row items-center justify-center"
+              >
+                {isPrinting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Icon name="file-pdf-box" size={20} color="#ffffff" />
+                    <Text className="text-white font-semibold ml-2">
+                      📄 Save as PDF
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Skip Print Button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setShowInvoiceSuccess(false);
+                  navigation.goBack();
+                }}
+                className="w-full py-3.5 border border-gray-300 dark:border-gray-600 rounded-xl flex-row items-center justify-center"
+              >
+                <Text
+                  className={`font-semibold ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
+                >
+                  Skip Print
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* All other Modal components remain the same */}
       {/* Add Customer Modal */}
       <Modal
@@ -3342,90 +3857,6 @@ const InvoiceFormScreen = () => {
             </View>
           </View>
         </View>
-      </Modal>
-
-      {/* Invoice Success Dialog with Print Options */}
-      <Modal
-        visible={showInvoiceSuccess}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowInvoiceSuccess(false)}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setShowInvoiceSuccess(false)}
-          className="flex-1 bg-black/50 justify-center items-center px-4"
-        >
-          <View
-            className={`rounded-2xl p-6 w-full max-w-sm ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-xl`}
-          >
-            <View className="items-center mb-4">
-              <View className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full items-center justify-center mb-3">
-                <Icon name="check-circle" size={32} color="#22c55e" />
-              </View>
-              <Text
-                className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}
-              >
-                Invoice Generated Successfully!
-              </Text>
-              <Text
-                className={`text-sm text-center mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-              >
-                Your invoice has been generated. What would you like to do next?
-              </Text>
-            </View>
-
-            <View className="space-y-3">
-              <TouchableOpacity
-                onPress={handlePrintA4}
-                disabled={isPrinting}
-                className="w-full py-3 bg-blue-600 rounded-xl flex-row items-center justify-center"
-              >
-                {isPrinting ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <>
-                    <Icon name="printer" size={20} color="#ffffff" />
-                    <Text className="text-white font-semibold ml-2">
-                      🖨️ A4 Print
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={handlePrintThermal}
-                disabled={isPrinting}
-                className="w-full py-3 bg-gray-600 rounded-xl flex-row items-center justify-center"
-              >
-                {isPrinting ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <>
-                    <Icon name="printer" size={20} color="#ffffff" />
-                    <Text className="text-white font-semibold ml-2">
-                      🧾 Thermal Print
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  setShowInvoiceSuccess(false);
-                  navigation.goBack();
-                }}
-                className="w-full py-3 border border-gray-300 dark:border-gray-600 rounded-xl flex-row items-center justify-center"
-              >
-                <Text
-                  className={`font-semibold ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
-                >
-                  Skip Print
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
       </Modal>
 
       {/* Success Modal */}
