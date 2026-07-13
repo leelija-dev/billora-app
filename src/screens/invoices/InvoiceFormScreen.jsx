@@ -47,14 +47,14 @@ const { width } = Dimensions.get("window");
 // Helper function to sanitize numeric input
 const sanitizeNumericInput = (value, allowDecimal = true, maxDecimals = 2) => {
   if (value === "" || value === null || value === undefined) return "";
-  
+
   let cleaned = value.toString().replace(/[^0-9.]/g, "");
-  
+
   const decimalCount = (cleaned.match(/\./g) || []).length;
   if (decimalCount > 1) {
     cleaned = cleaned.slice(0, cleaned.lastIndexOf("."));
   }
-  
+
   if (allowDecimal && cleaned.includes(".")) {
     const parts = cleaned.split(".");
     if (parts[1] && parts[1].length > maxDecimals) {
@@ -62,7 +62,7 @@ const sanitizeNumericInput = (value, allowDecimal = true, maxDecimals = 2) => {
       cleaned = parts.join(".");
     }
   }
-  
+
   return cleaned;
 };
 
@@ -84,7 +84,7 @@ const parseQRData = (qrData) => {
         raw: parsed
       };
     }
-    
+
     const typeMatch = qrData.match(/^(PRD|STK)(\d+)$/i);
     if (typeMatch) {
       const type = typeMatch[1].toUpperCase();
@@ -99,7 +99,7 @@ const parseQRData = (qrData) => {
         raw: qrData
       };
     }
-    
+
     const idMatch = qrData.match(/\d+/);
     if (idMatch) {
       return {
@@ -108,7 +108,7 @@ const parseQRData = (qrData) => {
         raw: qrData
       };
     }
-    
+
     return null;
   } catch (error) {
     console.error('Failed to parse QR data:', error);
@@ -117,25 +117,22 @@ const parseQRData = (qrData) => {
 };
 
 // ============ LINE ITEM COMPONENT WITH LOCAL STATE ============
-const LineItemComponent = React.memo(({ 
-  item, 
-  index, 
-  onUpdate, 
-  onRemove, 
+const LineItemComponent = React.memo(({
+  item,
+  index,
+  onUpdate,
+  onRemove,
   isDarkMode,
-  hasStockPermission 
+  hasStockPermission
 }) => {
-  // Local state for input values - prevents parent re-render on every keystroke
   const [localQuantity, setLocalQuantity] = useState(item.quantity?.toString() || "1");
   const [localPrice, setLocalPrice] = useState(item.price?.toString() || "0");
   const [localGst, setLocalGst] = useState(item.gst?.toString() || "0");
   const [localDiscount, setLocalDiscount] = useState(item.discount?.toString() || "0");
-  
-  // Ref to track if we're currently typing
+
   const isTypingRef = useRef(false);
   const timeoutRef = useRef(null);
 
-  // Update local state when prop changes (only when item changes from outside)
   useEffect(() => {
     if (!isTypingRef.current) {
       setLocalQuantity(item.quantity?.toString() || "1");
@@ -145,7 +142,6 @@ const LineItemComponent = React.memo(({
     }
   }, [item.quantity, item.price, item.gst, item.discount]);
 
-  // Clean up timeout on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
@@ -154,14 +150,12 @@ const LineItemComponent = React.memo(({
     };
   }, []);
 
-  // Handle blur - update parent state
   const handleBlur = (field, value, minValue = 0) => {
     isTypingRef.current = false;
     const numValue = parseFloat(value);
     if (!isNaN(numValue) && numValue >= minValue) {
       onUpdate(index, field, numValue);
     } else {
-      // Reset to default if invalid
       const defaultValue = field === 'quantity' ? 1 : 0;
       onUpdate(index, field, defaultValue);
       if (field === 'quantity') setLocalQuantity(defaultValue.toString());
@@ -171,22 +165,18 @@ const LineItemComponent = React.memo(({
     }
   };
 
-  // Handle focus
   const handleFocus = () => {
     isTypingRef.current = true;
   };
 
-  // Handle quantity change with debounce for real-time updates
   const handleQuantityChange = (text) => {
     const sanitized = text.replace(/[^0-9]/g, '');
     setLocalQuantity(sanitized);
-    
-    // Clear existing timeout
+
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    
-    // Only update parent after typing stops
+
     timeoutRef.current = setTimeout(() => {
       const num = parseInt(sanitized) || 1;
       if (num >= 1) {
@@ -197,7 +187,6 @@ const LineItemComponent = React.memo(({
 
   return (
     <View className={`p-4 rounded-xl mb-3 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"} border ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}>
-      {/* Header */}
       <View className="flex-row justify-between items-start mb-3">
         <View className="flex-1">
           <View className="flex-row items-center flex-wrap">
@@ -219,7 +208,7 @@ const LineItemComponent = React.memo(({
               {item.product_name}
             </Text>
           </View>
-          
+
           <View className="flex-row items-center mt-0.5">
             {item.product_code && (
               <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
@@ -232,7 +221,7 @@ const LineItemComponent = React.memo(({
               </Text>
             )}
           </View>
-          
+
           {item.unit_name && (
             <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>
               Unit: {item.unit_name}
@@ -244,9 +233,7 @@ const LineItemComponent = React.memo(({
         </TouchableOpacity>
       </View>
 
-      {/* Input Fields - Using local state to prevent re-renders */}
       <View className="flex-row flex-wrap gap-3">
-        {/* Quantity */}
         <View className="flex-1 min-w-[100px]">
           <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
             Quantity
@@ -263,7 +250,7 @@ const LineItemComponent = React.memo(({
             >
               <Icon name="minus" size={18} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
             </TouchableOpacity>
-            
+
             <TextInput
               className={`flex-1 text-center font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
               value={localQuantity}
@@ -282,7 +269,7 @@ const LineItemComponent = React.memo(({
               autoComplete="off"
               importantForAutofill="no"
             />
-            
+
             <TouchableOpacity
               onPress={() => {
                 const current = parseInt(localQuantity) || 1;
@@ -297,7 +284,6 @@ const LineItemComponent = React.memo(({
           </View>
         </View>
 
-        {/* Price */}
         {!item.is_package && (
           <>
             <View className="flex-1 min-w-[100px]">
@@ -328,7 +314,6 @@ const LineItemComponent = React.memo(({
               />
             </View>
 
-            {/* GST */}
             <View className="flex-1 min-w-[100px]">
               <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
                 GST %
@@ -362,7 +347,6 @@ const LineItemComponent = React.memo(({
               )}
             </View>
 
-            {/* Discount */}
             <View className="flex-1 min-w-[100px]">
               <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
                 Discount %
@@ -394,7 +378,6 @@ const LineItemComponent = React.memo(({
         )}
       </View>
 
-      {/* Total */}
       <View className="flex-row justify-between items-center mt-3 pt-3 border-t" style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}>
         <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
           Total
@@ -403,6 +386,106 @@ const LineItemComponent = React.memo(({
           ₹{item.total_price?.toFixed(2) || "0.00"}
         </Text>
       </View>
+    </View>
+  );
+});
+
+// ============ PAYMENT AMOUNT INPUT COMPONENT - FULLY ISOLATED ============
+const PaymentAmountInput = React.memo(({ 
+  initialValue = "",
+  onAmountChange, 
+  isDarkMode, 
+  maxAmount 
+}) => {
+  const [localAmount, setLocalAmount] = useState(initialValue || "");
+  const isFocusedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const maxAmountRef = useRef(maxAmount);
+
+  // Update maxAmount ref without causing re-render
+  useEffect(() => {
+    maxAmountRef.current = maxAmount;
+  }, [maxAmount]);
+
+  // Update local state only when initialValue changes and not focused
+  useEffect(() => {
+    if (!isFocusedRef.current && isMountedRef.current) {
+      setLocalAmount(initialValue || "");
+    }
+  }, [initialValue]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    isFocusedRef.current = false;
+    const numValue = parseFloat(localAmount);
+    if (!isNaN(numValue) && numValue > 0) {
+      const finalValue = Math.min(numValue, maxAmountRef.current);
+      // Only update parent state on blur to prevent keyboard dismissal
+      onAmountChange(finalValue.toString());
+      if (isMountedRef.current) {
+        setLocalAmount(finalValue.toString());
+      }
+    } else {
+      onAmountChange("");
+      if (isMountedRef.current) {
+        setLocalAmount("");
+      }
+    }
+  }, [localAmount, onAmountChange]);
+
+  const handleFocus = useCallback(() => {
+    isFocusedRef.current = true;
+  }, []);
+
+  const handleChangeText = useCallback((text) => {
+    // Only update local state while typing - don't update parent
+    const sanitized = sanitizeNumericInput(text, true, 2);
+    if (isMountedRef.current) {
+      setLocalAmount(sanitized);
+    }
+  }, []);
+
+  const handleSubmitEditing = useCallback(() => {
+    // Manually trigger blur when user presses Done
+    handleBlur();
+  }, [handleBlur]);
+
+  // Format currency
+  const formattedMaxAmount = useMemo(() => {
+    return `₹${maxAmountRef.current.toFixed(2)}`;
+  }, [maxAmount]);
+
+  return (
+    <View className={`flex-row items-center rounded-xl px-4 py-3 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}>
+      <Text className={`text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}>
+        ₹
+      </Text>
+      <TextInput
+        className={`flex-1 ml-3 text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+        placeholder="0.00"
+        placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
+        value={localAmount}
+        onChangeText={handleChangeText}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onSubmitEditing={handleSubmitEditing}
+        keyboardType="decimal-pad"
+        returnKeyType="done"
+        scrollEnabled={false}
+        textContentType="none"
+        autoComplete="off"
+        importantForAutofill="no"
+      />
+      <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+        / {formattedMaxAmount}
+      </Text>
     </View>
   );
 });
@@ -582,7 +665,7 @@ const InvoiceFormScreen = () => {
     const productData = stockData.product || {};
     const unit = productData.unit || stockData.unit || null;
     const stockQty = parseFloat(stockData.quantity || 0);
-    
+
     return {
       id: stockData.product_id || stockData.id,
       stock_id: stockData.id,
@@ -618,13 +701,13 @@ const InvoiceFormScreen = () => {
   // Handle QR code scan result
   const handleQRScanResult = useCallback(async (qrData) => {
     if (!qrScanningEnabled || scannerLoading) return;
-    
+
     setQrScanningEnabled(false);
     setScannerLoading(true);
-    
+
     try {
       const parsedData = parseQRData(qrData);
-      
+
       if (!parsedData || !parsedData.id) {
         Toast.show({
           type: 'error',
@@ -635,18 +718,18 @@ const InvoiceFormScreen = () => {
         setScannerLoading(false);
         return;
       }
-      
+
       let product = null;
       let qrType = parsedData.type;
-      
+
       if (parsedData.type === 'PRD') {
         try {
           const response = await invoiceAPI.getScannedProduct(parsedData.id);
-          
+
           if (response.data?.status === true && response.data?.data) {
             const productData = response.data.data;
             product = transformScannedProduct(productData);
-            
+
             Toast.show({
               type: 'success',
               text1: 'Product Found',
@@ -673,7 +756,7 @@ const InvoiceFormScreen = () => {
           setScannerLoading(false);
           return;
         }
-        
+
       } else if (parsedData.type === 'STK') {
         if (!hasStockPermission) {
           Toast.show({
@@ -685,14 +768,14 @@ const InvoiceFormScreen = () => {
           setScannerLoading(false);
           return;
         }
-        
+
         try {
           const response = await invoiceAPI.getScannedStock(parsedData.id);
-          
+
           if (response.data?.status === true && response.data?.data) {
             const stockData = response.data.data;
             product = transformScannedStock(stockData);
-            
+
             const stockQty = parseFloat(stockData.quantity || 0);
             Toast.show({
               type: 'success',
@@ -720,14 +803,14 @@ const InvoiceFormScreen = () => {
           setScannerLoading(false);
           return;
         }
-        
+
       } else {
         Toast.show({
           type: 'info',
           text1: 'Identifying',
           text2: 'Trying to identify product...',
         });
-        
+
         try {
           const response = await invoiceAPI.getScannedProduct(parsedData.id);
           if (response.data?.status === true && response.data?.data) {
@@ -740,8 +823,8 @@ const InvoiceFormScreen = () => {
               text2: `${product.name} added successfully!`,
             });
           }
-        } catch (e) {}
-        
+        } catch (e) { }
+
         if (!product && hasStockPermission) {
           try {
             const response = await invoiceAPI.getScannedStock(parsedData.id);
@@ -756,9 +839,9 @@ const InvoiceFormScreen = () => {
                 text2: `${product.name} - ${stockQty.toFixed(2)} units available`,
               });
             }
-          } catch (e) {}
+          } catch (e) { }
         }
-        
+
         if (!product) {
           Toast.show({
             type: 'error',
@@ -770,7 +853,7 @@ const InvoiceFormScreen = () => {
           return;
         }
       }
-      
+
       if (product) {
         const existingItemIndex = lineItems.findIndex(
           (item) =>
@@ -778,11 +861,11 @@ const InvoiceFormScreen = () => {
             item.product_id === product.id &&
             (hasStockPermission ? item.stock_id === product.stock_id : true),
         );
-        
+
         if (existingItemIndex !== -1) {
           const existingItem = lineItems[existingItemIndex];
           const newQuantity = parseFloat(existingItem.quantity) + 1;
-          
+
           if (hasStockPermission && product.stock_quantity !== null && product.stock_quantity !== undefined) {
             const availableStock = parseFloat(product.stock_quantity);
             if (availableStock > 0 && newQuantity > availableStock) {
@@ -796,7 +879,7 @@ const InvoiceFormScreen = () => {
               return;
             }
           }
-          
+
           setLineItems((prev) => {
             const next = [...prev];
             next[existingItemIndex] = {
@@ -812,7 +895,7 @@ const InvoiceFormScreen = () => {
             };
             return next;
           });
-          
+
           Toast.show({
             type: "success",
             text1: "Success",
@@ -830,12 +913,12 @@ const InvoiceFormScreen = () => {
             gst,
             discount,
           );
-          
+
           let unitName = "pcs";
           if (product.unit) {
             unitName = product.unit.short_name || product.unit.name || "pcs";
           }
-          
+
           const newItem = {
             product_id: product.id,
             stock_id: product.stock_id,
@@ -861,9 +944,9 @@ const InvoiceFormScreen = () => {
             stock_details: product.stock_details,
             scanned_from: qrType === 'STK' ? 'stock' : 'product'
           };
-          
+
           setLineItems((prev) => [...prev, newItem]);
-          
+
           const sourceText = qrType === 'STK' ? ' (Stock)' : '';
           Toast.show({
             type: "success",
@@ -871,10 +954,10 @@ const InvoiceFormScreen = () => {
             text2: `${newItem.product_name}${sourceText} added to invoice`,
           });
         }
-        
+
         setShowQRScanner(false);
       }
-      
+
     } catch (error) {
       console.error('QR scan error:', error);
       Toast.show({
@@ -1355,50 +1438,6 @@ const InvoiceFormScreen = () => {
     [totals.totalAmount, effectivePaidAmount],
   );
 
-  // Improved payment amount validation with proper sanitization
-  useEffect(() => {
-    if (formData.payment_status !== "semi_paid") return;
-    const t = totals.totalAmount;
-    const p = parseNumericValue(formData.payment_amount);
-    if (p > t) {
-      setFormData((prev) => ({ ...prev, payment_amount: t.toString() }));
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: `Payment amount adjusted to maximum: ₹${t.toFixed(2)}`,
-      });
-    }
-  }, [totals.totalAmount, formData.payment_status]);
-
-  // Improved payment amount change handler with proper sanitization
-  const handlePaymentAmountChange = (value) => {
-    let cleanedValue = sanitizeNumericInput(value, true, 2);
-    
-    if (cleanedValue === "") {
-      setFormData((prev) => ({ ...prev, payment_amount: "" }));
-      return;
-    }
-
-    let numValue = parseFloat(cleanedValue);
-    if (isNaN(numValue)) numValue = 0;
-
-    const maxAmount = totals.totalAmount;
-    if (numValue > maxAmount) {
-      numValue = maxAmount;
-      cleanedValue = numValue.toString();
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: `Payment amount cannot exceed total amount. Set to maximum: ₹${maxAmount.toFixed(2)}`,
-      });
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      payment_amount: cleanedValue,
-    }));
-  };
-
   // Handle adding item with multiple stock variants
   const handleAddItem = async (product) => {
     let productWithGST = product;
@@ -1609,7 +1648,7 @@ const InvoiceFormScreen = () => {
   const handleUpdateItem = useCallback((index, field, value) => {
     const item = lineItems[index];
     if (!item) return;
-    
+
     if (item.is_package) {
       if (field === "quantity") {
         const finalQ = Math.max(1, value);
@@ -1654,14 +1693,14 @@ const InvoiceFormScreen = () => {
     setLineItems((prev) => {
       const next = [...prev];
       const row = { ...next[index] };
-      
+
       if (field === "quantity") {
         row.quantity = value;
         row.item_count = value;
       } else {
         row[field] = value;
       }
-      
+
       row.total_price = calculateItemTotal(
         row.price || 0,
         row.quantity || 1,
@@ -1680,6 +1719,11 @@ const InvoiceFormScreen = () => {
     }
     setLineItems((prev) => prev.filter((_, i) => i !== index));
   };
+
+  // Payment amount change handler - stable reference
+  const handlePaymentAmountChange = useCallback((value) => {
+    setFormData((prev) => ({ ...prev, payment_amount: value }));
+  }, []);
 
   const handleCustomerSelect = (customerId, customer) => {
     setFormData({ ...formData, customer_id: customerId?.toString() || "" });
@@ -1960,51 +2004,51 @@ const InvoiceFormScreen = () => {
     if (!invoice) return null;
 
     const customerData = invoice.customer || {};
-    const customerName = customerData.name || 
-                         invoice.customer_name || 
-                         invoice.customerName || 
-                         "Walk-in Customer";
-    const customerPhone = customerData.phone || 
-                          invoice.customer_phone || 
-                          invoice.customerPhone || 
-                          "N/A";
-    const customerEmail = customerData.email || 
-                          invoice.customer_email || 
-                          invoice.customerEmail || 
-                          "N/A";
-    const customerAddress = customerData.address || 
-                            invoice.customer_address || 
-                            invoice.customerAddress || 
-                            "N/A";
-    const customerGst = customerData.gst || 
-                        customerData.gst_number || 
-                        invoice.customer_gst || 
-                        invoice.customerGst || 
-                        "N/A";
+    const customerName = customerData.name ||
+      invoice.customer_name ||
+      invoice.customerName ||
+      "Walk-in Customer";
+    const customerPhone = customerData.phone ||
+      invoice.customer_phone ||
+      invoice.customerPhone ||
+      "N/A";
+    const customerEmail = customerData.email ||
+      invoice.customer_email ||
+      invoice.customerEmail ||
+      "N/A";
+    const customerAddress = customerData.address ||
+      invoice.customer_address ||
+      invoice.customerAddress ||
+      "N/A";
+    const customerGst = customerData.gst ||
+      customerData.gst_number ||
+      invoice.customer_gst ||
+      invoice.customerGst ||
+      "N/A";
 
     const storeData = invoice.store || {};
-    const storeName = storeData.name || 
-                      invoice.store_name || 
-                      invoice.storeName || 
-                      "Your Store Name";
-    const storeAddress = storeData.address || 
-                         invoice.store_address || 
-                         invoice.storeAddress || 
-                         "123 Business Street, City";
-    const storeGst = storeData.gst || 
-                     storeData.gst_number || 
-                     invoice.store_gst || 
-                     invoice.storeGst || 
-                     "GSTIN123456";
-    const storeEmail = storeData.email || 
-                       invoice.store_email || 
-                       invoice.storeEmail || 
-                       "store@business.com";
-    const storePhone = storeData.mobile || 
-                       storeData.phone || 
-                       invoice.store_phone || 
-                       invoice.storePhone || 
-                       "123-456-7890";
+    const storeName = storeData.name ||
+      invoice.store_name ||
+      invoice.storeName ||
+      "Your Store Name";
+    const storeAddress = storeData.address ||
+      invoice.store_address ||
+      invoice.storeAddress ||
+      "123 Business Street, City";
+    const storeGst = storeData.gst ||
+      storeData.gst_number ||
+      invoice.store_gst ||
+      invoice.storeGst ||
+      "GSTIN123456";
+    const storeEmail = storeData.email ||
+      invoice.store_email ||
+      invoice.storeEmail ||
+      "store@business.com";
+    const storePhone = storeData.mobile ||
+      storeData.phone ||
+      invoice.store_phone ||
+      invoice.storePhone ||
+      "123-456-7890";
 
     const items = invoice.items || invoice.invoice_items || [];
     const transformedItems = items.map(item => {
@@ -2012,7 +2056,7 @@ const InvoiceFormScreen = () => {
       const price = parseFloat(item.price || 0);
       const gst = parseFloat(item.gst || 0);
       const discount = parseFloat(item.discount || 0);
-      
+
       let totalPrice = item.total_price || item.totalPrice || 0;
       if (!item.total_price && !item.totalPrice) {
         const basePrice = price * quantity;
@@ -2063,7 +2107,7 @@ const InvoiceFormScreen = () => {
 
     let totalAmount = parseFloat(invoice.total_amount || invoice.totalAmount || 0);
     let paidAmount = parseFloat(invoice.paid_amount || invoice.paidAmount || 0);
-    
+
     if (!totalAmount && transformedItems.length > 0) {
       totalAmount = transformedItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
       if (transformedPackages.length > 0) {
@@ -2077,14 +2121,14 @@ const InvoiceFormScreen = () => {
       invoice_number: invoice.invoice_number || invoice.invoice_id || `INV-${Date.now()}`,
       created_at: invoice.created_at || invoice.createdAt || new Date().toISOString(),
       invoice_date: invoice.invoice_date || invoice.created_at || new Date().toISOString(),
-      
+
       customer_id: invoice.customer_id,
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_email: customerEmail,
       customer_address: customerAddress,
       customer_gst: customerGst,
-      
+
       customer: {
         id: invoice.customer_id,
         name: customerName,
@@ -2094,7 +2138,7 @@ const InvoiceFormScreen = () => {
         gst: customerGst,
         gst_number: customerGst,
       },
-      
+
       store_id: invoice.store_id,
       store_name: storeName,
       store_address: storeAddress,
@@ -2103,7 +2147,7 @@ const InvoiceFormScreen = () => {
       store_phone: storePhone,
       store_logo: invoice.store_logo || invoice.storeLogo,
       bank_qr: invoice.bank_qr || invoice.bankQr,
-      
+
       store: {
         id: invoice.store_id,
         name: storeName,
@@ -2116,17 +2160,17 @@ const InvoiceFormScreen = () => {
         logo: invoice.store_logo || invoice.storeLogo,
         bank_qr: invoice.bank_qr || invoice.bankQr,
       },
-      
+
       total_amount: totalAmount,
       paid_amount: paidAmount,
       payment_method: invoice.payment_method || invoice.paymentMode || "Cash",
       payment_status: invoice.payment_status || "paid",
       payment_mode: invoice.payment_method || invoice.paymentMode || "Cash",
-      
+
       items: transformedItems,
       invoice_items: transformedItems,
       packages: transformedPackages,
-      
+
       hasStockPermission: invoice.hasStockPermission || false,
     };
   };
@@ -2152,24 +2196,24 @@ const InvoiceFormScreen = () => {
 
       const transformedInvoice = transformInvoiceForTemplate(invoiceData);
       const html = generateA4InvoiceHTML(transformedInvoice, false);
-      
+
       await printAsync({
         html: html,
         width: 794,
         height: 1123,
       });
-      
+
       Toast.show({
         type: 'success',
         text1: 'Success',
         text2: 'A4 Invoice printed successfully',
       });
-      
+
       setTimeout(() => {
         setShowInvoiceSuccess(false);
         navigation.goBack();
       }, 1000);
-      
+
     } catch (error) {
       console.error('Print A4 error:', error);
       Toast.show({
@@ -2201,24 +2245,24 @@ const InvoiceFormScreen = () => {
 
       const transformedInvoice = transformInvoiceForTemplate(invoiceData);
       const html = generateThermalInvoiceHTML(transformedInvoice, false);
-      
+
       await printAsync({
         html: html,
         width: 288,
         height: 'auto',
       });
-      
+
       Toast.show({
         type: 'success',
         text1: 'Success',
         text2: 'Thermal Invoice printed successfully',
       });
-      
+
       setTimeout(() => {
         setShowInvoiceSuccess(false);
         navigation.goBack();
       }, 1000);
-      
+
     } catch (error) {
       console.error('Print thermal error:', error);
       Toast.show({
@@ -2252,24 +2296,24 @@ const InvoiceFormScreen = () => {
       const html = type === 'a4'
         ? generateA4InvoiceHTML(transformedInvoice, false)
         : generateThermalInvoiceHTML(transformedInvoice, false);
-      
+
       const { uri } = await printAsync({
         html: html,
         width: type === 'a4' ? 794 : 288,
         height: type === 'a4' ? 1123 : 'auto',
       });
-      
+
       await shareAsync(uri, {
         UTI: 'com.adobe.pdf',
         mimeType: 'application/pdf',
       });
-      
+
       Toast.show({
         type: 'success',
         text1: 'Success',
         text2: 'Invoice saved as PDF',
       });
-      
+
     } catch (error) {
       console.error('Save PDF error:', error);
       Toast.show({
@@ -2331,7 +2375,7 @@ const InvoiceFormScreen = () => {
   // ============ IMPROVED SUBMIT WITH BETTER VALIDATION ============
   const handleSubmit = async () => {
     let validationErrors = [];
-    
+
     if (!formData.customer_id) {
       validationErrors.push("Please select a customer");
     }
@@ -2734,7 +2778,7 @@ const InvoiceFormScreen = () => {
             {/* QR Scanner Button */}
             <Card className="p-4 mb-3">
               <SectionHeader icon="qrcode-scan" title="Quick Add" />
-              
+
               <TouchableOpacity
                 onPress={async () => {
                   const hasPermission = await requestCameraPermission();
@@ -2768,7 +2812,7 @@ const InvoiceFormScreen = () => {
                   style={{ marginLeft: 'auto' }}
                 />
               </TouchableOpacity>
-              
+
               <Text
                 className={`text-xs text-center mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
               >
@@ -3107,7 +3151,7 @@ const InvoiceFormScreen = () => {
               )}
             </Card>
 
-            {/* Payment Settings */}
+            {/* Payment Settings - FIXED WITH MEMOIZED COMPONENT */}
             <Card className="p-4 mb-3">
               <SectionHeader icon="credit-card" title="Payment Settings" />
 
@@ -3198,38 +3242,17 @@ const InvoiceFormScreen = () => {
                   >
                     Payment Amount
                   </Text>
-                  <View
-                    className={`flex-row items-center rounded-xl px-4 py-3 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}
-                  >
-                    <Text
-                      className={`text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                    >
-                      ₹
-                    </Text>
-                    <TextInput
-                      className={`flex-1 ml-3 text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                      placeholder="0.00"
-                      placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
-                      value={formData.payment_amount}
-                      onChangeText={handlePaymentAmountChange}
-                      keyboardType="decimal-pad"
-                      blurOnSubmit={true}
-                      returnKeyType="done"
-                      keyboardShouldPersistTaps="handled"
-                      textContentType="none"
-                      autoComplete="off"
-                    />
-                    <Text
-                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                    >
-                      / ₹{totals.totalAmount.toFixed(2)}
-                    </Text>
-                  </View>
+                  <PaymentAmountInput
+                    initialValue={formData.payment_amount}
+                    onAmountChange={handlePaymentAmountChange}
+                    isDarkMode={isDarkMode}
+                    maxAmount={totals.totalAmount}
+                  />
                 </View>
               )}
             </Card>
 
-            {/* Summary */}
+            {/* Summary - Improved Design */}
             <Card className="p-4 mb-3">
               <SectionHeader icon="calculator" title="Invoice Summary" />
 
@@ -3248,7 +3271,7 @@ const InvoiceFormScreen = () => {
                 </View>
 
                 {totals.totalDiscount > 0 && (
-                  <View className="flex-row justify-between py-2">
+                  <View className="flex-row justify-between py-2 border-b border-dashed" style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}>
                     <Text
                       className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
                     >
@@ -3261,7 +3284,7 @@ const InvoiceFormScreen = () => {
                 )}
 
                 {totals.totalGst > 0 && (
-                  <View className="flex-row justify-between py-2">
+                  <View className="flex-row justify-between py-2 border-b border-dashed" style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}>
                     <Text
                       className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
                     >
@@ -3276,7 +3299,7 @@ const InvoiceFormScreen = () => {
                 )}
 
                 {totals.packageTotal > 0 && (
-                  <View className="flex-row justify-between py-2">
+                  <View className="flex-row justify-between py-2 border-b border-dashed" style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}>
                     <Text
                       className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
                     >
@@ -3291,7 +3314,7 @@ const InvoiceFormScreen = () => {
                 )}
 
                 <View
-                  className="flex-row justify-between items-center py-3 mt-2 border-t border-dashed"
+                  className="flex-row justify-between items-center py-4 mt-2 border-t-2 border-dashed"
                   style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
                 >
                   <Text
@@ -3308,8 +3331,8 @@ const InvoiceFormScreen = () => {
 
                 {formData.payment_status !== "non_paid" && (
                   <View
-                    className="flex-row justify-between py-2 border-t"
-                    style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
+                    className="flex-row justify-between py-2"
+                    style={{ borderTopColor: isDarkMode ? "#374151" : "#e5e7eb" }}
                   >
                     <Text
                       className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
@@ -3324,13 +3347,13 @@ const InvoiceFormScreen = () => {
 
                 {formData.payment_status !== "paid" &&
                   effectivePaidAmount < totals.totalAmount && (
-                    <View className="flex-row justify-between py-2">
+                    <View className="flex-row justify-between py-2 bg-red-500/10 rounded-lg px-3">
                       <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}
                       >
                         Balance Due
                       </Text>
-                      <Text className={`text-sm font-medium text-red-600`}>
+                      <Text className={`text-sm font-bold text-red-600`}>
                         ₹{dueAfterPayment.toFixed(2)}
                       </Text>
                     </View>
@@ -3338,34 +3361,29 @@ const InvoiceFormScreen = () => {
               </View>
             </Card>
 
-            {/* Bottom Action Button */}
+            {/* Bottom Action Button - Improved Design */}
             <View className="px-4 mt-2 mb-4">
               <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={submitting}
-                className={`w-full py-4 rounded-2xl shadow-lg ${submitting ? "bg-gray-400" : "bg-blue-600"}`}
+                className={`w-full py-4 rounded-2xl shadow-lg ${submitting ? "bg-gray-400" : "bg-blue-600"} flex-row items-center justify-center`}
               >
-                <View className="flex-row items-center justify-center">
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
                     <Icon name="content-save" size={24} color="#ffffff" />
-                  )}
-                  <Text className="text-white font-bold text-lg ml-2">
-                    {submitting
-                      ? "Saving Invoice..."
-                      : isEdit
-                        ? "Update Invoice"
-                        : "Create Invoice"}
-                  </Text>
-                </View>
+                    <Text className="text-white font-bold text-lg ml-2">
+                      {isEdit ? "Update Invoice" : "Create Invoice"}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
 
-      {/* All Modal components remain the same */}
       {/* QR Scanner Modal */}
       <Modal
         visible={showQRScanner}
@@ -3402,7 +3420,7 @@ const InvoiceFormScreen = () => {
                     <View className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-lg" />
                     <View className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-lg" />
                     <View className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-lg" />
-                    <View className="absolute top-0 left-0 right-0 h-0.5 bg-blue-400 animate-pulse" style={{ 
+                    <View className="absolute top-0 left-0 right-0 h-0.5 bg-blue-400 animate-pulse" style={{
                       shadowColor: '#3b82f6',
                       shadowOffset: { width: 0, height: 0 },
                       shadowOpacity: 0.8,
@@ -3621,7 +3639,7 @@ const InvoiceFormScreen = () => {
               <Text
                 className={`text-sm text-center mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
               >
-                Invoice #{createdInvoiceData?.invoice_number || createdInvoiceData?.id || 'N/A'} 
+                Invoice #{createdInvoiceData?.invoice_number || createdInvoiceData?.id || 'N/A'}
                 for ₹{createdInvoiceData?.total_amount?.toFixed(2) || '0.00'}
               </Text>
             </View>
@@ -4261,9 +4279,8 @@ const InvoiceFormScreen = () => {
               <TouchableOpacity
                 onPress={handleCreateStore}
                 disabled={isCreatingStore || stores.length > 0}
-                className={`w-full py-4 rounded-xl shadow-lg flex-row items-center justify-center ${
-                  stores.length > 0 ? "bg-gray-400" : "bg-purple-600"
-                }`}
+                className={`w-full py-4 rounded-xl shadow-lg flex-row items-center justify-center ${stores.length > 0 ? "bg-gray-400" : "bg-purple-600"
+                  }`}
               >
                 {isCreatingStore ? (
                   <ActivityIndicator size="small" color="#ffffff" />
