@@ -1,4 +1,4 @@
-// store/invoiceStore.js - COMPLETE FIXED VERSION
+// store/invoiceStore.js - UPDATED WITH QR SCANNING SUPPORT
 import { create } from 'zustand';
 import { invoiceAPI } from '../api';
 import Toast from 'react-native-toast-message';
@@ -560,6 +560,224 @@ export const useInvoiceStore = create((set, get) => ({
       console.error('Failed to fetch invoice:', error);
       set({ loading: false, error: error.message });
       return null;
+    }
+  },
+
+  // ============ QR SCANNING METHODS ============
+
+  /**
+   * Fetch scanned product by ID (from product table)
+   * @param {string|number} productId - The product ID
+   * @returns {Promise<Object>} - The product data
+   */
+  fetchScannedProduct: async (productId) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await invoiceAPI.getScannedProduct(productId);
+      
+      if (response.data?.status === true && response.data?.data) {
+        const product = response.data.data;
+        set({ loading: false });
+        return { 
+          success: true, 
+          data: product,
+          type: 'product'
+        };
+      } else {
+        set({ loading: false });
+        return { 
+          success: false, 
+          error: response.data?.message || 'Product not found' 
+        };
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch scanned product:', error);
+      set({ loading: false, error: error.message });
+      return { 
+        success: false, 
+        error: error.message || 'Failed to fetch product' 
+      };
+    }
+  },
+
+  /**
+   * Fetch scanned stock by ID (from stock table)
+   * @param {string|number} stockId - The stock ID
+   * @returns {Promise<Object>} - The stock data
+   */
+  fetchScannedStock: async (stockId) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await invoiceAPI.getScannedStock(stockId);
+      
+      if (response.data?.status === true && response.data?.data) {
+        const stock = response.data.data;
+        set({ loading: false });
+        return { 
+          success: true, 
+          data: stock,
+          type: 'stock'
+        };
+      } else {
+        set({ loading: false });
+        return { 
+          success: false, 
+          error: response.data?.message || 'Stock not found' 
+        };
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch scanned stock:', error);
+      set({ loading: false, error: error.message });
+      return { 
+        success: false, 
+        error: error.message || 'Failed to fetch stock' 
+      };
+    }
+  },
+
+  /**
+   * Handle QR scan result - detects type and fetches appropriate data
+   * @param {string} qrData - The raw QR code data
+   * @param {boolean} hasStockPermission - Whether user has stock permission
+   * @returns {Promise<Object>} - The product/stock data with type info
+   */
+  handleQRScan: async (qrData, hasStockPermission = false) => {
+    set({ loading: true, error: null });
+    
+    try {
+      if (!qrData) {
+        throw new Error('QR data is required');
+      }
+
+      // Parse the QR data
+      let parsedData = null;
+      
+      // Try to parse as JSON
+      try {
+        if (qrData.startsWith('{')) {
+          const parsed = JSON.parse(qrData);
+          parsedData = {
+            type: parsed.type || parsed.qrType || null,
+            id: parsed.id || parsed.productId || parsed.stockId || null,
+            raw: parsed
+          };
+        }
+      } catch (e) {
+        // Not JSON, try other formats
+      }
+      
+      // If not parsed yet, try string format "TYPE:ID" or "TYPE-ID"
+      if (!parsedData) {
+        const typeMatch = qrData.match(/^(PRD|STK)[:\-](\d+)/i);
+        if (typeMatch) {
+          parsedData = {
+            type: typeMatch[1].toUpperCase(),
+            id: typeMatch[2],
+            raw: qrData
+          };
+        } else {
+          // Try to extract ID from string
+          const idMatch = qrData.match(/\d+/);
+          if (idMatch) {
+            parsedData = {
+              type: null,
+              id: idMatch[0],
+              raw: qrData
+            };
+          }
+        }
+      }
+      
+      if (!parsedData || !parsedData.id) {
+        throw new Error('Could not parse QR code data');
+      }
+      
+      let result = null;
+      
+      // Determine how to fetch based on QR type
+      if (parsedData.type === 'PRD') {
+        // Fetch from product endpoint
+        const response = await get().fetchScannedProduct(parsedData.id);
+        if (response.success) {
+          result = {
+            type: 'product',
+            data: response.data,
+            qrType: 'PRD',
+            rawData: parsedData.raw
+          };
+        } else {
+          throw new Error(response.error || 'Product not found');
+        }
+      } else if (parsedData.type === 'STK') {
+        // Check if user has stock permission
+        if (!hasStockPermission) {
+          throw new Error('You do not have permission to scan stock QR codes');
+        }
+        
+        // Fetch from stock endpoint
+        const response = await get().fetchScannedStock(parsedData.id);
+        if (response.success) {
+          result = {
+            type: 'stock',
+            data: response.data,
+            qrType: 'STK',
+            rawData: parsedData.raw
+          };
+        } else {
+          throw new Error(response.error || 'Stock not found');
+        }
+      } else {
+        // Unknown type - try both endpoints
+        // Try product endpoint first
+        try {
+          const productResponse = await get().fetchScannedProduct(parsedData.id);
+          if (productResponse.success) {
+            result = {
+              type: 'product',
+              data: productResponse.data,
+              qrType: 'PRD',
+              rawData: parsedData.raw
+            };
+          }
+        } catch (e) {
+          // Product not found, try stock if permitted
+        }
+        
+        // If product not found and stock permission exists, try stock
+        if (!result && hasStockPermission) {
+          try {
+            const stockResponse = await get().fetchScannedStock(parsedData.id);
+            if (stockResponse.success) {
+              result = {
+                type: 'stock',
+                data: stockResponse.data,
+                qrType: 'STK',
+                rawData: parsedData.raw
+              };
+            }
+          } catch (e) {
+            // Both failed
+          }
+        }
+        
+        if (!result) {
+          throw new Error('Could not find product or stock with this ID');
+        }
+      }
+      
+      set({ loading: false });
+      return { 
+        success: true, 
+        ...result 
+      };
+      
+    } catch (error) {
+      console.error('❌ Error handling QR scan:', error);
+      set({ loading: false, error: error.message });
+      return { 
+        success: false, 
+        error: error.message || 'Failed to process QR code' 
+      };
     }
   },
 

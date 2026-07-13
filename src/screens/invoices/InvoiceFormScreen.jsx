@@ -1,7 +1,7 @@
-// screens/invoices/InvoiceFormScreen.js - COMPLETE UPDATED VERSION WITH PROPER DATA FORMATTING
+// screens/invoices/InvoiceFormScreen.js - COMPLETE FIXED VERSION
 
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -14,16 +14,20 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Keyboard,
+  TouchableWithoutFeedback
 } from "react-native";
 import Toast from "react-native-toast-message";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { invoiceAPI } from "../../api/invoices";
 import {
-  SuccessModal
+  SuccessModal,
+  InfoModal
 } from "../../components/common/CustomModal";
 import Header from "../../components/common/Header";
 import SearchSelect from "../../components/common/SearchSelect";
+import Input from "../../components/common/Input";
 import { useAuthStore } from "../../store/authStore";
 import useCustomerStore from "../../store/customerStore";
 import useInvoiceStore from "../../store/invoiceStore";
@@ -32,13 +36,378 @@ import { usePermissionStore } from "../../store/permissionStore";
 import useProductStore from "../../store/productStore";
 import useStoreStore from "../../store/storeStore";
 import { useThemeStore } from "../../store/themeStore";
-import { generateA4InvoiceHTML, generateThermalInvoiceHTML } from "../../templates/invoiceTemplates"
+import { generateA4InvoiceHTML, generateThermalInvoiceHTML } from "../../templates/invoiceTemplates";
 import { printAsync } from "expo-print";
 import { shareAsync } from "expo-sharing";
 import * as FileSystem from "expo-file-system";
+import { Camera, CameraView } from "expo-camera";
 
 const { width } = Dimensions.get("window");
 
+// Helper function to sanitize numeric input
+const sanitizeNumericInput = (value, allowDecimal = true, maxDecimals = 2) => {
+  if (value === "" || value === null || value === undefined) return "";
+  
+  let cleaned = value.toString().replace(/[^0-9.]/g, "");
+  
+  const decimalCount = (cleaned.match(/\./g) || []).length;
+  if (decimalCount > 1) {
+    cleaned = cleaned.slice(0, cleaned.lastIndexOf("."));
+  }
+  
+  if (allowDecimal && cleaned.includes(".")) {
+    const parts = cleaned.split(".");
+    if (parts[1] && parts[1].length > maxDecimals) {
+      parts[1] = parts[1].slice(0, maxDecimals);
+      cleaned = parts.join(".");
+    }
+  }
+  
+  return cleaned;
+};
+
+// Helper function to parse numeric value
+const parseNumericValue = (value) => {
+  if (value === "" || value === null || value === undefined) return 0;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+// Helper function to parse QR code data
+const parseQRData = (qrData) => {
+  try {
+    if (qrData.startsWith('{')) {
+      const parsed = JSON.parse(qrData);
+      return {
+        type: parsed.type || parsed.qrType || null,
+        id: parsed.id || parsed.productId || parsed.stockId || null,
+        raw: parsed
+      };
+    }
+    
+    const typeMatch = qrData.match(/^(PRD|STK)(\d+)$/i);
+    if (typeMatch) {
+      const type = typeMatch[1].toUpperCase();
+      let id = typeMatch[2];
+      id = id.replace(/^0+/, '');
+      if (id === '') {
+        id = '0';
+      }
+      return {
+        type: type,
+        id: id,
+        raw: qrData
+      };
+    }
+    
+    const idMatch = qrData.match(/\d+/);
+    if (idMatch) {
+      return {
+        type: null,
+        id: idMatch[0],
+        raw: qrData
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Failed to parse QR data:', error);
+    return null;
+  }
+};
+
+// ============ LINE ITEM COMPONENT WITH LOCAL STATE ============
+const LineItemComponent = React.memo(({ 
+  item, 
+  index, 
+  onUpdate, 
+  onRemove, 
+  isDarkMode,
+  hasStockPermission 
+}) => {
+  // Local state for input values - prevents parent re-render on every keystroke
+  const [localQuantity, setLocalQuantity] = useState(item.quantity?.toString() || "1");
+  const [localPrice, setLocalPrice] = useState(item.price?.toString() || "0");
+  const [localGst, setLocalGst] = useState(item.gst?.toString() || "0");
+  const [localDiscount, setLocalDiscount] = useState(item.discount?.toString() || "0");
+  
+  // Ref to track if we're currently typing
+  const isTypingRef = useRef(false);
+  const timeoutRef = useRef(null);
+
+  // Update local state when prop changes (only when item changes from outside)
+  useEffect(() => {
+    if (!isTypingRef.current) {
+      setLocalQuantity(item.quantity?.toString() || "1");
+      setLocalPrice(item.price?.toString() || "0");
+      setLocalGst(item.gst?.toString() || "0");
+      setLocalDiscount(item.discount?.toString() || "0");
+    }
+  }, [item.quantity, item.price, item.gst, item.discount]);
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Handle blur - update parent state
+  const handleBlur = (field, value, minValue = 0) => {
+    isTypingRef.current = false;
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue >= minValue) {
+      onUpdate(index, field, numValue);
+    } else {
+      // Reset to default if invalid
+      const defaultValue = field === 'quantity' ? 1 : 0;
+      onUpdate(index, field, defaultValue);
+      if (field === 'quantity') setLocalQuantity(defaultValue.toString());
+      else if (field === 'price') setLocalPrice(defaultValue.toString());
+      else if (field === 'gst') setLocalGst(defaultValue.toString());
+      else if (field === 'discount') setLocalDiscount(defaultValue.toString());
+    }
+  };
+
+  // Handle focus
+  const handleFocus = () => {
+    isTypingRef.current = true;
+  };
+
+  // Handle quantity change with debounce for real-time updates
+  const handleQuantityChange = (text) => {
+    const sanitized = text.replace(/[^0-9]/g, '');
+    setLocalQuantity(sanitized);
+    
+    // Clear existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Only update parent after typing stops
+    timeoutRef.current = setTimeout(() => {
+      const num = parseInt(sanitized) || 1;
+      if (num >= 1) {
+        onUpdate(index, 'quantity', num);
+      }
+    }, 300);
+  };
+
+  return (
+    <View className={`p-4 rounded-xl mb-3 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"} border ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}>
+      {/* Header */}
+      <View className="flex-row justify-between items-start mb-3">
+        <View className="flex-1">
+          <View className="flex-row items-center flex-wrap">
+            {item.is_package && (
+              <View className={`px-2 py-0.5 rounded mr-2 ${isDarkMode ? "bg-purple-500/30" : "bg-purple-100"}`}>
+                <Text className={`text-xs font-semibold ${isDarkMode ? "text-purple-400" : "text-purple-700"}`}>
+                  PACKAGE
+                </Text>
+              </View>
+            )}
+            {item.scanned_from && (
+              <View className={`px-2 py-0.5 rounded mr-2 ${isDarkMode ? "bg-green-500/30" : "bg-green-100"}`}>
+                <Text className={`text-xs font-semibold ${isDarkMode ? "text-green-400" : "text-green-700"}`}>
+                  SCANNED
+                </Text>
+              </View>
+            )}
+            <Text className={`font-semibold text-base flex-1 ${isDarkMode ? "text-white" : "text-gray-800"}`}>
+              {item.product_name}
+            </Text>
+          </View>
+          
+          <View className="flex-row items-center mt-0.5">
+            {item.product_code && (
+              <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                {item.product_code}
+              </Text>
+            )}
+            {item.variant_info && (
+              <Text className={`ml-2 text-xs ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
+                ({item.variant_info})
+              </Text>
+            )}
+          </View>
+          
+          {item.unit_name && (
+            <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>
+              Unit: {item.unit_name}
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity onPress={() => onRemove(index)} className="p-2 rounded-lg bg-red-500/10">
+          <Icon name="delete-outline" size={22} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Input Fields - Using local state to prevent re-renders */}
+      <View className="flex-row flex-wrap gap-3">
+        {/* Quantity */}
+        <View className="flex-1 min-w-[100px]">
+          <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
+            Quantity
+          </Text>
+          <View className={`flex-row items-center rounded-lg px-1 ${isDarkMode ? "bg-gray-600" : "bg-white"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}>
+            <TouchableOpacity
+              onPress={() => {
+                const current = parseInt(localQuantity) || 1;
+                const newVal = Math.max(1, current - 1);
+                setLocalQuantity(newVal.toString());
+                onUpdate(index, "quantity", newVal);
+              }}
+              className="p-1"
+            >
+              <Icon name="minus" size={18} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
+            </TouchableOpacity>
+            
+            <TextInput
+              className={`flex-1 text-center font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+              value={localQuantity}
+              onChangeText={handleQuantityChange}
+              onFocus={handleFocus}
+              onBlur={() => {
+                const num = parseInt(localQuantity) || 1;
+                const finalVal = Math.max(1, num);
+                setLocalQuantity(finalVal.toString());
+                onUpdate(index, "quantity", finalVal);
+              }}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              scrollEnabled={false}
+              textContentType="none"
+              autoComplete="off"
+              importantForAutofill="no"
+            />
+            
+            <TouchableOpacity
+              onPress={() => {
+                const current = parseInt(localQuantity) || 1;
+                const newVal = current + 1;
+                setLocalQuantity(newVal.toString());
+                onUpdate(index, "quantity", newVal);
+              }}
+              className="p-1"
+            >
+              <Icon name="plus" size={18} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Price */}
+        {!item.is_package && (
+          <>
+            <View className="flex-1 min-w-[100px]">
+              <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
+                Price
+              </Text>
+              <TextInput
+                className={`px-3 py-2 rounded-lg text-base ${isDarkMode ? "bg-gray-600 text-white" : "bg-white text-gray-800"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
+                value={localPrice}
+                onChangeText={(text) => {
+                  const sanitized = sanitizeNumericInput(text, true, 2);
+                  setLocalPrice(sanitized);
+                }}
+                onFocus={handleFocus}
+                onBlur={() => {
+                  const num = parseFloat(localPrice) || 0;
+                  setLocalPrice(num.toString());
+                  onUpdate(index, "price", num);
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
+                returnKeyType="done"
+                scrollEnabled={false}
+                textContentType="none"
+                autoComplete="off"
+                importantForAutofill="no"
+              />
+            </View>
+
+            {/* GST */}
+            <View className="flex-1 min-w-[100px]">
+              <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
+                GST %
+              </Text>
+              <TextInput
+                className={`px-3 py-2 rounded-lg text-base ${isDarkMode ? "bg-gray-600 text-white" : "bg-white text-gray-800"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
+                value={localGst}
+                onChangeText={(text) => {
+                  const sanitized = sanitizeNumericInput(text, true, 2);
+                  setLocalGst(sanitized);
+                }}
+                onFocus={handleFocus}
+                onBlur={() => {
+                  const num = parseFloat(localGst) || 0;
+                  setLocalGst(num.toString());
+                  onUpdate(index, "gst", num);
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
+                returnKeyType="done"
+                scrollEnabled={false}
+                textContentType="none"
+                autoComplete="off"
+                importantForAutofill="no"
+              />
+              {item.original_gst_percentage > 0 && parseFloat(item.gst) < item.original_gst_percentage && (
+                <Text className="text-xs text-red-500 mt-1">
+                  ⚠️ GST ({item.original_gst_percentage}%)
+                </Text>
+              )}
+            </View>
+
+            {/* Discount */}
+            <View className="flex-1 min-w-[100px]">
+              <Text className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
+                Discount %
+              </Text>
+              <TextInput
+                className={`px-3 py-2 rounded-lg text-base ${isDarkMode ? "bg-gray-600 text-white" : "bg-white text-gray-800"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
+                value={localDiscount}
+                onChangeText={(text) => {
+                  const sanitized = sanitizeNumericInput(text, true, 2);
+                  setLocalDiscount(sanitized);
+                }}
+                onFocus={handleFocus}
+                onBlur={() => {
+                  const num = parseFloat(localDiscount) || 0;
+                  setLocalDiscount(num.toString());
+                  onUpdate(index, "discount", num);
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
+                returnKeyType="done"
+                scrollEnabled={false}
+                textContentType="none"
+                autoComplete="off"
+                importantForAutofill="no"
+              />
+            </View>
+          </>
+        )}
+      </View>
+
+      {/* Total */}
+      <View className="flex-row justify-between items-center mt-3 pt-3 border-t" style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}>
+        <Text className={`text-sm font-medium ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+          Total
+        </Text>
+        <Text className={`text-base font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}>
+          ₹{item.total_price?.toFixed(2) || "0.00"}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+// ============ MAIN COMPONENT ============
 const InvoiceFormScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -60,6 +429,12 @@ const InvoiceFormScreen = () => {
   const [submitting, setSubmitting] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataFetchError, setDataFetchError] = useState(false);
+
+  // QR Scanner states
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [scannerLoading, setScannerLoading] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState(null);
+  const [qrScanningEnabled, setQrScanningEnabled] = useState(true);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -139,6 +514,10 @@ const InvoiceFormScreen = () => {
   const [createdInvoiceData, setCreatedInvoiceData] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
+  // Validation Alert Modal
+  const [showValidationAlert, setShowValidationAlert] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
+
   // Success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
@@ -158,6 +537,363 @@ const InvoiceFormScreen = () => {
     if (user && user.id) return user.id.toString();
     return "1";
   }, [user]);
+
+  // Request camera permission
+  const requestCameraPermission = useCallback(async () => {
+    try {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasCameraPermission(status === 'granted');
+      return status === 'granted';
+    } catch (error) {
+      console.error('Camera permission error:', error);
+      setHasCameraPermission(false);
+      return false;
+    }
+  }, []);
+
+  // Transform scanned product data
+  const transformScannedProduct = useCallback((productData) => {
+    return {
+      id: productData.id,
+      stock_id: null,
+      variant_index: 0,
+      name: productData.name,
+      sku: productData.sku,
+      brand: productData.brand,
+      category: productData.category,
+      unit: productData.unit,
+      attributes: productData.attributes || [],
+      variants: productData.variants || [],
+      price: parseFloat(productData.selling_price || 0),
+      purchase_price: parseFloat(productData.purchase_price || 0),
+      gst_percentage: parseFloat(productData.gst_percentage || 0),
+      discount_percentage: parseFloat(productData.discount_percentage || 0),
+      current_stock: hasStockPermission ? parseFloat(productData.current_stock || 0) : null,
+      stock_quantity: hasStockPermission ? parseFloat(productData.current_stock || 0) : null,
+      variant_info: null,
+      stock_entry: null,
+      stock_details: null,
+      scanned_from: 'product'
+    };
+  }, [hasStockPermission]);
+
+  // Transform scanned stock data
+  const transformScannedStock = useCallback((stockData) => {
+    const productData = stockData.product || {};
+    const unit = productData.unit || stockData.unit || null;
+    const stockQty = parseFloat(stockData.quantity || 0);
+    
+    return {
+      id: stockData.product_id || stockData.id,
+      stock_id: stockData.id,
+      variant_index: 0,
+      name: productData.name || stockData.product_name || 'Product',
+      sku: productData.sku || stockData.sku || '',
+      brand: productData.brand || null,
+      category: productData.category || null,
+      unit: unit,
+      attributes: productData.attributes || [],
+      variants: productData.variants || [],
+      price: parseFloat(stockData.selling_price || 0),
+      purchase_price: parseFloat(stockData.purchase_price || 0),
+      gst_percentage: parseFloat(stockData.selling_gst_percentage || 0),
+      discount_percentage: parseFloat(productData.discount_percentage || 0),
+      current_stock: stockQty,
+      stock_quantity: stockQty,
+      variant_info: stockQty > 0 ? `${stockQty.toFixed(2)} units available` : 'Out of stock',
+      stock_entry: stockData,
+      stock_details: {
+        id: stockData.id,
+        quantity: stockData.quantity,
+        selling_price: stockData.selling_price,
+        purchase_price: stockData.purchase_price,
+        unit: unit,
+        selling_gst_percentage: stockData.selling_gst_percentage,
+        product: productData
+      },
+      scanned_from: 'stock'
+    };
+  }, []);
+
+  // Handle QR code scan result
+  const handleQRScanResult = useCallback(async (qrData) => {
+    if (!qrScanningEnabled || scannerLoading) return;
+    
+    setQrScanningEnabled(false);
+    setScannerLoading(true);
+    
+    try {
+      const parsedData = parseQRData(qrData);
+      
+      if (!parsedData || !parsedData.id) {
+        Toast.show({
+          type: 'error',
+          text1: 'Invalid QR Code',
+          text2: 'Could not parse QR code data. Please try again.',
+        });
+        setQrScanningEnabled(true);
+        setScannerLoading(false);
+        return;
+      }
+      
+      let product = null;
+      let qrType = parsedData.type;
+      
+      if (parsedData.type === 'PRD') {
+        try {
+          const response = await invoiceAPI.getScannedProduct(parsedData.id);
+          
+          if (response.data?.status === true && response.data?.data) {
+            const productData = response.data.data;
+            product = transformScannedProduct(productData);
+            
+            Toast.show({
+              type: 'success',
+              text1: 'Product Found',
+              text2: `${product.name} added successfully!`,
+            });
+          } else {
+            Toast.show({
+              type: 'error',
+              text1: 'Product Not Found',
+              text2: 'Could not find product with this QR code.',
+            });
+            setQrScanningEnabled(true);
+            setScannerLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Error fetching scanned product:', error);
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: error.message || 'Failed to fetch product details',
+          });
+          setQrScanningEnabled(true);
+          setScannerLoading(false);
+          return;
+        }
+        
+      } else if (parsedData.type === 'STK') {
+        if (!hasStockPermission) {
+          Toast.show({
+            type: 'error',
+            text1: 'Permission Denied',
+            text2: 'You do not have permission to scan stock QR codes.',
+          });
+          setQrScanningEnabled(true);
+          setScannerLoading(false);
+          return;
+        }
+        
+        try {
+          const response = await invoiceAPI.getScannedStock(parsedData.id);
+          
+          if (response.data?.status === true && response.data?.data) {
+            const stockData = response.data.data;
+            product = transformScannedStock(stockData);
+            
+            const stockQty = parseFloat(stockData.quantity || 0);
+            Toast.show({
+              type: 'success',
+              text1: 'Stock Found',
+              text2: `${product.name} - ${stockQty.toFixed(2)} units available`,
+            });
+          } else {
+            Toast.show({
+              type: 'error',
+              text1: 'Stock Not Found',
+              text2: 'Could not find stock with this QR code.',
+            });
+            setQrScanningEnabled(true);
+            setScannerLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Error fetching scanned stock:', error);
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: error.message || 'Failed to fetch stock details',
+          });
+          setQrScanningEnabled(true);
+          setScannerLoading(false);
+          return;
+        }
+        
+      } else {
+        Toast.show({
+          type: 'info',
+          text1: 'Identifying',
+          text2: 'Trying to identify product...',
+        });
+        
+        try {
+          const response = await invoiceAPI.getScannedProduct(parsedData.id);
+          if (response.data?.status === true && response.data?.data) {
+            const productData = response.data.data;
+            product = transformScannedProduct(productData);
+            qrType = 'PRD';
+            Toast.show({
+              type: 'success',
+              text1: 'Product Found',
+              text2: `${product.name} added successfully!`,
+            });
+          }
+        } catch (e) {}
+        
+        if (!product && hasStockPermission) {
+          try {
+            const response = await invoiceAPI.getScannedStock(parsedData.id);
+            if (response.data?.status === true && response.data?.data) {
+              const stockData = response.data.data;
+              product = transformScannedStock(stockData);
+              qrType = 'STK';
+              const stockQty = parseFloat(stockData.quantity || 0);
+              Toast.show({
+                type: 'success',
+                text1: 'Stock Found',
+                text2: `${product.name} - ${stockQty.toFixed(2)} units available`,
+              });
+            }
+          } catch (e) {}
+        }
+        
+        if (!product) {
+          Toast.show({
+            type: 'error',
+            text1: 'Not Found',
+            text2: 'Could not find product or stock with this QR code.',
+          });
+          setQrScanningEnabled(true);
+          setScannerLoading(false);
+          return;
+        }
+      }
+      
+      if (product) {
+        const existingItemIndex = lineItems.findIndex(
+          (item) =>
+            !item.is_package &&
+            item.product_id === product.id &&
+            (hasStockPermission ? item.stock_id === product.stock_id : true),
+        );
+        
+        if (existingItemIndex !== -1) {
+          const existingItem = lineItems[existingItemIndex];
+          const newQuantity = parseFloat(existingItem.quantity) + 1;
+          
+          if (hasStockPermission && product.stock_quantity !== null && product.stock_quantity !== undefined) {
+            const availableStock = parseFloat(product.stock_quantity);
+            if (availableStock > 0 && newQuantity > availableStock) {
+              Toast.show({
+                type: "error",
+                text1: "Error",
+                text2: `Cannot add more than available stock. Available: ${availableStock.toFixed(2)} units`,
+              });
+              setQrScanningEnabled(true);
+              setScannerLoading(false);
+              return;
+            }
+          }
+          
+          setLineItems((prev) => {
+            const next = [...prev];
+            next[existingItemIndex] = {
+              ...existingItem,
+              quantity: newQuantity,
+              item_count: newQuantity,
+              total_price: calculateItemTotal(
+                existingItem.price,
+                newQuantity,
+                existingItem.gst,
+                existingItem.discount,
+              ),
+            };
+            return next;
+          });
+          
+          Toast.show({
+            type: "success",
+            text1: "Success",
+            text2: `Quantity updated for ${product.name} to ${newQuantity}`,
+          });
+        } else {
+          const quantity = 1;
+          const sellingPrice = product.price;
+          const purchasePrice = product.purchase_price;
+          const gst = parseFloat(product.gst_percentage) || 0;
+          const discount = parseFloat(product.discount_percentage) || 0;
+          const totalPrice = calculateItemTotal(
+            sellingPrice,
+            quantity,
+            gst,
+            discount,
+          );
+          
+          let unitName = "pcs";
+          if (product.unit) {
+            unitName = product.unit.short_name || product.unit.name || "pcs";
+          }
+          
+          const newItem = {
+            product_id: product.id,
+            stock_id: product.stock_id,
+            product_name: product.name,
+            product_code: product.sku,
+            quantity: quantity,
+            item_count: quantity,
+            unit_id: product.unit?.id || null,
+            unit_name: unitName,
+            price: sellingPrice,
+            purchase_price: purchasePrice,
+            gst: gst,
+            discount: discount,
+            total_price: totalPrice,
+            status: "completed",
+            stock_quantity: product.stock_quantity,
+            current_stock: product.stock_quantity,
+            variant_info: product.variant_info || null,
+            original_gst_percentage: gst,
+            attributes: product.attributes || [],
+            variants: product.variants || [],
+            is_package: false,
+            stock_details: product.stock_details,
+            scanned_from: qrType === 'STK' ? 'stock' : 'product'
+          };
+          
+          setLineItems((prev) => [...prev, newItem]);
+          
+          const sourceText = qrType === 'STK' ? ' (Stock)' : '';
+          Toast.show({
+            type: "success",
+            text1: "Success",
+            text2: `${newItem.product_name}${sourceText} added to invoice`,
+          });
+        }
+        
+        setShowQRScanner(false);
+      }
+      
+    } catch (error) {
+      console.error('QR scan error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Scan Error',
+        text2: error.message || 'Failed to process QR code. Please try again.',
+      });
+    } finally {
+      setQrScanningEnabled(true);
+      setScannerLoading(false);
+    }
+  }, [
+    qrScanningEnabled,
+    scannerLoading,
+    hasStockPermission,
+    lineItems,
+    transformScannedProduct,
+    transformScannedStock,
+  ]);
 
   // Fetch products with stock
   const fetchProductsWithStock = useCallback(
@@ -201,7 +937,7 @@ const InvoiceFormScreen = () => {
                   stock_quantity: parseFloat(stock.quantity),
                   variant_info:
                     product.stocks.length > 1
-                      ? `Stock #${index + 1} (${stock.quantity} units)`
+                      ? `Stock (${stock.quantity} units)`
                       : null,
                   stock_entry: stock,
                   stock_details: {
@@ -258,6 +994,7 @@ const InvoiceFormScreen = () => {
 
   // Product search handler for inline search (opens modal)
   const handleProductSearch = useCallback(() => {
+    Keyboard.dismiss();
     setShowProductModal(true);
     setProductModalSearch("");
     setFilteredModalProducts([]);
@@ -607,7 +1344,7 @@ const InvoiceFormScreen = () => {
     const t = totals.totalAmount;
     if (formData.payment_status === "paid") return t;
     if (formData.payment_status === "semi_paid") {
-      const p = parseFloat(formData.payment_amount) || 0;
+      const p = parseNumericValue(formData.payment_amount);
       return Math.min(Math.max(0, p), t);
     }
     return 0;
@@ -618,10 +1355,11 @@ const InvoiceFormScreen = () => {
     [totals.totalAmount, effectivePaidAmount],
   );
 
+  // Improved payment amount validation with proper sanitization
   useEffect(() => {
     if (formData.payment_status !== "semi_paid") return;
     const t = totals.totalAmount;
-    const p = parseFloat(formData.payment_amount) || 0;
+    const p = parseNumericValue(formData.payment_amount);
     if (p > t) {
       setFormData((prev) => ({ ...prev, payment_amount: t.toString() }));
       Toast.show({
@@ -632,19 +1370,16 @@ const InvoiceFormScreen = () => {
     }
   }, [totals.totalAmount, formData.payment_status]);
 
+  // Improved payment amount change handler with proper sanitization
   const handlePaymentAmountChange = (value) => {
-    if (value === "") {
+    let cleanedValue = sanitizeNumericInput(value, true, 2);
+    
+    if (cleanedValue === "") {
       setFormData((prev) => ({ ...prev, payment_amount: "" }));
       return;
     }
 
-    let cleanedValue = value.replace(/[^0-9.]/g, "");
-    const decimalCount = (cleanedValue.match(/\./g) || []).length;
-    if (decimalCount > 1) {
-      cleanedValue = cleanedValue.slice(0, cleanedValue.lastIndexOf("."));
-    }
-
-    let numValue = cleanedValue === "" ? 0 : parseFloat(cleanedValue);
+    let numValue = parseFloat(cleanedValue);
     if (isNaN(numValue)) numValue = 0;
 
     const maxAmount = totals.totalAmount;
@@ -660,13 +1395,12 @@ const InvoiceFormScreen = () => {
 
     setFormData((prev) => ({
       ...prev,
-      payment_amount: cleanedValue === "" ? "" : cleanedValue,
+      payment_amount: cleanedValue,
     }));
   };
 
   // Handle adding item with multiple stock variants
   const handleAddItem = async (product) => {
-    // Fetch full product details if GST is 0 to get correct GST from database
     let productWithGST = product;
     if (parseFloat(product.gst_percentage) === 0) {
       try {
@@ -675,11 +1409,6 @@ const InvoiceFormScreen = () => {
           const fullProduct = result.data;
           if (parseFloat(fullProduct.gst_percentage) > 0) {
             productWithGST = { ...product, gst_percentage: fullProduct.gst_percentage };
-            console.log('Updated GST from full product:', {
-              productName: product.name,
-              oldGST: product.gst_percentage,
-              newGST: fullProduct.gst_percentage
-            });
           }
         }
       } catch (error) {
@@ -771,17 +1500,10 @@ const InvoiceFormScreen = () => {
     let gst = parseFloat(productWithGST.gst_percentage) || 0;
     const discount = parseFloat(product.discount_percentage) || 0;
 
-    // Fallback: if GST is 0 but product has stock details with GST, use that
     if (gst === 0 && product.stock_details?.selling_gst_percentage) {
       gst = parseFloat(product.stock_details.selling_gst_percentage) || 0;
     }
 
-    console.log('Adding product GST:', {
-      productName: product.name,
-      gst_percentage: productWithGST.gst_percentage,
-      stock_gst: product.stock_details?.selling_gst_percentage,
-      final_gst: gst
-    });
     const quantity = 1;
     const totalPrice = calculateItemTotal(
       sellingPrice,
@@ -883,18 +1605,21 @@ const InvoiceFormScreen = () => {
     setPackageQuantity(1);
   };
 
-  const handleUpdateItem = (index, field, value) => {
+  // UPDATED: Update item with proper numeric validation
+  const handleUpdateItem = useCallback((index, field, value) => {
     const item = lineItems[index];
+    if (!item) return;
+    
     if (item.is_package) {
       if (field === "quantity") {
-        const q = parseFloat(value) || 1;
+        const finalQ = Math.max(1, value);
         setLineItems((prev) => {
           const next = [...prev];
           next[index] = {
             ...item,
-            quantity: q,
-            item_count: q,
-            total_price: item.price * q,
+            quantity: finalQ,
+            item_count: finalQ,
+            total_price: item.price * finalQ,
           };
           return next;
         });
@@ -902,55 +1627,51 @@ const InvoiceFormScreen = () => {
       return;
     }
 
+    // Validate quantity against stock
+    if (field === "quantity") {
+      if (hasStockPermission && item.stock_quantity > 0 && value > item.stock_quantity) {
+        Toast.show({
+          type: "error",
+          text1: "Error",
+          text2: `Cannot exceed available stock. Available: ${item.stock_quantity}`,
+        });
+        return;
+      }
+    }
+
+    // Validate GST
+    if (field === "gst") {
+      const originalGst = item.original_gst_percentage || 0;
+      if (originalGst > 0 && value < originalGst) {
+        Toast.show({
+          type: "warning",
+          text1: "Warning",
+          text2: `GST cannot be reduced below original GST (${originalGst}%). Current: ${value}%`,
+        });
+      }
+    }
+
     setLineItems((prev) => {
       const next = [...prev];
       const row = { ...next[index] };
-
+      
       if (field === "quantity") {
-        const newQuantity = parseFloat(value) || 0;
-        if (
-          hasStockPermission &&
-          row.stock_quantity > 0 &&
-          newQuantity > row.stock_quantity
-        ) {
-          Toast.show({
-            type: "error",
-            text1: "Error",
-            text2: `Cannot exceed available stock. Available: ${row.stock_quantity}`,
-          });
-          return prev;
-        }
-        row.quantity = newQuantity;
-        row.item_count = newQuantity;
-      } else if (field === "price" || field === "discount") {
-        row[field] = parseFloat(value) || 0;
-      } else if (field === "gst") {
-        const numValue = parseFloat(value) || 0;
-        const originalGst = row.original_gst_percentage || 0;
-
-        if (originalGst > 0 && numValue < originalGst) {
-          Toast.show({
-            type: "error",
-            text1: "Warning",
-            text2: `GST cannot be reduced below original GST (${originalGst}%). Current: ${numValue}%`,
-          });
-        }
-
-        row.gst = numValue;
+        row.quantity = value;
+        row.item_count = value;
       } else {
         row[field] = value;
       }
-
+      
       row.total_price = calculateItemTotal(
-        row.price,
-        row.quantity,
-        row.gst,
-        row.discount,
+        row.price || 0,
+        row.quantity || 1,
+        row.gst || 0,
+        row.discount || 0,
       );
       next[index] = row;
       return next;
     });
-  };
+  }, [lineItems, hasStockPermission]);
 
   const handleRemoveItem = (index) => {
     const row = lineItems[index];
@@ -1235,11 +1956,9 @@ const InvoiceFormScreen = () => {
   };
 
   // ============ TRANSFORM INVOICE DATA FOR PRINT TEMPLATES ============
-  // This function formats data exactly like the React web version
   const transformInvoiceForTemplate = (invoice) => {
     if (!invoice) return null;
 
-    // Extract customer data from various possible structures
     const customerData = invoice.customer || {};
     const customerName = customerData.name || 
                          invoice.customer_name || 
@@ -1263,7 +1982,6 @@ const InvoiceFormScreen = () => {
                         invoice.customerGst || 
                         "N/A";
 
-    // Extract store data from various possible structures
     const storeData = invoice.store || {};
     const storeName = storeData.name || 
                       invoice.store_name || 
@@ -1288,16 +2006,13 @@ const InvoiceFormScreen = () => {
                        invoice.storePhone || 
                        "123-456-7890";
 
-    // Transform items to have nested product structure (matching web version)
     const items = invoice.items || invoice.invoice_items || [];
     const transformedItems = items.map(item => {
-      // Calculate totals if not present
       const quantity = parseFloat(item.quantity || item.item_count || 1);
       const price = parseFloat(item.price || 0);
       const gst = parseFloat(item.gst || 0);
       const discount = parseFloat(item.discount || 0);
       
-      // Calculate total price if not present
       let totalPrice = item.total_price || item.totalPrice || 0;
       if (!item.total_price && !item.totalPrice) {
         const basePrice = price * quantity;
@@ -1319,7 +2034,6 @@ const InvoiceFormScreen = () => {
         discount: discount,
         total_price: totalPrice,
         unit_name: item.unit_name || item.unit || 'pcs',
-        // Nested product object for template compatibility
         product: {
           id: item.product_id,
           name: item.product_name || item.name || 'Product',
@@ -1329,7 +2043,6 @@ const InvoiceFormScreen = () => {
           attributes: item.attributes || [],
           unit: item.unit_name ? { code: item.unit_name, name: item.unit_name } : null,
         },
-        // Include stock information
         stock_quantity: item.stock_quantity || 0,
         stock_id: item.stock_id || null,
         variant_info: item.variant_info || null,
@@ -1337,7 +2050,6 @@ const InvoiceFormScreen = () => {
       };
     });
 
-    // Transform packages (matching web version)
     const packages = invoice.packages || [];
     const transformedPackages = packages.map(pkg => ({
       ...pkg,
@@ -1349,29 +2061,23 @@ const InvoiceFormScreen = () => {
       quantity: parseFloat(pkg.quantity || 1),
     }));
 
-    // Calculate totals if not present
     let totalAmount = parseFloat(invoice.total_amount || invoice.totalAmount || 0);
     let paidAmount = parseFloat(invoice.paid_amount || invoice.paidAmount || 0);
     
-    // If totals are missing, calculate from items
     if (!totalAmount && transformedItems.length > 0) {
       totalAmount = transformedItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
-      // Add package totals
       if (transformedPackages.length > 0) {
         totalAmount += transformedPackages.reduce((sum, pkg) => sum + (pkg.package_price * pkg.quantity), 0);
       }
     }
 
-    // Construct final invoice object matching web version structure
     return {
-      // Core invoice data
       id: invoice.id || invoice.invoice_id,
       invoice_id: invoice.invoice_id || invoice.id,
       invoice_number: invoice.invoice_number || invoice.invoice_id || `INV-${Date.now()}`,
       created_at: invoice.created_at || invoice.createdAt || new Date().toISOString(),
       invoice_date: invoice.invoice_date || invoice.created_at || new Date().toISOString(),
       
-      // Customer data (flat structure for template)
       customer_id: invoice.customer_id,
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -1379,7 +2085,6 @@ const InvoiceFormScreen = () => {
       customer_address: customerAddress,
       customer_gst: customerGst,
       
-      // Customer nested object
       customer: {
         id: invoice.customer_id,
         name: customerName,
@@ -1390,7 +2095,6 @@ const InvoiceFormScreen = () => {
         gst_number: customerGst,
       },
       
-      // Store data (flat structure for template)
       store_id: invoice.store_id,
       store_name: storeName,
       store_address: storeAddress,
@@ -1400,7 +2104,6 @@ const InvoiceFormScreen = () => {
       store_logo: invoice.store_logo || invoice.storeLogo,
       bank_qr: invoice.bank_qr || invoice.bankQr,
       
-      // Store nested object
       store: {
         id: invoice.store_id,
         name: storeName,
@@ -1414,31 +2117,27 @@ const InvoiceFormScreen = () => {
         bank_qr: invoice.bank_qr || invoice.bankQr,
       },
       
-      // Financial data
       total_amount: totalAmount,
       paid_amount: paidAmount,
       payment_method: invoice.payment_method || invoice.paymentMode || "Cash",
       payment_status: invoice.payment_status || "paid",
       payment_mode: invoice.payment_method || invoice.paymentMode || "Cash",
       
-      // Items and packages
       items: transformedItems,
       invoice_items: transformedItems,
       packages: transformedPackages,
       
-      // Flags
       hasStockPermission: invoice.hasStockPermission || false,
     };
   };
 
-  // ============ UPDATED PRINT HANDLERS ============
+  // ============ PRINT HANDLERS ============
 
   const handlePrintA4 = async () => {
     if (isPrinting) return;
     setIsPrinting(true);
 
     try {
-      // Get the full invoice data
       const invoiceData = createdInvoiceData || await getInvoiceById(invoiceId);
 
       if (!invoiceData) {
@@ -1451,18 +2150,13 @@ const InvoiceFormScreen = () => {
         return;
       }
 
-      // Transform invoice data to match template expectations
       const transformedInvoice = transformInvoiceForTemplate(invoiceData);
-      console.log('Transformed invoice for A4 print:', JSON.stringify(transformedInvoice, null, 2));
-
-      // Generate HTML for A4 invoice
       const html = generateA4InvoiceHTML(transformedInvoice, false);
       
-      // Print the invoice
       await printAsync({
         html: html,
-        width: 794, // A4 width in pixels
-        height: 1123, // A4 height in pixels
+        width: 794,
+        height: 1123,
       });
       
       Toast.show({
@@ -1471,7 +2165,6 @@ const InvoiceFormScreen = () => {
         text2: 'A4 Invoice printed successfully',
       });
       
-      // Close the success modal and go back after a short delay
       setTimeout(() => {
         setShowInvoiceSuccess(false);
         navigation.goBack();
@@ -1494,7 +2187,6 @@ const InvoiceFormScreen = () => {
     setIsPrinting(true);
 
     try {
-      // Get the full invoice data
       const invoiceData = createdInvoiceData || await getInvoiceById(invoiceId);
 
       if (!invoiceData) {
@@ -1507,17 +2199,12 @@ const InvoiceFormScreen = () => {
         return;
       }
 
-      // Transform invoice data to match template expectations
       const transformedInvoice = transformInvoiceForTemplate(invoiceData);
-      console.log('Transformed invoice for thermal print:', JSON.stringify(transformedInvoice, null, 2));
-
-      // Generate HTML for thermal invoice
       const html = generateThermalInvoiceHTML(transformedInvoice, false);
       
-      // Print the invoice with thermal settings
       await printAsync({
         html: html,
-        width: 288, // 76mm in pixels (3 inches)
+        width: 288,
         height: 'auto',
       });
       
@@ -1527,7 +2214,6 @@ const InvoiceFormScreen = () => {
         text2: 'Thermal Invoice printed successfully',
       });
       
-      // Close the success modal and go back after a short delay
       setTimeout(() => {
         setShowInvoiceSuccess(false);
         navigation.goBack();
@@ -1545,7 +2231,6 @@ const InvoiceFormScreen = () => {
     }
   };
 
-  // Save as PDF with proper formatting
   const handleSaveAsPDF = async (type = 'a4') => {
     if (isPrinting) return;
     setIsPrinting(true);
@@ -1563,22 +2248,17 @@ const InvoiceFormScreen = () => {
         return;
       }
 
-      // Transform invoice data to match template expectations
       const transformedInvoice = transformInvoiceForTemplate(invoiceData);
-
-      // Generate HTML based on type
       const html = type === 'a4'
         ? generateA4InvoiceHTML(transformedInvoice, false)
         : generateThermalInvoiceHTML(transformedInvoice, false);
       
-      // Generate PDF
       const { uri } = await printAsync({
         html: html,
         width: type === 'a4' ? 794 : 288,
         height: type === 'a4' ? 1123 : 'auto',
       });
       
-      // Share the PDF
       await shareAsync(uri, {
         UTI: 'com.adobe.pdf',
         mimeType: 'application/pdf',
@@ -1602,9 +2282,7 @@ const InvoiceFormScreen = () => {
     }
   };
 
-  // ============ UPDATED INVOICE SUCCESS HANDLER ============
   const handleInvoiceSuccess = (invoiceData) => {
-    // Get selected customer and store
     const selectedCustomer = customers.find(
       (c) => c.id.toString() === formData.customer_id
     );
@@ -1612,7 +2290,6 @@ const InvoiceFormScreen = () => {
       (s) => s.id.toString() === formData.store_id
     );
 
-    // Transform the invoice data to include all necessary fields
     const completeInvoiceData = {
       ...invoiceData,
       items: lineItems.map(item => ({
@@ -1632,7 +2309,6 @@ const InvoiceFormScreen = () => {
       paid_amount: effectivePaidAmount,
       payment_method: formData.payment_method,
       payment_status: formData.payment_status,
-      // Include customer and store details
       customer: selectedCustomer,
       store: selectedStore,
       customer_name: selectedCustomer?.name || selectedCustomer?.customer_name || "Walk-in Customer",
@@ -1652,31 +2328,40 @@ const InvoiceFormScreen = () => {
     setShowInvoiceSuccess(true);
   };
 
+  // ============ IMPROVED SUBMIT WITH BETTER VALIDATION ============
   const handleSubmit = async () => {
+    let validationErrors = [];
+    
     if (!formData.customer_id) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Please select a customer",
-      });
-      return;
+      validationErrors.push("Please select a customer");
     }
 
     if (!formData.store_id) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Please select a store",
-      });
-      return;
+      validationErrors.push("Please select a store");
     }
 
     if (lineItems.length === 0) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Please add at least one item (product or package)",
-      });
+      validationErrors.push("Please add at least one product or package");
+    }
+
+    if (!formData.payment_method) {
+      validationErrors.push("Please select a payment method");
+    }
+
+    if (formData.payment_status === "semi_paid") {
+      const paymentAmount = parseNumericValue(formData.payment_amount);
+      if (!formData.payment_amount || paymentAmount <= 0) {
+        validationErrors.push("Please enter a valid payment amount for partial payment");
+      }
+      if (paymentAmount > totals.totalAmount) {
+        validationErrors.push(`Payment amount cannot exceed total amount (₹${totals.totalAmount.toFixed(2)})`);
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      const errorMessage = validationErrors.join("\n• ");
+      setValidationMessage(errorMessage);
+      setShowValidationAlert(true);
       return;
     }
 
@@ -1695,8 +2380,10 @@ const InvoiceFormScreen = () => {
         );
         Toast.show({
           type: "error",
-          text1: "Error",
-          text2: `Cannot proceed. ${stockIssues.length} item(s) exceed available stock:\n${issueMessages.join("\n")}`,
+          text1: "⚠️ Stock Issues",
+          text2: `${stockIssues.length} item(s) exceed available stock:\n• ${issueMessages.join("\n• ")}`,
+          visibilityTime: 5000,
+          position: "top",
         });
         return;
       }
@@ -1714,31 +2401,12 @@ const InvoiceFormScreen = () => {
         (item) =>
           `${item.product_name}: ₹${item.price.toFixed(2)} < ₹${(item.purchase_price || 0).toFixed(2)}`,
       );
-
       Toast.show({
         type: "error",
-        text1: "Error",
-        text2: `Cannot generate invoice. ${priceIssues.length} item(s) have price below purchase price:\n${issueMessages.join("\n")}`,
-      });
-      return;
-    }
-
-    if (formData.payment_status === "semi_paid") {
-      if (!formData.payment_amount || formData.payment_amount <= 0) {
-        Toast.show({
-          type: "error",
-          text1: "Error",
-          text2: "Please enter a valid payment amount for semi-paid option",
-        });
-        return;
-      }
-    }
-
-    if (!formData.payment_method) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "Please select a payment method",
+        text1: "⚠️ Price Issues",
+        text2: `${priceIssues.length} item(s) have price below purchase price:\n• ${issueMessages.join("\n• ")}`,
+        visibilityTime: 5000,
+        position: "top",
       });
       return;
     }
@@ -1756,11 +2424,12 @@ const InvoiceFormScreen = () => {
         (item) =>
           `${item.product_name}: ${item.gst}% < ${item.original_gst_percentage || 0}%`,
       );
-
       Toast.show({
         type: "error",
-        text1: "Error",
-        text2: `Cannot generate invoice. ${gstIssues.length} item(s) have GST below the original GST percentage:\n${issueMessages.join("\n")}`,
+        text1: "⚠️ GST Issues",
+        text2: `${gstIssues.length} item(s) have GST below the original GST percentage:\n• ${issueMessages.join("\n• ")}`,
+        visibilityTime: 5000,
+        position: "top",
       });
       return;
     }
@@ -1780,10 +2449,7 @@ const InvoiceFormScreen = () => {
     if (formData.payment_status === "paid") {
       paidAmountValue = totals.totalAmount;
     } else if (formData.payment_status === "semi_paid") {
-      const p =
-        formData.payment_amount === "" || !formData.payment_amount
-          ? 0
-          : parseFloat(formData.payment_amount) || 0;
+      const p = parseNumericValue(formData.payment_amount);
       paidAmountValue = Math.min(Math.max(0, p), totals.totalAmount);
     } else {
       paidAmountValue = 0;
@@ -2003,6 +2669,19 @@ const InvoiceFormScreen = () => {
     </TouchableOpacity>
   );
 
+  // Render line item using the memoized component
+  const renderLineItem = ({ item, index }) => (
+    <LineItemComponent
+      key={`${item.is_package ? "p" : "i"}-${index}-${item.id || item.product_id}`}
+      item={item}
+      index={index}
+      onUpdate={handleUpdateItem}
+      onRemove={handleRemoveItem}
+      isDarkMode={isDarkMode}
+      hasStockPermission={hasStockPermission}
+    />
+  );
+
   return (
     <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}>
       <StatusBar
@@ -2036,770 +2715,732 @@ const InvoiceFormScreen = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
         keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+        enabled={true}
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingVertical: 16, paddingBottom: 40 }}
-          className="flex-1"
-          keyboardShouldPersistTaps="handled"
-          scrollEventThrottle={16}
-        >
-          {/* Customer Selection with Edit */}
-          <Card className="p-4 mb-3">
-            <SectionHeader icon="account" title="Customer Details" />
-
-            <View className="relative">
-              <SearchSelect
-                label="Customer"
-                options={customers.map((c) => ({
-                  value: c.id.toString(),
-                  label: c.name || c.customer_name || `Customer #${c.id}`,
-                  description: c.phone ? `📱 ${c.phone}` : "",
-                  subtext: c.email ? `✉️ ${c.email}` : "",
-                  gst: c.gst,
-                }))}
-                value={formData.customer_id}
-                onSelect={handleCustomerSelect}
-                placeholder="Search customer by name, phone, or email..."
-                required={true}
-                isDarkMode={isDarkMode}
-                displayKey="label"
-                valueKey="value"
-                onCreateNew={handleCreateCustomerFromSearch}
-              />
-
-              {selectedCustomer && (
-                <TouchableOpacity
-                  onPress={() => handleEditCustomer(selectedCustomer)}
-                  className="absolute right-12 top-10"
-                  style={{ zIndex: 10 }}
-                >
-                  <Icon
-                    name="pencil"
-                    size={20}
-                    color={isDarkMode ? "#60A5FA" : "#3B82F6"}
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-          </Card>
-
-          {/* Store Selection with Edit */}
-          <Card className="p-4 mb-3">
-            <SectionHeader
-              icon="store"
-              title="Store Information"
-              rightComponent={
-                stores.length === 0 && (
-                  <TouchableOpacity
-                    onPress={() => setShowAddStoreModal(true)}
-                    className="flex-row items-center px-3 py-1.5 bg-green-500 rounded-lg"
-                  >
-                    <Icon name="plus" size={16} color="#ffffff" />
-                    <Text className="text-white text-sm ml-1 font-medium">
-                      Add New
-                    </Text>
-                  </TouchableOpacity>
-                )
-              }
-            />
-
-            {stores.length === 1 && !isEdit && (
-              <View
-                className={`mb-3 p-3 rounded-xl ${isDarkMode ? "bg-green-500/10 border border-green-500/20" : "bg-green-50 border border-green-200"}`}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingVertical: 16, paddingBottom: 40 }}
+            className="flex-1"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="none"
+            removeClippedSubviews={false}
+            scrollEventThrottle={16}
+            nestedScrollEnabled={true}
+          >
+            {/* QR Scanner Button */}
+            <Card className="p-4 mb-3">
+              <SectionHeader icon="qrcode-scan" title="Quick Add" />
+              
+              <TouchableOpacity
+                onPress={async () => {
+                  const hasPermission = await requestCameraPermission();
+                  if (hasPermission) {
+                    setShowQRScanner(true);
+                  } else {
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Camera Permission Required',
+                      text2: 'Please grant camera permission to scan QR codes.',
+                    });
+                  }
+                }}
+                className={`flex-row items-center justify-center rounded-xl py-4 px-6 ${isDarkMode ? "bg-blue-500/20 border border-blue-500/30" : "bg-blue-50 border border-blue-200"}`}
+                activeOpacity={0.7}
               >
-                <View className="flex-row items-center">
-                  <Icon name="check-circle" size={18} color="#22c55e" />
-                  <Text
-                    className={`ml-2 text-sm font-medium ${isDarkMode ? "text-green-400" : "text-green-700"}`}
-                  >
-                    Store automatically selected
-                  </Text>
-                </View>
+                <Icon
+                  name="qrcode-scan"
+                  size={28}
+                  color={isDarkMode ? "#60A5FA" : "#2563EB"}
+                />
                 <Text
-                  className={`text-xs mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  className={`ml-3 text-base font-medium ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
                 >
-                  {stores[0]?.name || stores[0]?.store_name || "Store"} will be
-                  used for this invoice
+                  Scan QR Code to Add Product
                 </Text>
-              </View>
-            )}
+                <Icon
+                  name="chevron-right"
+                  size={24}
+                  color={isDarkMode ? "#60A5FA" : "#2563EB"}
+                  style={{ marginLeft: 'auto' }}
+                />
+              </TouchableOpacity>
+              
+              <Text
+                className={`text-xs text-center mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              >
+                Scan product or stock QR codes to quickly add items
+              </Text>
+            </Card>
 
-            <View className="relative">
-              <SearchSelect
-                label="Store"
-                options={stores.map((s) => ({
-                  value: s.id.toString(),
-                  label: s.name || s.store_name || `Store #${s.id}`,
-                  description: s.address ? `📍 ${s.address}` : "",
-                  subtext:
-                    s.mobile || s.phone ? `📱 ${s.mobile || s.phone}` : "",
-                  email: s.email,
-                  gst: s.gst,
-                }))}
-                value={formData.store_id}
-                onSelect={handleStoreSelect}
-                placeholder="Search store by name, phone, or email..."
-                required={true}
-                isDarkMode={isDarkMode}
-                displayKey="label"
-                valueKey="value"
-                onCreateNew={
-                  stores.length === 0 ? handleCreateStoreFromSearch : undefined
+            {/* Customer Selection with Edit */}
+            <Card className="p-4 mb-3">
+              <SectionHeader icon="account" title="Customer Details" />
+
+              <View className="relative">
+                <SearchSelect
+                  label="Customer"
+                  options={customers.map((c) => ({
+                    value: c.id.toString(),
+                    label: c.name || c.customer_name || `Customer #${c.id}`,
+                    description: c.phone ? `📱 ${c.phone}` : "",
+                    subtext: c.email ? `✉️ ${c.email}` : "",
+                    gst: c.gst,
+                  }))}
+                  value={formData.customer_id}
+                  onSelect={handleCustomerSelect}
+                  placeholder="Search customer by name, phone, or email..."
+                  required={true}
+                  isDarkMode={isDarkMode}
+                  displayKey="label"
+                  valueKey="value"
+                  onCreateNew={handleCreateCustomerFromSearch}
+                />
+
+                {selectedCustomer && (
+                  <TouchableOpacity
+                    onPress={() => handleEditCustomer(selectedCustomer)}
+                    className="absolute right-12 top-10"
+                    style={{ zIndex: 10 }}
+                  >
+                    <Icon
+                      name="pencil"
+                      size={20}
+                      color={isDarkMode ? "#60A5FA" : "#3B82F6"}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Card>
+
+            {/* Store Selection with Edit */}
+            <Card className="p-4 mb-3">
+              <SectionHeader
+                icon="store"
+                title="Store Information"
+                rightComponent={
+                  stores.length === 0 && (
+                    <TouchableOpacity
+                      onPress={() => setShowAddStoreModal(true)}
+                      className="flex-row items-center px-3 py-1.5 bg-green-500 rounded-lg"
+                    >
+                      <Icon name="plus" size={16} color="#ffffff" />
+                      <Text className="text-white text-sm ml-1 font-medium">
+                        Add New
+                      </Text>
+                    </TouchableOpacity>
+                  )
                 }
               />
 
-              {selectedStore && (
-                <TouchableOpacity
-                  onPress={() => handleEditStore(selectedStore)}
-                  className="absolute right-12 top-10"
-                  style={{ zIndex: 10 }}
-                >
-                  <Icon
-                    name="pencil"
-                    size={20}
-                    color={isDarkMode ? "#60A5FA" : "#3B82F6"}
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {stores.length === 0 && (
-              <Text
-                className={`text-xs mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-              >
-                No stores found. Please add a store to create invoices.
-              </Text>
-            )}
-          </Card>
-
-          {/* Package Selection */}
-          <Card className="p-4 mb-3">
-            <SectionHeader icon="package-variant" title="Add Packages" />
-
-            <View className="relative">
-              <SearchSelect
-                label="Packages"
-                options={packages.map((pkg) => ({
-                  value: pkg.id.toString(),
-                  label: pkg.package_name || `Package #${pkg.id}`,
-                  description: pkg.package_size
-                    ? `📦 Size: ${pkg.package_size}`
-                    : "",
-                  subtext: pkg.package_price
-                    ? `💰 ₹${parseFloat(pkg.package_price || 0).toFixed(2)}`
-                    : "",
-                }))}
-                value={selectedPackage?.id?.toString() || ""}
-                onSelect={(value, option) => {
-                  const pkg = packages.find((p) => p.id.toString() === value);
-                  if (pkg) {
-                    handlePackageSelect(pkg);
-                  }
-                }}
-                placeholder="Search packages by name, size, or price..."
-                isDarkMode={isDarkMode}
-                displayKey="label"
-                valueKey="value"
-              />
-
-              {selectedPackage && (
+              {stores.length === 1 && !isEdit && (
                 <View
-                  className={`mt-3 p-4 rounded-xl ${isDarkMode ? "bg-green-500/10 border border-green-500/20" : "bg-green-50 border border-green-200"}`}
+                  className={`mb-3 p-3 rounded-xl ${isDarkMode ? "bg-green-500/10 border border-green-500/20" : "bg-green-50 border border-green-200"}`}
                 >
-                  <View className="flex-row justify-between items-start mb-3">
-                    <View className="flex-1">
-                      <Text
-                        className={`font-semibold text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                      >
-                        {selectedPackage.package_name}
-                      </Text>
-                      <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                      >
-                        Size: {selectedPackage.package_size || "—"}
-                      </Text>
-                    </View>
+                  <View className="flex-row items-center">
+                    <Icon name="check-circle" size={18} color="#22c55e" />
                     <Text
-                      className={`text-lg font-bold ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
+                      className={`ml-2 text-sm font-medium ${isDarkMode ? "text-green-400" : "text-green-700"}`}
                     >
-                      ₹
-                      {parseFloat(selectedPackage.package_price || 0).toFixed(
-                        2,
-                      )}
+                      Store automatically selected
                     </Text>
                   </View>
-
-                  <View className="flex-row items-center gap-3">
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
-                    >
-                      Quantity:
-                    </Text>
-                    <View
-                      className={`flex-row items-center rounded-lg px-1 ${isDarkMode ? "bg-gray-700" : "bg-white"} border ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
-                    >
-                      <TouchableOpacity
-                        onPress={() =>
-                          setPackageQuantity(Math.max(1, packageQuantity - 1))
-                        }
-                        className="p-2"
-                      >
-                        <Icon
-                          name="minus"
-                          size={20}
-                          color={isDarkMode ? "#9ca3af" : "#6b7280"}
-                        />
-                      </TouchableOpacity>
-                      <TextInput
-                        className={`w-14 text-center font-medium text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                        value={packageQuantity.toString()}
-                        onChangeText={(value) => {
-                          const num = parseInt(value) || 1;
-                          setPackageQuantity(Math.max(1, num));
-                        }}
-                        keyboardType="numeric"
-                      />
-                      <TouchableOpacity
-                        onPress={() => setPackageQuantity(packageQuantity + 1)}
-                        className="p-2"
-                      >
-                        <Icon
-                          name="plus"
-                          size={20}
-                          color={isDarkMode ? "#9ca3af" : "#6b7280"}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity
-                      onPress={handleAddPackageToInvoice}
-                      className="flex-1 flex-row items-center justify-center px-4 py-2.5 bg-blue-600 rounded-xl"
-                      disabled={packageQuantity <= 0}
-                    >
-                      <Icon name="plus" size={18} color="#ffffff" />
-                      <Text className="text-white font-semibold ml-2">
-                        Add Package
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                  <Text
+                    className={`text-xs mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    {stores[0]?.name || stores[0]?.store_name || "Store"} will be
+                    used for this invoice
+                  </Text>
                 </View>
               )}
-            </View>
-          </Card>
 
-          {/* Product Search - Opens Modal */}
-          <Card className="p-4 mb-3">
-            <SectionHeader icon="cart-plus" title="Add Products" />
-
-            <TouchableOpacity
-              onPress={handleProductSearch}
-              className={`flex-row items-center rounded-xl px-4 py-4 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}
-              activeOpacity={0.7}
-            >
-              <Icon
-                name="magnify"
-                size={24}
-                color={isDarkMode ? "#9ca3af" : "#6b7280"}
-              />
-              <Text
-                className={`flex-1 ml-3 text-base ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-              >
-                Tap to search and add products...
-              </Text>
-              <Icon
-                name="arrow-right"
-                size={20}
-                color={isDarkMode ? "#9ca3af" : "#6b7280"}
-              />
-            </TouchableOpacity>
-
-            {lineItems.filter((item) => !item.is_package).length > 0 && (
-              <View
-                className={`mt-3 p-3 rounded-xl ${isDarkMode ? "bg-blue-500/10 border border-blue-500/20" : "bg-blue-50 border border-blue-200"}`}
-              >
-                <Text
-                  className={`text-sm ${isDarkMode ? "text-blue-400" : "text-blue-700"}`}
-                >
-                  {lineItems.filter((item) => !item.is_package).length}{" "}
-                  product(s) added
-                </Text>
-              </View>
-            )}
-          </Card>
-
-          {/* Line Items */}
-          <Card className="p-4 mb-3">
-            <SectionHeader
-              icon="format-list-bulleted"
-              title={`Invoice Items (${lineItems.length})`}
-            />
-
-            {lineItems.length === 0 ? (
-              <View className="py-8 items-center">
-                <Icon
-                  name="cart-outline"
-                  size={56}
-                  color={isDarkMode ? "#4b5563" : "#D1D5DB"}
+              <View className="relative">
+                <SearchSelect
+                  label="Store"
+                  options={stores.map((s) => ({
+                    value: s.id.toString(),
+                    label: s.name || s.store_name || `Store #${s.id}`,
+                    description: s.address ? `📍 ${s.address}` : "",
+                    subtext:
+                      s.mobile || s.phone ? `📱 ${s.mobile || s.phone}` : "",
+                    email: s.email,
+                    gst: s.gst,
+                  }))}
+                  value={formData.store_id}
+                  onSelect={handleStoreSelect}
+                  placeholder="Search store by name, phone, or email..."
+                  required={true}
+                  isDarkMode={isDarkMode}
+                  displayKey="label"
+                  valueKey="value"
+                  onCreateNew={
+                    stores.length === 0 ? handleCreateStoreFromSearch : undefined
+                  }
                 />
-                <Text
-                  className={`text-base mt-3 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                >
-                  No items added yet
-                </Text>
-                <Text
-                  className={`text-sm ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
-                >
-                  Tap "Add Products" above to search and add
-                </Text>
+
+                {selectedStore && (
+                  <TouchableOpacity
+                    onPress={() => handleEditStore(selectedStore)}
+                    className="absolute right-12 top-10"
+                    style={{ zIndex: 10 }}
+                  >
+                    <Icon
+                      name="pencil"
+                      size={20}
+                      color={isDarkMode ? "#60A5FA" : "#3B82F6"}
+                    />
+                  </TouchableOpacity>
+                )}
               </View>
-            ) : (
-              lineItems.map((item, index) => (
-                <View
-                  key={`${item.is_package ? "p" : "i"}-${index}-${item.id || item.product_id}`}
-                  className={`p-4 rounded-xl mb-3 ${isDarkMode ? "bg-gray-700" : "bg-gray-50"} border ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
+
+              {stores.length === 0 && (
+                <Text
+                  className={`text-xs mt-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
                 >
-                  <View className="flex-row justify-between items-start mb-3">
-                    <View className="flex-1">
-                      <View className="flex-row items-center">
-                        {item.is_package && (
-                          <View
-                            className={`px-2 py-0.5 rounded mr-2 ${isDarkMode ? "bg-purple-500/30" : "bg-purple-100"}`}
-                          >
-                            <Text
-                              className={`text-xs font-semibold ${isDarkMode ? "text-purple-400" : "text-purple-700"}`}
-                            >
-                              PACKAGE
-                            </Text>
-                          </View>
-                        )}
+                  No stores found. Please add a store to create invoices.
+                </Text>
+              )}
+            </Card>
+
+            {/* Package Selection */}
+            <Card className="p-4 mb-3">
+              <SectionHeader icon="package-variant" title="Add Packages" />
+
+              <View className="relative">
+                <SearchSelect
+                  label="Packages"
+                  options={packages.map((pkg) => ({
+                    value: pkg.id.toString(),
+                    label: pkg.package_name || `Package #${pkg.id}`,
+                    description: pkg.package_size
+                      ? `📦 Size: ${pkg.package_size}`
+                      : "",
+                    subtext: pkg.package_price
+                      ? `💰 ₹${parseFloat(pkg.package_price || 0).toFixed(2)}`
+                      : "",
+                  }))}
+                  value={selectedPackage?.id?.toString() || ""}
+                  onSelect={(value, option) => {
+                    const pkg = packages.find((p) => p.id.toString() === value);
+                    if (pkg) {
+                      handlePackageSelect(pkg);
+                    }
+                  }}
+                  placeholder="Search packages by name, size, or price..."
+                  isDarkMode={isDarkMode}
+                  displayKey="label"
+                  valueKey="value"
+                />
+
+                {selectedPackage && (
+                  <View
+                    className={`mt-3 p-4 rounded-xl ${isDarkMode ? "bg-green-500/10 border border-green-500/20" : "bg-green-50 border border-green-200"}`}
+                  >
+                    <View className="flex-row justify-between items-start mb-3">
+                      <View className="flex-1">
                         <Text
-                          className={`font-semibold text-base flex-1 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                          className={`font-semibold text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
                         >
-                          {item.product_name}
+                          {selectedPackage.package_name}
+                        </Text>
+                        <Text
+                          className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                        >
+                          Size: {selectedPackage.package_size || "—"}
                         </Text>
                       </View>
                       <Text
-                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}
+                        className={`text-lg font-bold ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
                       >
-                        {item.product_code}
-                        {item.variant_info && (
-                          <Text
-                            className={`ml-2 text-xs ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
-                          >
-                            ({item.variant_info})
-                          </Text>
+                        ₹
+                        {parseFloat(selectedPackage.package_price || 0).toFixed(
+                          2,
                         )}
                       </Text>
-                      {item.unit_name && (
-                        <Text
-                          className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}
-                        >
-                          Unit: {item.unit_name}
-                        </Text>
-                      )}
-                      {hasStockPermission && item.stock_id && (
-                        <Text
-                          className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"} mt-0.5`}
-                        >
-                          Stock ID: #{item.stock_id}
-                        </Text>
-                      )}
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleRemoveItem(index)}
-                      className="p-2 rounded-lg bg-red-500/10"
-                    >
-                      <Icon name="delete-outline" size={22} color="#EF4444" />
-                    </TouchableOpacity>
-                  </View>
 
-                  <View className="flex-row flex-wrap gap-3">
-                    <View className="flex-1 min-w-[100px]">
+                    <View className="flex-row items-center gap-3">
                       <Text
-                        className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}
+                        className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
                       >
-                        Quantity
+                        Quantity:
                       </Text>
                       <View
-                        className={`flex-row items-center rounded-lg px-1 ${isDarkMode ? "bg-gray-600" : "bg-white"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
+                        className={`flex-row items-center rounded-lg px-1 ${isDarkMode ? "bg-gray-700" : "bg-white"} border ${isDarkMode ? "border-gray-600" : "border-gray-200"}`}
                       >
                         <TouchableOpacity
                           onPress={() =>
-                            handleUpdateItem(
-                              index,
-                              "quantity",
-                              Math.max(1, item.quantity - 1),
-                            )
+                            setPackageQuantity(Math.max(1, packageQuantity - 1))
                           }
-                          className="p-1"
+                          className="p-2"
                         >
                           <Icon
                             name="minus"
-                            size={18}
+                            size={20}
                             color={isDarkMode ? "#9ca3af" : "#6b7280"}
                           />
                         </TouchableOpacity>
                         <TextInput
-                          className={`flex-1 text-center font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                          value={item.quantity.toString()}
-                          onChangeText={(value) =>
-                            handleUpdateItem(index, "quantity", value)
-                          }
-                          keyboardType="numeric"
+                          className={`w-14 text-center font-medium text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                          value={packageQuantity.toString()}
+                          onChangeText={(value) => {
+                            const sanitized = sanitizeNumericInput(value, false, 0);
+                            const num = parseNumericValue(sanitized);
+                            setPackageQuantity(Math.max(1, num));
+                          }}
+                          keyboardType="number-pad"
+                          blurOnSubmit={true}
+                          returnKeyType="done"
+                          keyboardShouldPersistTaps="handled"
+                          textContentType="none"
+                          autoComplete="off"
                         />
                         <TouchableOpacity
-                          onPress={() =>
-                            handleUpdateItem(
-                              index,
-                              "quantity",
-                              item.quantity + 1,
-                            )
-                          }
-                          className="p-1"
+                          onPress={() => setPackageQuantity(packageQuantity + 1)}
+                          className="p-2"
                         >
                           <Icon
                             name="plus"
-                            size={18}
+                            size={20}
                             color={isDarkMode ? "#9ca3af" : "#6b7280"}
                           />
                         </TouchableOpacity>
                       </View>
+                      <TouchableOpacity
+                        onPress={handleAddPackageToInvoice}
+                        className="flex-1 flex-row items-center justify-center px-4 py-2.5 bg-blue-600 rounded-xl"
+                        disabled={packageQuantity <= 0}
+                      >
+                        <Icon name="plus" size={18} color="#ffffff" />
+                        <Text className="text-white font-semibold ml-2">
+                          Add Package
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-
-                    {!item.is_package && (
-                      <>
-                        <View className="flex-1 min-w-[100px]">
-                          <Text
-                            className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}
-                          >
-                            Price
-                          </Text>
-                          <TextInput
-                            className={`px-3 py-2 rounded-lg text-base ${isDarkMode ? "bg-gray-600 text-white" : "bg-white text-gray-800"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
-                            value={item.price.toString()}
-                            onChangeText={(value) =>
-                              handleUpdateItem(index, "price", value)
-                            }
-                            keyboardType="decimal-pad"
-                          />
-                        </View>
-
-                        <View className="flex-1 min-w-[100px]">
-                          <Text
-                            className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}
-                          >
-                            GST %
-                          </Text>
-                          <TextInput
-                            className={`px-3 py-2 rounded-lg text-base ${isDarkMode ? "bg-gray-600 text-white" : "bg-white text-gray-800"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
-                            value={item.gst.toString()}
-                            onChangeText={(value) =>
-                              handleUpdateItem(index, "gst", value)
-                            }
-                            keyboardType="decimal-pad"
-                          />
-                          {item.original_gst_percentage > 0 &&
-                            parseFloat(item.gst) <
-                              item.original_gst_percentage && (
-                              <Text className={`text-xs text-red-500 mt-1`}>
-                                ⚠️ GST ({item.original_gst_percentage}%)
-                              </Text>
-                            )}
-                        </View>
-
-                        <View className="flex-1 min-w-[100px]">
-                          <Text
-                            className={`text-xs font-medium ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}
-                          >
-                            Discount %
-                          </Text>
-                          <TextInput
-                            className={`px-3 py-2 rounded-lg text-base ${isDarkMode ? "bg-gray-600 text-white" : "bg-white text-gray-800"} border ${isDarkMode ? "border-gray-500" : "border-gray-300"}`}
-                            value={item.discount.toString()}
-                            onChangeText={(value) =>
-                              handleUpdateItem(index, "discount", value)
-                            }
-                            keyboardType="decimal-pad"
-                          />
-                        </View>
-                      </>
-                    )}
                   </View>
+                )}
+              </View>
+            </Card>
 
-                  <View
-                    className="flex-row justify-between items-center mt-3 pt-3 border-t"
-                    style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
-                  >
-                    <Text
-                      className={`text-sm font-medium ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-                    >
-                      Total
-                    </Text>
-                    <Text
-                      className={`text-base font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                    >
-                      ₹{item.total_price.toFixed(2)}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            )}
-          </Card>
+            {/* Product Search - Opens Modal */}
+            <Card className="p-4 mb-3">
+              <SectionHeader icon="cart-plus" title="Add Products" />
 
-          {/* Payment Settings */}
-          <Card className="p-4 mb-3">
-            <SectionHeader icon="credit-card" title="Payment Settings" />
-
-            <View className="mb-4">
-              <Text
-                className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"} mb-2`}
+              <TouchableOpacity
+                onPress={handleProductSearch}
+                className={`flex-row items-center rounded-xl px-4 py-4 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}
+                activeOpacity={0.7}
               >
-                Payment Method
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {["Cash", "Card", "UPI", "Bank Transfer", "Cheque"].map(
-                  (method) => (
+                <Icon
+                  name="magnify"
+                  size={24}
+                  color={isDarkMode ? "#9ca3af" : "#6b7280"}
+                />
+                <Text
+                  className={`flex-1 ml-3 text-base ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                >
+                  Tap to search and add products...
+                </Text>
+                <Icon
+                  name="arrow-right"
+                  size={20}
+                  color={isDarkMode ? "#9ca3af" : "#6b7280"}
+                />
+              </TouchableOpacity>
+
+              {lineItems.filter((item) => !item.is_package).length > 0 && (
+                <View
+                  className={`mt-3 p-3 rounded-xl ${isDarkMode ? "bg-blue-500/10 border border-blue-500/20" : "bg-blue-50 border border-blue-200"}`}
+                >
+                  <Text
+                    className={`text-sm ${isDarkMode ? "text-blue-400" : "text-blue-700"}`}
+                  >
+                    {lineItems.filter((item) => !item.is_package).length}{" "}
+                    product(s) added
+                  </Text>
+                </View>
+              )}
+            </Card>
+
+            {/* Line Items - Using memoized component with local state */}
+            <Card className="p-4 mb-3">
+              <SectionHeader
+                icon="format-list-bulleted"
+                title={`Invoice Items (${lineItems.length})`}
+              />
+
+              {lineItems.length === 0 ? (
+                <View className="py-8 items-center">
+                  <Icon
+                    name="cart-outline"
+                    size={56}
+                    color={isDarkMode ? "#4b5563" : "#D1D5DB"}
+                  />
+                  <Text
+                    className={`text-base mt-3 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                  >
+                    No items added yet
+                  </Text>
+                  <Text
+                    className={`text-sm ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}
+                  >
+                    Tap "Add Products" above to search and add
+                  </Text>
+                </View>
+              ) : (
+                <View>
+                  {lineItems.map((item, index) => (
+                    <LineItemComponent
+                      key={`${item.is_package ? "p" : "i"}-${index}-${item.id || item.product_id}`}
+                      item={item}
+                      index={index}
+                      onUpdate={handleUpdateItem}
+                      onRemove={handleRemoveItem}
+                      isDarkMode={isDarkMode}
+                      hasStockPermission={hasStockPermission}
+                    />
+                  ))}
+                </View>
+              )}
+            </Card>
+
+            {/* Payment Settings */}
+            <Card className="p-4 mb-3">
+              <SectionHeader icon="credit-card" title="Payment Settings" />
+
+              <View className="mb-4">
+                <Text
+                  className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"} mb-2`}
+                >
+                  Payment Method
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {["Cash", "Card", "UPI", "Bank Transfer", "Cheque"].map(
+                    (method) => (
+                      <TouchableOpacity
+                        key={method}
+                        onPress={() =>
+                          setFormData({ ...formData, payment_method: method })
+                        }
+                        className={`px-4 py-2.5 rounded-xl border ${
+                          formData.payment_method === method
+                            ? "border-blue-500 bg-blue-500/10"
+                            : isDarkMode
+                              ? "border-gray-600 bg-gray-700"
+                              : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        <Text
+                          className={`text-sm font-medium ${
+                            formData.payment_method === method
+                              ? "text-blue-500"
+                              : isDarkMode
+                                ? "text-gray-300"
+                                : "text-gray-600"
+                          }`}
+                        >
+                          {method}
+                        </Text>
+                      </TouchableOpacity>
+                    ),
+                  )}
+                </View>
+              </View>
+
+              <View className="mb-4">
+                <Text
+                  className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"} mb-2`}
+                >
+                  Payment Status
+                </Text>
+                <View className="flex-row gap-2">
+                  {[
+                    { value: "paid", label: "Paid", color: "green" },
+                    { value: "non_paid", label: "Unpaid", color: "red" },
+                    { value: "semi_paid", label: "Partial", color: "orange" },
+                  ].map((status) => (
                     <TouchableOpacity
-                      key={method}
+                      key={status.value}
                       onPress={() =>
-                        setFormData({ ...formData, payment_method: method })
+                        setFormData({ ...formData, payment_status: status.value })
                       }
-                      className={`px-4 py-2.5 rounded-xl border ${
-                        formData.payment_method === method
-                          ? "border-blue-500 bg-blue-500/10"
+                      className={`flex-1 py-3 rounded-xl border ${
+                        formData.payment_status === status.value
+                          ? `border-${status.color}-500 bg-${status.color}-500/10`
                           : isDarkMode
                             ? "border-gray-600 bg-gray-700"
                             : "border-gray-200 bg-white"
                       }`}
                     >
                       <Text
-                        className={`text-sm font-medium ${
-                          formData.payment_method === method
-                            ? "text-blue-500"
+                        className={`text-sm text-center font-medium ${
+                          formData.payment_status === status.value
+                            ? `text-${status.color}-500`
                             : isDarkMode
                               ? "text-gray-300"
                               : "text-gray-600"
                         }`}
                       >
-                        {method}
+                        {status.label}
                       </Text>
                     </TouchableOpacity>
-                  ),
-                )}
+                  ))}
+                </View>
               </View>
-            </View>
 
-            <View className="mb-4">
-              <Text
-                className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"} mb-2`}
-              >
-                Payment Status
-              </Text>
-              <View className="flex-row gap-2">
-                {[
-                  { value: "paid", label: "Paid", color: "green" },
-                  { value: "non_paid", label: "Unpaid", color: "red" },
-                  { value: "semi_paid", label: "Partial", color: "orange" },
-                ].map((status) => (
-                  <TouchableOpacity
-                    key={status.value}
-                    onPress={() =>
-                      setFormData({ ...formData, payment_status: status.value })
-                    }
-                    className={`flex-1 py-3 rounded-xl border ${
-                      formData.payment_status === status.value
-                        ? `border-${status.color}-500 bg-${status.color}-500/10`
-                        : isDarkMode
-                          ? "border-gray-600 bg-gray-700"
-                          : "border-gray-200 bg-white"
-                    }`}
+              {formData.payment_status === "semi_paid" && (
+                <View>
+                  <Text
+                    className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"} mb-2`}
+                  >
+                    Payment Amount
+                  </Text>
+                  <View
+                    className={`flex-row items-center rounded-xl px-4 py-3 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}
                   >
                     <Text
-                      className={`text-sm text-center font-medium ${
-                        formData.payment_status === status.value
-                          ? `text-${status.color}-500`
-                          : isDarkMode
-                            ? "text-gray-300"
-                            : "text-gray-600"
-                      }`}
+                      className={`text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
                     >
-                      {status.label}
+                      ₹
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {formData.payment_status === "semi_paid" && (
-              <View>
-                <Text
-                  className={`text-sm font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"} mb-2`}
-                >
-                  Payment Amount
-                </Text>
-                <View
-                  className={`flex-row items-center rounded-xl px-4 py-3 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}
-                >
-                  <Text
-                    className={`text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                  >
-                    ₹
-                  </Text>
-                  <TextInput
-                    className={`flex-1 ml-3 text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                    placeholder="0.00"
-                    placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
-                    value={formData.payment_amount}
-                    onChangeText={handlePaymentAmountChange}
-                    keyboardType="decimal-pad"
-                  />
-                  <Text
-                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
-                  >
-                    / ₹{totals.totalAmount.toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </Card>
-
-          {/* Summary */}
-          <Card className="p-4 mb-3">
-            <SectionHeader icon="calculator" title="Invoice Summary" />
-
-            <View className="space-y-2">
-              <View className="flex-row justify-between py-2">
-                <Text
-                  className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-                >
-                  Subtotal
-                </Text>
-                <Text
-                  className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                >
-                  ₹{totals.subtotal.toFixed(2)}
-                </Text>
-              </View>
-
-              {totals.totalDiscount > 0 && (
-                <View className="flex-row justify-between py-2">
-                  <Text
-                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-                  >
-                    Discount
-                  </Text>
-                  <Text className={`text-sm font-medium text-green-600`}>
-                    -₹{totals.totalDiscount.toFixed(2)}
-                  </Text>
+                    <TextInput
+                      className={`flex-1 ml-3 text-xl font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                      placeholder="0.00"
+                      placeholderTextColor={isDarkMode ? "#9ca3af" : "#6b7280"}
+                      value={formData.payment_amount}
+                      onChangeText={handlePaymentAmountChange}
+                      keyboardType="decimal-pad"
+                      blurOnSubmit={true}
+                      returnKeyType="done"
+                      keyboardShouldPersistTaps="handled"
+                      textContentType="none"
+                      autoComplete="off"
+                    />
+                    <Text
+                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+                    >
+                      / ₹{totals.totalAmount.toFixed(2)}
+                    </Text>
+                  </View>
                 </View>
               )}
+            </Card>
 
-              {totals.totalGst > 0 && (
+            {/* Summary */}
+            <Card className="p-4 mb-3">
+              <SectionHeader icon="calculator" title="Invoice Summary" />
+
+              <View className="space-y-2">
                 <View className="flex-row justify-between py-2">
                   <Text
                     className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
                   >
-                    GST
+                    Subtotal
                   </Text>
                   <Text
                     className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
                   >
-                    ₹{totals.totalGst.toFixed(2)}
+                    ₹{totals.subtotal.toFixed(2)}
                   </Text>
                 </View>
-              )}
 
-              {totals.packageTotal > 0 && (
-                <View className="flex-row justify-between py-2">
-                  <Text
-                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-                  >
-                    Package Total
-                  </Text>
-                  <Text
-                    className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                  >
-                    ₹{totals.packageTotal.toFixed(2)}
-                  </Text>
-                </View>
-              )}
-
-              <View
-                className="flex-row justify-between items-center py-3 mt-2 border-t border-dashed"
-                style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
-              >
-                <Text
-                  className={`text-lg font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}
-                >
-                  Grand Total
-                </Text>
-                <Text
-                  className={`text-xl font-bold ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
-                >
-                  ₹{totals.totalAmount.toFixed(2)}
-                </Text>
-              </View>
-
-              {formData.payment_status !== "non_paid" && (
-                <View
-                  className="flex-row justify-between py-2 border-t"
-                  style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
-                >
-                  <Text
-                    className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
-                  >
-                    Paid Amount
-                  </Text>
-                  <Text className={`text-sm font-medium text-green-600`}>
-                    ₹{effectivePaidAmount.toFixed(2)}
-                  </Text>
-                </View>
-              )}
-
-              {formData.payment_status !== "paid" &&
-                effectivePaidAmount < totals.totalAmount && (
+                {totals.totalDiscount > 0 && (
                   <View className="flex-row justify-between py-2">
                     <Text
                       className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
                     >
-                      Balance Due
+                      Discount
                     </Text>
-                    <Text className={`text-sm font-medium text-red-600`}>
-                      ₹{dueAfterPayment.toFixed(2)}
+                    <Text className={`text-sm font-medium text-green-600`}>
+                      -₹{totals.totalDiscount.toFixed(2)}
                     </Text>
                   </View>
                 )}
-            </View>
-          </Card>
 
-          {/* Bottom Action Button */}
-          <View className="px-4 mt-2 mb-4">
-            <TouchableOpacity
-              onPress={handleSubmit}
-              disabled={submitting}
-              className={`w-full py-4 rounded-2xl shadow-lg ${submitting ? "bg-gray-400" : "bg-blue-600"}`}
-            >
-              <View className="flex-row items-center justify-center">
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Icon name="content-save" size={24} color="#ffffff" />
+                {totals.totalGst > 0 && (
+                  <View className="flex-row justify-between py-2">
+                    <Text
+                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      GST
+                    </Text>
+                    <Text
+                      className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                    >
+                      ₹{totals.totalGst.toFixed(2)}
+                    </Text>
+                  </View>
                 )}
-                <Text className="text-white font-bold text-lg ml-2">
-                  {submitting
-                    ? "Saving Invoice..."
-                    : isEdit
-                      ? "Update Invoice"
-                      : "Create Invoice"}
-                </Text>
+
+                {totals.packageTotal > 0 && (
+                  <View className="flex-row justify-between py-2">
+                    <Text
+                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      Package Total
+                    </Text>
+                    <Text
+                      className={`text-sm font-medium ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                    >
+                      ₹{totals.packageTotal.toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+
+                <View
+                  className="flex-row justify-between items-center py-3 mt-2 border-t border-dashed"
+                  style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
+                >
+                  <Text
+                    className={`text-lg font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}
+                  >
+                    Grand Total
+                  </Text>
+                  <Text
+                    className={`text-xl font-bold ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}
+                  >
+                    ₹{totals.totalAmount.toFixed(2)}
+                  </Text>
+                </View>
+
+                {formData.payment_status !== "non_paid" && (
+                  <View
+                    className="flex-row justify-between py-2 border-t"
+                    style={{ borderColor: isDarkMode ? "#374151" : "#e5e7eb" }}
+                  >
+                    <Text
+                      className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+                    >
+                      Paid Amount
+                    </Text>
+                    <Text className={`text-sm font-medium text-green-600`}>
+                      ₹{effectivePaidAmount.toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+
+                {formData.payment_status !== "paid" &&
+                  effectivePaidAmount < totals.totalAmount && (
+                    <View className="flex-row justify-between py-2">
+                      <Text
+                        className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+                      >
+                        Balance Due
+                      </Text>
+                      <Text className={`text-sm font-medium text-red-600`}>
+                        ₹{dueAfterPayment.toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
               </View>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+            </Card>
+
+            {/* Bottom Action Button */}
+            <View className="px-4 mt-2 mb-4">
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={submitting}
+                className={`w-full py-4 rounded-2xl shadow-lg ${submitting ? "bg-gray-400" : "bg-blue-600"}`}
+              >
+                <View className="flex-row items-center justify-center">
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Icon name="content-save" size={24} color="#ffffff" />
+                  )}
+                  <Text className="text-white font-bold text-lg ml-2">
+                    {submitting
+                      ? "Saving Invoice..."
+                      : isEdit
+                        ? "Update Invoice"
+                        : "Create Invoice"}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      {/* All Modal components remain the same */}
+      {/* QR Scanner Modal */}
+      <Modal
+        visible={showQRScanner}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          setShowQRScanner(false);
+          setQrScanningEnabled(true);
+          setScannerLoading(false);
+        }}
+      >
+        <View className={`flex-1 ${isDarkMode ? "bg-gray-900" : "bg-black"}`}>
+          <StatusBar barStyle="light-content" backgroundColor="#000000" />
+
+          <View className="flex-1">
+            <CameraView
+              style={{ flex: 1 }}
+              facing="back"
+              onBarcodeScanned={({ data }) => {
+                if (data && qrScanningEnabled && !scannerLoading) {
+                  handleQRScanResult(data);
+                }
+              }}
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr", "ean13", "ean8", "code128", "code39"],
+              }}
+            >
+              <View className="absolute top-0 left-0 right-0 bottom-0 bg-black/50">
+                <View className="flex-1" />
+                <View className="flex-row">
+                  <View className="flex-1" />
+                  <View className="w-72 h-72 border-2 border-blue-500 rounded-xl bg-transparent relative">
+                    <View className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-lg" />
+                    <View className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-lg" />
+                    <View className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-lg" />
+                    <View className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-lg" />
+                    <View className="absolute top-0 left-0 right-0 h-0.5 bg-blue-400 animate-pulse" style={{ 
+                      shadowColor: '#3b82f6',
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.8,
+                      shadowRadius: 10,
+                      elevation: 5
+                    }} />
+                  </View>
+                  <View className="flex-1" />
+                </View>
+                <View className="flex-1 items-center justify-center">
+                  <Text className="text-white text-base font-medium mb-2">
+                    Scan QR Code
+                  </Text>
+                  <Text className="text-gray-300 text-sm text-center px-8">
+                    Position the QR code within the frame to scan
+                  </Text>
+                  {scannerLoading && (
+                    <View className="mt-4 flex-row items-center">
+                      <ActivityIndicator size="small" color="#3b82f6" />
+                      <Text className="text-blue-400 ml-2">Processing...</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowQRScanner(false);
+                      setQrScanningEnabled(true);
+                      setScannerLoading(false);
+                    }}
+                    className="mt-8 px-8 py-3 bg-red-500 rounded-xl"
+                  >
+                    <Text className="text-white font-semibold">Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </CameraView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Product Search Modal */}
       <Modal
@@ -2819,7 +3460,6 @@ const InvoiceFormScreen = () => {
             backgroundColor={isDarkMode ? "#111827" : "#F9FAFB"}
           />
 
-          {/* Modal Header */}
           <View
             className={`px-4 py-3 ${isDarkMode ? "bg-gray-800" : "bg-white"} border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
           >
@@ -2847,7 +3487,6 @@ const InvoiceFormScreen = () => {
               <View style={{ width: 40 }} />
             </View>
 
-            {/* Search Input */}
             <View
               className={`flex-row items-center rounded-xl px-4 py-3 mt-3 border ${isDarkMode ? "border-gray-600 bg-gray-700" : "border-gray-200 bg-gray-50"}`}
             >
@@ -2868,6 +3507,10 @@ const InvoiceFormScreen = () => {
                 spellCheck={false}
                 clearButtonMode="while-editing"
                 returnKeyType="search"
+                blurOnSubmit={true}
+                keyboardShouldPersistTaps="handled"
+                textContentType="none"
+                autoComplete="off"
               />
               {isLoadingModalProducts && (
                 <ActivityIndicator size="small" color="#3b82f6" />
@@ -2891,7 +3534,6 @@ const InvoiceFormScreen = () => {
             </View>
           </View>
 
-          {/* Product List */}
           {isLoadingModalProducts ? (
             <View className="flex-1 items-center justify-center">
               <ActivityIndicator size="large" color="#3b82f6" />
@@ -2910,6 +3552,7 @@ const InvoiceFormScreen = () => {
               }
               contentContainerStyle={{ paddingVertical: 8 }}
               showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
             />
           ) : productModalSearch.trim() !== "" ? (
             <View className="flex-1 items-center justify-center px-8">
@@ -2951,7 +3594,7 @@ const InvoiceFormScreen = () => {
         </View>
       </Modal>
 
-      {/* Invoice Success Dialog with Print Options - UPDATED */}
+      {/* Invoice Success Dialog */}
       <Modal
         visible={showInvoiceSuccess}
         transparent
@@ -2984,7 +3627,6 @@ const InvoiceFormScreen = () => {
             </View>
 
             <View className="space-y-3">
-              {/* A4 Print Button */}
               <TouchableOpacity
                 onPress={handlePrintA4}
                 disabled={isPrinting}
@@ -3002,7 +3644,6 @@ const InvoiceFormScreen = () => {
                 )}
               </TouchableOpacity>
 
-              {/* Thermal Print Button */}
               <TouchableOpacity
                 onPress={handlePrintThermal}
                 disabled={isPrinting}
@@ -3020,7 +3661,6 @@ const InvoiceFormScreen = () => {
                 )}
               </TouchableOpacity>
 
-              {/* Save as PDF Button */}
               <TouchableOpacity
                 onPress={() => handleSaveAsPDF('a4')}
                 disabled={isPrinting}
@@ -3038,7 +3678,6 @@ const InvoiceFormScreen = () => {
                 )}
               </TouchableOpacity>
 
-              {/* Skip Print Button */}
               <TouchableOpacity
                 onPress={() => {
                   setShowInvoiceSuccess(false);
@@ -3057,7 +3696,6 @@ const InvoiceFormScreen = () => {
         </TouchableOpacity>
       </Modal>
 
-      {/* All other Modal components remain the same */}
       {/* Add Customer Modal */}
       <Modal
         visible={showAddCustomerModal}
@@ -3866,6 +4504,16 @@ const InvoiceFormScreen = () => {
         onClose={() => setShowSuccessModal(false)}
         autoClose={true}
         autoCloseDelay={2000}
+      />
+
+      {/* Validation Alert Modal */}
+      <InfoModal
+        visible={showValidationAlert}
+        title="⚠️ Validation Required"
+        message={`Please fix the following issues:\n\n• ${validationMessage}`}
+        onClose={() => setShowValidationAlert(false)}
+        icon="alert-circle"
+        iconColor="#f59e0b"
       />
     </View>
   );
