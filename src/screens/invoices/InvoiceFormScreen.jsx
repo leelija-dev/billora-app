@@ -36,6 +36,7 @@ import { usePermissionStore } from "../../store/permissionStore";
 import useProductStore from "../../store/productStore";
 import useStoreStore from "../../store/storeStore";
 import { useThemeStore } from "../../store/themeStore";
+import useUnitStore from "../../store/unitStore";
 import { generateA4InvoiceHTML, generateThermalInvoiceHTML } from "../../templates/invoiceTemplates";
 import { printAsync } from "expo-print";
 import { shareAsync } from "expo-sharing";
@@ -227,6 +228,12 @@ const LineItemComponent = React.memo(({
               Unit: {item.unit_name}
             </Text>
           )}
+
+          {!item.is_package && hasStockPermission && item.stock_quantity !== undefined && item.stock_quantity < Infinity && (
+            <Text className={`text-xs mt-0.5 ${item.stock_quantity > 0 ? "text-green-600" : "text-red-600"}`}>
+              📊 Stock: {item.stock_quantity > 0 ? item.stock_quantity : "Out of Stock"}
+            </Text>
+          )}
         </View>
         <TouchableOpacity onPress={() => onRemove(index)} className="p-2 rounded-lg bg-red-500/10">
           <Icon name="delete-outline" size={22} color="#EF4444" />
@@ -274,10 +281,23 @@ const LineItemComponent = React.memo(({
               onPress={() => {
                 const current = parseInt(localQuantity) || 1;
                 const newVal = current + 1;
+                
+                // Stock validation for increment
+                if (!item.is_package && hasStockPermission && item.stock_quantity !== undefined && item.stock_quantity < Infinity && newVal > item.stock_quantity) {
+                  Toast.show({
+                    type: "warning",
+                    text1: "⚠️ Stock Limit",
+                    text2: `Cannot exceed available stock. Maximum: ${item.stock_quantity}`,
+                    visibilityTime: 3000,
+                  });
+                  return;
+                }
+                
                 setLocalQuantity(newVal.toString());
                 onUpdate(index, "quantity", newVal);
               }}
               className="p-1"
+              disabled={!item.is_package && hasStockPermission && item.stock_quantity !== undefined && item.stock_quantity < Infinity && parseInt(localQuantity) >= item.stock_quantity}
             >
               <Icon name="plus" size={18} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
             </TouchableOpacity>
@@ -503,6 +523,7 @@ const InvoiceFormScreen = () => {
   const { stores, fetchStores, createStore } = useStoreStore();
   const { products, fetchProducts, getProduct } = useProductStore();
   const { packages, fetchPackages } = usePackageStore();
+  const { units, fetchUnits } = useUnitStore();
 
   const { invoiceId, isEdit } = route.params || {};
 
@@ -559,6 +580,7 @@ const InvoiceFormScreen = () => {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [packageQuantity, setPackageQuantity] = useState(1);
   const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const initialPackageSnapshot = useRef("");
 
   // Customer/Store creation states
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -1196,6 +1218,7 @@ const InvoiceFormScreen = () => {
           fetchStores(userId, ""),
           fetchProducts(userId, 1, ""),
           fetchPackages(1, userId),
+          fetchUnits(1, false),
         ]);
 
         if (stores.length === 1 && !isEdit) {
@@ -1228,39 +1251,133 @@ const InvoiceFormScreen = () => {
                 []
               ).filter((row) => !row.is_package);
 
-              const mappedProducts = rows.map((item) => {
+              // Enhanced product mapping with real-time stock fetching
+              const mappedProducts = [];
+              
+              for (const item of rows) {
                 const qty = parseFloat(item.quantity ?? item.item_count ?? 1);
-                const price = parseFloat(item.price ?? 0);
-                const gst = parseFloat(item.gst ?? 0);
-                const discount = parseFloat(item.discount ?? 0);
-
-                return {
+                
+                // Try to find product in local products first
+                let product = products.find((p) => p.id === item.product_id);
+                
+                // If not found locally, fetch from API
+                if (!product || !product.name) {
+                  try {
+                    const productResponse = await invoiceAPI.getScannedProduct(item.product_id);
+                    if (productResponse.data?.status === true && productResponse.data?.data) {
+                      product = productResponse.data.data;
+                    }
+                  } catch (error) {
+                    console.error(`Failed to fetch product ${item.product_id}:`, error);
+                  }
+                }
+                
+                // Fetch current stock quantity using stock_id from invoice item
+                let currentStockQuantity = 0;
+                let stockEntry = null;
+                
+                if (hasStockPermission && item.stock_id) {
+                  try {
+                    const stockResponse = await invoiceAPI.getScannedStock(item.stock_id);
+                    if (stockResponse.data?.status === true && stockResponse.data?.data) {
+                      stockEntry = stockResponse.data.data;
+                      currentStockQuantity = parseFloat(stockEntry.quantity || 0);
+                    }
+                  } catch (error) {
+                    console.error(`Failed to fetch stock ${item.stock_id}:`, error);
+                  }
+                }
+                
+                const availableStock = hasStockPermission ? currentStockQuantity : Infinity;
+                const price = parseFloat(item.price ?? product?.selling_price ?? 0);
+                const gst = parseFloat(item.gst ?? product?.gst_percentage ?? 0);
+                const discount = parseFloat(item.discount ?? product?.discount_percentage ?? 0);
+                
+                let productName = "";
+                if (product?.name) {
+                  productName = product.name;
+                } else if (item.product_name && item.product_name !== "Product #undefined") {
+                  productName = item.product_name;
+                } else if (item.name && item.name !== "Product #undefined") {
+                  productName = item.name;
+                } else {
+                  productName = `Product #${item.product_id}`;
+                }
+                
+                let productCode = "";
+                if (product?.sku) {
+                  productCode = product.sku;
+                } else if (product?.code) {
+                  productCode = product.code;
+                } else if (item.product_code) {
+                  productCode = item.product_code;
+                } else if (item.code) {
+                  productCode = item.code;
+                }
+                
+                const unit = units.find((u) => u.id === (item.unit_id || product?.unit_id));
+                let unitName = "pcs";
+                if (item.unit_name) {
+                  unitName = item.unit_name;
+                } else if (unit?.short_name) {
+                  unitName = unit.short_name;
+                } else if (unit?.name) {
+                  unitName = unit.name;
+                } else if (product?.unit?.short_name) {
+                  unitName = product.unit.short_name;
+                } else if (product?.unit?.name) {
+                  unitName = product.unit.name;
+                }
+                
+                // Extract attributes from product
+                let productAttributes = [];
+                let productVariants = [];
+                
+                if (product) {
+                  if (product.attributes && Array.isArray(product.attributes)) {
+                    productAttributes = product.attributes;
+                  } else if (product.attribute && Array.isArray(product.attribute)) {
+                    productAttributes = product.attribute;
+                  }
+                  
+                  if (product.variants && Array.isArray(product.variants)) {
+                    productVariants = product.variants;
+                  } else if (product.variant && Array.isArray(product.variant)) {
+                    productVariants = product.variant;
+                  }
+                  
+                  // If stock entry has variant info, use that
+                  if (stockEntry && stockEntry.variant_info) {
+                    if (!productVariants.length && stockEntry.variant_info) {
+                      productVariants = [stockEntry.variant_info];
+                    }
+                  }
+                }
+                
+                mappedProducts.push({
                   id: item.id,
                   product_id: item.product_id,
-                  product_name:
-                    item.product_name ||
-                    item.name ||
-                    `Product #${item.product_id}`,
-                  product_code: item.product_code || item.code || "",
+                  product_name: productName,
+                  product_code: productCode,
                   quantity: qty,
                   item_count: qty,
-                  unit_id: item.unit_id || null,
-                  unit_name: item.unit_name || "pcs",
+                  unit_id: item.unit_id || product?.unit_id || null,
+                  unit_name: unitName,
                   price: price,
                   gst: gst,
                   discount: discount,
                   total_price: calculateItemTotal(price, qty, gst, discount),
                   status: "completed",
-                  stock_quantity: item.stock_quantity || 0,
-                  current_stock: item.current_stock || 0,
-                  stock_id: item.stock_id || null,
+                  stock_quantity: availableStock,
+                  current_stock: currentStockQuantity,
+                  stock_id: item.stock_id || stockEntry?.id || null,
                   is_package: false,
-                  variant_info: item.variant_info || null,
-                  attributes: item.attributes || [],
-                  variants: item.variants || [],
+                  variant_info: item.variant_info || stockEntry?.variant_info || null,
+                  attributes: productAttributes,
+                  variants: productVariants,
                   original_gst_percentage: gst,
-                };
-              });
+                });
+              }
 
               const pkgData = invoiceData.packages;
               const invoicePackages = Array.isArray(pkgData)
@@ -1289,6 +1406,11 @@ const InvoiceFormScreen = () => {
                 attributes: [],
                 variants: [],
               }));
+
+              // Store initial package snapshot for change detection
+              initialPackageSnapshot.current = JSON.stringify(
+                mappedPackages.map((m) => ({ id: m.package_row_id, q: m.quantity })),
+              );
 
               setLineItems([...mappedProducts, ...mappedPackages]);
             }
@@ -2481,6 +2603,24 @@ const InvoiceFormScreen = () => {
     const productItems = lineItems.filter((item) => !item.is_package);
     const packageItems = lineItems.filter((item) => item.is_package);
 
+    // Stock validation warning for edit mode
+    if (isEdit && hasStockPermission) {
+      const stockExceededItems = productItems.filter(
+        (item) => item.stock_quantity !== undefined && item.stock_quantity < Infinity && item.quantity > item.stock_quantity
+      );
+      
+      if (stockExceededItems.length > 0) {
+        const itemNames = stockExceededItems.map(item => item.product_name).join(", ");
+        Toast.show({
+          type: "warning",
+          text1: "⚠️ Stock Warning",
+          text2: `${stockExceededItems.length} item(s) exceed available stock: ${itemNames}`,
+          visibilityTime: 5000,
+        });
+        // Allow user to continue but warn them
+      }
+    }
+
     const packagesData = packageItems.map((item) => ({
       package_id: item.product_id,
       package_name: item.product_name,
@@ -2529,6 +2669,27 @@ const InvoiceFormScreen = () => {
     try {
       let result;
       if (isEdit && invoiceId) {
+        // Check if packages were modified in edit mode
+        const pkgSnapNow = JSON.stringify(
+          lineItems
+            .filter((l) => l.is_package)
+            .map((m) => ({
+              id: m.package_row_id,
+              q: m.quantity,
+              name: m.product_name,
+            })),
+        );
+        const packagesDirty = pkgSnapNow !== initialPackageSnapshot.current;
+
+        if (packagesDirty) {
+          Toast.show({
+            type: "info",
+            text1: "ℹ️ Package Changes",
+            text2: "Package lines were not saved to this invoice (only product lines update on the server).",
+            visibilityTime: 4000,
+          });
+        }
+
         result = await updateInvoice(invoiceId, payload);
       } else {
         result = await createInvoice(payload);
