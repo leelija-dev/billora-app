@@ -11,6 +11,7 @@ import { customersAPI } from './customers';
 import { dashboardAPI } from './dashboard';
 import { reportsAPI } from './reports';
 import { invoiceAPI } from './invoices';
+import { gstAPI } from './gst';
 
 // API Configuration
 export const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
@@ -51,6 +52,9 @@ export {
   
   // Invoices
   invoiceAPI,
+
+  // GST
+  gstAPI,
 };
 
 // Legacy exports for backward compatibility

@@ -22,7 +22,7 @@ import DashboardScreen from "./screens/dashboard/DashboardScreen";
 import BrandsStackNavigator from "./components/navigation/stacks/BrandsStack";
 import CategoriesStackNavigator from "./components/navigation/stacks/CategoriesStack";
 import CustomersStackNavigator from "./components/navigation/stacks/CustomersStack";
-
+import GstStackNavigator from "./components/navigation/stacks/GstStack";
 import MedicineTypesStackNavigator from "./components/navigation/stacks/MedicineTypesStack";
 import OrdersStackNavigator from "./components/navigation/stacks/OrdersStack";
 import PackagesStackNavigator from "./components/navigation/stacks/PackagesStack";
@@ -221,7 +221,7 @@ const SCREEN_COMPONENTS = {
   Packages: PackagesStackNavigator,
   Stores: StoresStackNavigator,
   Sellers: SellersStackNavigator,
-  GST: DashboardScreen,
+  GST: GstStackNavigator,
   Plans: DashboardScreen,
   SocialLink: DashboardScreen,
   Settings: SettingsStackNavigator,

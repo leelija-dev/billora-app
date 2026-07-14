@@ -9,7 +9,7 @@ import DashboardScreen from "../../screens/dashboard/DashboardScreen";
 import BrandsStackNavigator from "./stacks/BrandsStack";
 import CategoriesStackNavigator from "./stacks/CategoriesStack";
 import CustomersStackNavigator from "./stacks/CustomersStack";
-
+import GstStackNavigator from "./stacks/GstStack";
 
 import MedicineTypesStackNavigator from "./stacks/MedicineTypesStack";
 import OrdersStackNavigator from "./stacks/OrdersStack";
@@ -41,6 +41,7 @@ const COMPONENT_MAP = {
   Packages: PackagesStackNavigator,
   Stores: StoresStackNavigator,
   Sellers: SellersStackNavigator,
+  GST: GstStackNavigator,
   Settings: SettingsStackNavigator,
 };
 
