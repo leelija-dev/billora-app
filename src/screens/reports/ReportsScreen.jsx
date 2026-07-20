@@ -1,4 +1,4 @@
-// screens/reports/ReportsScreen.js - UPDATED WITH INFINITE SCROLLING
+// screens/reports/ReportsScreen.js - UPDATED WITH STATS TOGGLE
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -24,6 +24,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import * as XLSX from "xlsx";
 import Header from "../../components/common/Header";
 import ExportDropdown from "../../components/common/ExportDropdown";
+import StatsCard from "../../components/dashboard/StatsCard";
 import { getNavigationItemsWithBadges } from "../../constants/navigationItems";
 import { useAuthStore } from "../../store/authStore";
 import useReportsStore from "../../store/reportsStore";
@@ -62,6 +63,7 @@ const ReportsScreen = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
   const [printingInvoice, setPrintingInvoice] = useState(false);
+  const [showStats, setShowStats] = useState(true);
   
   // Date filter states
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -217,21 +219,17 @@ const ReportsScreen = () => {
   // Handle load more
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || loadingMore || loading) {
-      console.log('⏭️ Skipping - already loading');
       return;
     }
     
     if (!hasMore) {
-      console.log('⏭️ Skipping - no more data');
       return;
     }
 
     if (currentPage >= lastPage) {
-      console.log('⏭️ Skipping - reached last page');
       return;
     }
 
-    console.log(`📜 Triggering loadMoreReports - currentPage: ${currentPage}, lastPage: ${lastPage}`);
     setIsLoadingMore(true);
     await loadMoreReports();
     setIsLoadingMore(false);
@@ -252,7 +250,6 @@ const ReportsScreen = () => {
     const shouldLoadMore = scrollPercentage >= triggerThreshold;
     
     if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
-      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
       setHasTriggeredLoadMore(true);
       handleLoadMore();
     }
@@ -265,6 +262,11 @@ const ReportsScreen = () => {
     setSearchQuery("");
     resetFilters();
     handleQuickFilter("30days");
+  };
+
+  // Toggle stats visibility
+  const toggleStats = () => {
+    setShowStats(!showStats);
   };
 
   // Calculate statistics from filtered reports
@@ -299,6 +301,70 @@ const ReportsScreen = () => {
       averageOrder: calculatedStats.orders > 0 ? calculatedStats.revenue / calculatedStats.orders : 0,
     };
   }, [filteredReports]);
+
+  // Stats Section Component
+  const StatsSection = () => {
+    if (!showStats) return null;
+
+    const statsData = [
+      {
+        id: 1,
+        title: "Total Reports",
+        value: totalReports || filteredReports.length,
+        icon: "file-document",
+        color: "#4F46E5",
+        onPress: () => console.log("Total Reports clicked"),
+      },
+      {
+        id: 2,
+        title: "Revenue",
+        value: `₹${stats.revenue.toLocaleString()}`,
+        icon: "cash",
+        color: "#10B981",
+        onPress: () => console.log("Revenue clicked"),
+      },
+      {
+        id: 3,
+        title: "Due Amount",
+        value: `₹${stats.due.toLocaleString()}`,
+        icon: "alert-circle",
+        color: "#EF4444",
+        onPress: () => console.log("Due Amount clicked"),
+      },
+      {
+        id: 4,
+        title: "Total Orders",
+        value: stats.orders,
+        icon: "shopping",
+        color: "#F59E0B",
+        onPress: () => console.log("Total Orders clicked"),
+      },
+    ];
+
+    return (
+      <View
+        className={`px-4 py-4 border-b ${
+          isDarkMode
+            ? "bg-gray-900 border-gray-800"
+            : "bg-gray-50 border-gray-100"
+        }`}
+      >
+        <View className="flex-row flex-wrap justify-between">
+          {statsData.map((item) => (
+            <View key={item.id} className="w-[48%] mb-3">
+              <StatsCard
+                title={item.title}
+                value={item.value}
+                icon={item.icon}
+                color={item.color}
+                onPress={item.onPress}
+              />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   // Generate Invoice Print HTML
   const generateInvoiceHTML = (report) => {
@@ -806,7 +872,6 @@ const ReportsScreen = () => {
     }
   };
 
-
   const navigationItems = useMemo(() => {
     const badges = {
       reports: filteredReports.length.toString(),
@@ -865,7 +930,7 @@ const ReportsScreen = () => {
 
   return (
     <View
-      className={`flex-1 pb-24 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
+      className={`flex-1 pb-0 ${isDarkMode ? "bg-gray-900" : "bg-gray-50"}`}
     >
       <StatusBar
         barStyle={isDarkMode ? "light-content" : "dark-content"}
@@ -916,54 +981,36 @@ const ReportsScreen = () => {
         }
       />
 
-      {/* Statistics Cards */}
-      <View className="flex-row flex-wrap px-4 py-3">
-        <LinearGradient 
-          style={{borderRadius: 12}} 
-          colors={["#3b82f6", "#2563eb"]} 
-          className="rounded-xl p-4 flex-1 mr-2" 
-          start={{ x: 0, y: 0 }} 
-          end={{ x: 1, y: 1 }}
-        >
-          <Text className="text-white/80 text-xs">Total Reports</Text>
-          <Text className="text-white text-2xl font-bold">{totalReports || filteredReports.length}</Text>
-          <View className="flex-row items-center mt-1">
-            <Icon name="file-document" size={16} color="#86efac" />
-            <Text className="text-white/80 text-xs ml-1">All reports</Text>
-          </View>
-        </LinearGradient>
-
-        <View className={`rounded-xl p-4 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-          <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Total Amount</Text>
-          <Text className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}>₹{stats.total.toLocaleString()}</Text>
-          <View className="flex-row items-center mt-1">
-            <View className="w-2 h-2 rounded-full bg-blue-500 mr-1" />
-            <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-              Gross total
-            </Text>
-          </View>
+      {/* Stats Toggle Button */}
+      <TouchableOpacity
+        onPress={toggleStats}
+        className={`px-4 py-3 flex-row items-center justify-between ${
+          isDarkMode ? "bg-gray-800" : "bg-white"
+        } border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
+      >
+        <View className="flex-row items-center">
+          <Icon
+            name="chart-bar"
+            size={20}
+            color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+          />
+          <Text
+            className={`text-sm font-medium ml-2 ${
+              isDarkMode ? "text-gray-300" : "text-gray-600"
+            }`}
+          >
+            {showStats ? "Hide Statistics" : "Show Statistics"}
+          </Text>
         </View>
-      </View>
+        <Icon
+          name={showStats ? "chevron-up" : "chevron-down"}
+          size={22}
+          color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+        />
+      </TouchableOpacity>
 
-      <View className="flex-row px-4 mb-4">
-        <View className={`rounded-xl p-3 flex-1 mr-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-          <View className="flex-row items-center">
-            <Icon name="cash" size={20} color="#10b981" />
-            <Text className={`ml-2 text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Paid Amount</Text>
-          </View>
-          <Text className={`text-xl font-bold mt-1 ${isDarkMode ? "text-white" : "text-gray-800"}`}>₹{stats.revenue.toLocaleString()}</Text>
-          <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Collected</Text>
-        </View>
-
-        <View className={`rounded-xl p-3 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-          <View className="flex-row items-center">
-            <Icon name="alert-circle" size={20} color="#ef4444" />
-            <Text className={`ml-2 text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Due Amount</Text>
-          </View>
-          <Text className={`text-xl font-bold mt-1 ${isDarkMode ? "text-white" : "text-gray-800"}`}>₹{stats.due.toLocaleString()}</Text>
-          <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Pending</Text>
-        </View>
-      </View>
+      {/* Stats Section */}
+      <StatsSection />
 
       {/* Page Indicator */}
       <View className={`px-4 py-2 flex-row justify-between items-center border-b ${isDarkMode ? 'border-gray-800' : 'border-gray-100'}`}>

@@ -1,6 +1,5 @@
-// screens/invoices/InvoicesScreen.js - COMPLETE UPDATED VERSION
+// screens/invoices/InvoicesScreen.js - UPDATED WITH AUTO-SEARCH
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +15,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import Header from "../../components/common/Header";
 import { ConfirmationModal, SuccessModal } from "../../components/common/CustomModal";
+import StatsCard from "../../components/dashboard/StatsCard";
 import { useAuthStore } from "../../store/authStore";
 import useInvoiceStore from "../../store/invoiceStore";
 import { useThemeStore } from "../../store/themeStore";
@@ -52,6 +52,7 @@ const InvoicesScreen = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
+  const [showStats, setShowStats] = useState(true);
   
   // Modal states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -73,6 +74,7 @@ const InvoicesScreen = () => {
   const [cancellingInvoice, setCancellingInvoice] = useState(false);
 
   const scrollViewRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
 
   // Get filtered menu items from permission store
   const menuItems = useMemo(() => {
@@ -100,7 +102,11 @@ const InvoicesScreen = () => {
       fetchInvoices(1, filters, false).finally(() => {
         setInitialLoading(false);
       });
-      return () => {};
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+      };
     }, [fetchInvoices, filters]),
   );
 
@@ -111,7 +117,27 @@ const InvoicesScreen = () => {
     }
   }, [isLoadingMore, loadingMore]);
 
-  // ❌ REMOVED: Auto-search useEffect - now search is applied manually
+  // Handle search with debounce - AUTO SEARCH
+  useEffect(() => {
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Set new timeout for debounce
+    searchTimeoutRef.current = setTimeout(() => {
+      if (!initialLoading) {
+        setFilters({ search: searchQuery });
+        fetchInvoices(1, { ...filters, search: searchQuery }, false);
+      }
+    }, 500); // 500ms debounce delay
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
 
   // Handle pull-to-refresh
   const handleRefresh = useCallback(async () => {
@@ -123,21 +149,17 @@ const InvoicesScreen = () => {
   // Handle load more
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || loadingMore || loading) {
-      console.log('⏭️ Skipping - already loading');
       return;
     }
     
     if (!hasMore) {
-      console.log('⏭️ Skipping - no more data');
       return;
     }
 
     if (currentPage >= lastPage) {
-      console.log('⏭️ Skipping - reached last page');
       return;
     }
 
-    console.log(`📜 Triggering loadMoreInvoices - currentPage: ${currentPage}, lastPage: ${lastPage}`);
     setIsLoadingMore(true);
     await loadMoreInvoices();
     setIsLoadingMore(false);
@@ -154,42 +176,29 @@ const InvoicesScreen = () => {
     const maxScroll = totalContentHeight - scrollViewHeight;
     const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
     
-    // Only log when percentage changes significantly
-    if (Math.floor(scrollPercentage) % 10 === 0) {
-      console.log(`📊 Scroll percentage: ${Math.floor(scrollPercentage)}%`);
-    }
-    
     const triggerThreshold = 50;
     const shouldLoadMore = scrollPercentage >= triggerThreshold;
     
     if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
-      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
       setHasTriggeredLoadMore(true);
       handleLoadMore();
     }
   }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
 
-  // ============ MANUAL FILTER HANDLERS ============
-  
-  // Apply search filter - only when user clicks search or presses Enter
-  const handleApplySearch = () => {
-    console.log("🔍 Applying search filter:", searchQuery);
-    setFilters({ search: searchQuery });
-    // Reset to page 1 when applying filter
-    fetchInvoices(1, { ...filters, search: searchQuery }, false);
+  // Toggle stats visibility
+  const toggleStats = () => {
+    setShowStats(!showStats);
   };
 
   // Clear search filter
   const handleClearSearch = () => {
-    console.log("🧹 Clearing search filter");
     setSearchQuery("");
     setFilters({ search: "" });
-    // Reset to page 1 when clearing filter
     fetchInvoices(1, { ...filters, search: "" }, false);
   };
 
   // Check if search filter is active
-  const hasActiveSearch = filters.search !== "";
+  const hasActiveSearch = searchQuery.trim() !== "";
 
   const handleAddInvoice = () => {
     navigation.navigate("InvoiceForm");
@@ -382,6 +391,70 @@ const InvoicesScreen = () => {
     }, 0);
   }, [safeInvoices]);
 
+  // Stats Section Component
+  const StatsSection = () => {
+    if (!showStats) return null;
+
+    const statsData = [
+      {
+        id: 1,
+        title: "Total Invoices",
+        value: totalInvoicesCount,
+        icon: "file-document",
+        color: "#4F46E5",
+        onPress: () => console.log("Total Invoices clicked"),
+      },
+      {
+        id: 2,
+        title: "Total Amount",
+        value: `₹${totalAmount.toLocaleString()}`,
+        icon: "cash",
+        color: "#10B981",
+        onPress: () => console.log("Total Amount clicked"),
+      },
+      {
+        id: 3,
+        title: "Paid Amount",
+        value: `₹${totalPaidAmount.toLocaleString()}`,
+        icon: "check-circle",
+        color: "#2563EB",
+        onPress: () => console.log("Paid Amount clicked"),
+      },
+      {
+        id: 4,
+        title: "Due Amount",
+        value: `₹${totalDueAmount.toLocaleString()}`,
+        icon: "alert-circle",
+        color: "#EF4444",
+        onPress: () => console.log("Due Amount clicked"),
+      },
+    ];
+
+    return (
+      <View
+        className={`px-4 py-4 border-b ${
+          isDarkMode
+            ? "bg-gray-900 border-gray-800"
+            : "bg-gray-50 border-gray-100"
+        }`}
+      >
+        <View className="flex-row flex-wrap justify-between">
+          {statsData.map((item) => (
+            <View key={item.id} className="w-[48%] mb-3">
+              <StatsCard
+                title={item.title}
+                value={item.value}
+                icon={item.icon}
+                color={item.color}
+                onPress={item.onPress}
+              />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const getStatusConfig = (status) => {
     const configs = {
       paid: { color: "#10b981", icon: "check-circle", label: "Paid" },
@@ -524,7 +597,38 @@ const InvoicesScreen = () => {
         }
       />
 
-      {/* Search Bar with Manual Apply */}
+      {/* Stats Toggle Button */}
+      <TouchableOpacity
+        onPress={toggleStats}
+        className={`px-4 py-3 flex-row items-center justify-between ${
+          isDarkMode ? "bg-gray-800" : "bg-white"
+        } border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
+      >
+        <View className="flex-row items-center">
+          <Icon
+            name="chart-bar"
+            size={20}
+            color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+          />
+          <Text
+            className={`text-sm font-medium ml-2 ${
+              isDarkMode ? "text-gray-300" : "text-gray-600"
+            }`}
+          >
+            {showStats ? "Hide Statistics" : "Show Statistics"}
+          </Text>
+        </View>
+        <Icon
+          name={showStats ? "chevron-up" : "chevron-down"}
+          size={22}
+          color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+        />
+      </TouchableOpacity>
+
+      {/* Stats Section */}
+      <StatsSection />
+
+      {/* Search Bar - Auto Search without button */}
       <View className="px-4 pt-4 pb-2">
         <View className={`flex-row items-center rounded-2xl px-4 h-14 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
           <Icon name="magnify" size={22} color="#9ca3af" />
@@ -534,20 +638,13 @@ const InvoicesScreen = () => {
             placeholderTextColor="#9ca3af"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            onSubmitEditing={handleApplySearch}
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch} className="mr-2">
+            <TouchableOpacity onPress={handleClearSearch} className="ml-2">
               <Icon name="close-circle" size={20} color="#9ca3af" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            onPress={handleApplySearch}
-            className="bg-blue-500 px-4 py-2 rounded-xl"
-          >
-            <Text className="text-white font-medium text-sm">Search</Text>
-          </TouchableOpacity>
         </View>
         
         {/* Active Filter Indicator */}
@@ -556,7 +653,7 @@ const InvoicesScreen = () => {
             <View className="flex-row items-center bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full">
               <Icon name="filter" size={14} color="#3B82F6" />
               <Text className="text-xs text-blue-600 dark:text-blue-400 ml-1">
-                Filter: "{filters.search}"
+                Searching: "{searchQuery}"
               </Text>
               <TouchableOpacity onPress={handleClearSearch} className="ml-2">
                 <Icon name="close" size={14} color="#3B82F6" />
@@ -593,57 +690,8 @@ const InvoicesScreen = () => {
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: 20 }}
         >
-          {/* Stats Cards */}
-          <View className="flex-row flex-wrap px-4 py-3">
-            <LinearGradient 
-              style={{borderRadius: 12}} 
-              colors={["#3b82f6", "#2563eb"]} 
-              className="rounded-xl p-4 flex-1 mr-2" 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }}
-            >
-              <Text className="text-white/80 text-xs">Total Invoices</Text>
-              <Text className="text-white text-2xl font-bold">{totalInvoicesCount}</Text>
-              <View className="flex-row items-center mt-1">
-                <Icon name="file-document" size={16} color="#86efac" />
-                <Text className="text-white/80 text-xs ml-1">All invoices</Text>
-              </View>
-            </LinearGradient>
-
-            <View className={`rounded-xl p-4 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-              <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Total Amount</Text>
-              <Text className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-800"}`}>₹{totalAmount.toLocaleString()}</Text>
-              <View className="flex-row items-center mt-1">
-                <View className="w-2 h-2 rounded-full bg-blue-500 mr-1" />
-                <Text className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  Gross total
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View className="flex-row px-4 mb-4">
-            <View className={`rounded-xl p-3 flex-1 mr-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-              <View className="flex-row items-center">
-                <Icon name="cash" size={20} color="#10b981" />
-                <Text className={`ml-2 text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Paid Amount</Text>
-              </View>
-              <Text className={`text-xl font-bold mt-1 ${isDarkMode ? "text-white" : "text-gray-800"}`}>₹{totalPaidAmount.toLocaleString()}</Text>
-              <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Collected</Text>
-            </View>
-
-            <View className={`rounded-xl p-3 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-              <View className="flex-row items-center">
-                <Icon name="alert-circle" size={20} color="#ef4444" />
-                <Text className={`ml-2 text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Due Amount</Text>
-              </View>
-              <Text className={`text-xl font-bold mt-1 ${isDarkMode ? "text-white" : "text-gray-800"}`}>₹{totalDueAmount.toLocaleString()}</Text>
-              <Text className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Pending</Text>
-            </View>
-          </View>
-
           {/* Invoice List */}
-          <View className="flex-1 px-4 pb-4">
+          <View className="flex-1 px-4 pt-2 pb-4">
             {loading && safeInvoices.length === 0 ? (
               <View className="py-12 items-center">
                 <ActivityIndicator size="large" color="#3B82F6" />

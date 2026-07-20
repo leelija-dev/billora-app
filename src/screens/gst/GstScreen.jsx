@@ -1,4 +1,4 @@
-// screens/gst/GstScreen.jsx - COMPLETE UPDATED VERSION WITHOUT STATUS UPDATION
+// screens/gst/GstScreen.jsx - UPDATED WITH STATS TOGGLE AND NO SEARCH BAR
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { printAsync } from "expo-print";
@@ -19,6 +19,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import Header from "../../components/common/Header";
 import { SuccessModal } from "../../components/common/CustomModal";
+import StatsCard from "../../components/dashboard/StatsCard";
 import { useAuthStore } from "../../store/authStore";
 import useGstStore from "../../store/gstStore";
 import { useThemeStore } from "../../store/themeStore";
@@ -36,6 +37,23 @@ const escapeHtml = (text) => {
     "'": '&#039;'
   };
   return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+};
+
+// Format currency helper
+const formatCurrency = (amount) => {
+  const num = parseFloat(amount) || 0;
+  return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+// Format date helper
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 };
 
 const GstScreen = () => {
@@ -65,13 +83,13 @@ const GstScreen = () => {
 
   const [activeTab, setActiveTab] = useState("gst_in");
   const [dataViewMode, setDataViewMode] = useState("paginate");
-  const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasTriggeredLoadMore, setHasTriggeredLoadMore] = useState(false);
   const [showMonthFilter, setShowMonthFilter] = useState(false);
   const [showYearFilter, setShowYearFilter] = useState(false);
+  const [showStats, setShowStats] = useState(true);
 
   // Modal states - Removed status modal, kept only success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -180,26 +198,21 @@ const GstScreen = () => {
   // Handle load more
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore || loadingMore || loading) {
-      console.log('⏭️ Skipping - already loading');
       return;
     }
     
     if (!hasMore) {
-      console.log('⏭️ Skipping - no more data');
       return;
     }
 
     if (currentPage >= lastPage) {
-      console.log('⏭️ Skipping - reached last page');
       return;
     }
 
     if (dataViewMode === "all") {
-      console.log('⏭️ Skipping - all data mode');
       return;
     }
 
-    console.log(`📜 Triggering loadMoreGstCollections - currentPage: ${currentPage}, lastPage: ${lastPage}`);
     setIsLoadingMore(true);
     await loadMoreGstCollections(getUserId());
     setIsLoadingMore(false);
@@ -216,59 +229,26 @@ const GstScreen = () => {
     const maxScroll = totalContentHeight - scrollViewHeight;
     const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
     
-    // Only log when percentage changes significantly
-    if (Math.floor(scrollPercentage) % 10 === 0) {
-      console.log(`📊 Scroll percentage: ${Math.floor(scrollPercentage)}%`);
-    }
-    
     const triggerThreshold = 50;
     const shouldLoadMore = scrollPercentage >= triggerThreshold;
     
     if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading && dataViewMode !== "all") {
-      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
       setHasTriggeredLoadMore(true);
       handleLoadMore();
     }
   }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore, dataViewMode]);
 
-  // ============ MANUAL FILTER HANDLERS ============
-  
-  // Apply search filter
-  const handleApplySearch = () => {
-    console.log("🔍 Applying search filter:", searchQuery);
-    const params = { page: 1 };
-    if (searchQuery.trim()) {
-      params.search = searchQuery.trim();
-      setDataViewMode("all");
-    } else {
-      setDataViewMode("paginate");
-    }
-    if (filters.month) params.month = filters.month;
-    if (filters.year) params.year = filters.year;
-    fetchGstCollections(getUserId(), params);
+  // Toggle stats visibility
+  const toggleStats = () => {
+    setShowStats(!showStats);
   };
 
-  // Clear search filter
-  const handleClearSearch = () => {
-    console.log("🧹 Clearing search filter");
-    setSearchQuery("");
-    setDataViewMode("paginate");
-    const params = { page: 1 };
-    if (filters.month) params.month = filters.month;
-    if (filters.year) params.year = filters.year;
-    fetchGstCollections(getUserId(), params);
-  };
-
-  // Check if search filter is active
-  const hasActiveSearch = searchQuery.trim() !== "";
-
-  // ============ FIXED PRINT FUNCTION WITH BETTER ERROR HANDLING ============
+  // ============ PRINT FUNCTION ============
   const handlePrint = async () => {
     try {
       const isGstIn = activeTab === 'gst_in';
       const title = isGstIn ? 'GST In Report' : 'GST Out Report';
       
-      // Limit to first 20 records to avoid string length issues
       const printData = tableData.slice(0, 20);
       const recordsCount = tableData.length;
       
@@ -288,10 +268,10 @@ const GstScreen = () => {
             <td>#${escapeHtml(invoiceNumber)}</td>
             <td>${escapeHtml(customerName)}</td>
             <td>${escapeHtml(productName)}</td>
-            <td>${quantity.toFixed(2)}</td>
-            <td>${formatCurrency(price)}</td>
-            <td>${gstPercent.toFixed(2)}%</td>
-            <td>${formatCurrency(gstAmount)}</td>
+            <td class="center">${quantity.toFixed(2)}</td>
+            <td class="amount">${formatCurrency(price)}</td>
+            <td class="center">${gstPercent.toFixed(2)}%</td>
+            <td class="amount">${formatCurrency(gstAmount)}</td>
             <td>${formatDate(item.created_at || item.invoice?.created_at)}</td>
           </tr>`;
         } else {
@@ -303,21 +283,20 @@ const GstScreen = () => {
           const quantity = parseFloat(item.quantity) || 0;
           const price = parseFloat(item.price) || 0;
           const gstPercent = parseFloat(item.gst) || 0;
-          const gstAmount = (price * gstPercent / 100) * (item.quantity || 1);
+          const gstAmount = (price * gstPercent / 100) * quantity;
           
           return `<tr>
             <td>${escapeHtml(productName)}</td>
             <td>${escapeHtml(sellerName)}</td>
-            <td>${quantity.toFixed(2)}</td>
-            <td>${formatCurrency(price)}</td>
-            <td>${gstPercent.toFixed(2)}%</td>
-            <td>${formatCurrency(gstAmount)}</td>
+            <td class="center">${quantity.toFixed(2)}</td>
+            <td class="amount">${formatCurrency(price)}</td>
+            <td class="center">${gstPercent.toFixed(2)}%</td>
+            <td class="amount">${formatCurrency(gstAmount)}</td>
             <td>${formatDate(item.created_at)}</td>
           </tr>`;
         }
       }).join('');
       
-      // Create clean HTML document with proper encoding
       const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -439,8 +418,8 @@ const GstScreen = () => {
         <thead>
           <tr>
             ${isGstIn 
-              ? '<th>Invoice #</th><th>Customer</th><th>Product</th><th>Qty</th><th>Price</th><th>GST %</th><th>GST Amt</th><th>Date</th>' 
-              : '<th>Product</th><th>Seller</th><th>Qty</th><th>Price</th><th>GST %</th><th>GST Amt</th><th>Date</th>'}
+              ? '<th>Invoice #</th><th>Customer</th><th>Product</th><th class="center">Qty</th><th class="amount">Price</th><th class="center">GST %</th><th class="amount">GST Amt</th><th>Date</th>' 
+              : '<th>Product</th><th>Seller</th><th class="center">Qty</th><th class="amount">Price</th><th class="center">GST %</th><th class="amount">GST Amt</th><th>Date</th>'}
           </tr>
         </thead>
         <tbody>${tableRows}</tbody>
@@ -457,9 +436,6 @@ const GstScreen = () => {
   </body>
 </html>`;
 
-      console.log('📄 Generating PDF...');
-      
-      // Try to print with better error handling
       let result;
       try {
         result = await printAsync({
@@ -467,9 +443,6 @@ const GstScreen = () => {
           base64: false,
         });
       } catch (printError) {
-        console.warn('⚠️ Print warning:', printError);
-        // If printAsync throws, but we're still here, it might have worked
-        // Show success message anyway
         Toast.show({
           type: 'success',
           text1: 'Success',
@@ -478,11 +451,7 @@ const GstScreen = () => {
         return;
       }
 
-      // Check if result is valid
       if (result && result.uri) {
-        console.log('✅ PDF generated successfully:', result.uri);
-        
-        // Share the PDF
         await shareAsync(result.uri, {
           UTI: '.pdf',
           mimeType: 'application/pdf',
@@ -495,8 +464,6 @@ const GstScreen = () => {
           text2: 'PDF generated and shared successfully',
         });
       } else {
-        // If result is null but no error was thrown, print might still work
-        console.log('✅ Print operation completed (result may be null)');
         Toast.show({
           type: 'success',
           text1: 'Success',
@@ -507,8 +474,6 @@ const GstScreen = () => {
     } catch (error) {
       console.error('❌ Print error:', error);
       
-      // Don't show error if print actually worked (user saw the print dialog)
-      // Check if the error is about null result
       if (error.message && error.message.includes('null')) {
         Toast.show({
           type: 'success',
@@ -524,24 +489,7 @@ const GstScreen = () => {
       }
     }
   };
-  // ============ END OF FIXED PRINT FUNCTION ============
-
-  // Format currency
-  const formatCurrency = (amount) => {
-    const num = parseFloat(amount) || 0;
-    return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  // Format date
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
+  // ============ END OF PRINT FUNCTION ============
 
   // Get current data based on active tab
   const getCurrentData = () => {
@@ -602,9 +550,86 @@ const GstScreen = () => {
   const tableData = getCurrentData();
   const totalCount = getTotalCount();
 
+  // Calculate GST Amount based on type
+  const calculateGstAmount = (item) => {
+    const price = parseFloat(item.price) || 0;
+    const gstPercent = parseFloat(item.gst) || 0;
+    const quantity = parseFloat(item.quantity) || 1;
+    
+    if (activeTab === 'gst_in') {
+      return (price * gstPercent) / (100 + gstPercent);
+    } else {
+      return (price * gstPercent / 100) * quantity;
+    }
+  };
+
+  // Stats Section Component
+  const StatsSection = () => {
+    if (!showStats) return null;
+
+    const statsData = [
+      {
+        id: 1,
+        title: "GST In (Sales)",
+        value: formatCurrency(summary.gstIn),
+        icon: "arrow-up",
+        color: "#10B981",
+        onPress: () => setActiveTab('gst_in'),
+      },
+      {
+        id: 2,
+        title: "GST Out (Purchases)",
+        value: formatCurrency(summary.gstOut),
+        icon: "arrow-down",
+        color: "#EF4444",
+        onPress: () => setActiveTab('gst_out'),
+      },
+      {
+        id: 3,
+        title: "Net GST",
+        value: formatCurrency(summary.gstIn - summary.gstOut),
+        icon: "calculator",
+        color: (summary.gstIn - summary.gstOut) >= 0 ? "#2563EB" : "#F59E0B",
+        onPress: () => {},
+      },
+      {
+        id: 4,
+        title: "Total Records",
+        value: totalCount,
+        icon: "file-document",
+        color: "#8B5CF6",
+        onPress: () => {},
+      },
+    ];
+
+    return (
+      <View
+        className={`px-4 py-4 border-b ${
+          isDarkMode
+            ? "bg-gray-900 border-gray-800"
+            : "bg-gray-50 border-gray-100"
+        }`}
+      >
+        <View className="flex-row flex-wrap justify-between">
+          {statsData.map((item) => (
+            <View key={item.id} className="w-[48%] mb-3">
+              <StatsCard
+                title={item.title}
+                value={item.value}
+                icon={item.icon}
+                color={item.color}
+                onPress={item.onPress}
+              />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   // Render GST In item
   const renderGstInItem = (item) => {
-    const gstAmount = (item.price * item.gst) / (100 + item.gst);
+    const gstAmount = calculateGstAmount(item);
     
     return (
       <View
@@ -619,6 +644,9 @@ const GstScreen = () => {
             <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
               {item.customer?.name || `Customer #${item.customer_id}`}
             </Text>
+          </View>
+          <View className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-lg">
+            <Text className="text-xs text-green-600 dark:text-green-400 font-medium">GST In</Text>
           </View>
         </View>
 
@@ -640,7 +668,7 @@ const GstScreen = () => {
           </Text>
         </View>
 
-        <View className="flex-row justify-between items-center">
+        <View className="flex-row justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700">
           <Text className={`text-sm font-semibold text-green-600`}>
             GST Amount: {formatCurrency(gstAmount)}
           </Text>
@@ -654,7 +682,7 @@ const GstScreen = () => {
 
   // Render GST Out item
   const renderGstOutItem = (item) => {
-    const gstAmount = (item.price * item.gst / 100) * (item.quantity || 1);
+    const gstAmount = calculateGstAmount(item);
     
     return (
       <View
@@ -669,6 +697,9 @@ const GstScreen = () => {
             <Text className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
               Seller: {item.seller?.name || 'N/A'}
             </Text>
+          </View>
+          <View className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+            <Text className="text-xs text-purple-600 dark:text-purple-400 font-medium">GST Out</Text>
           </View>
         </View>
 
@@ -687,7 +718,7 @@ const GstScreen = () => {
           </Text>
         </View>
 
-        <View className="flex-row justify-between items-center">
+        <View className="flex-row justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-700">
           <Text className={`text-sm font-semibold text-purple-600`}>
             GST Amount: {formatCurrency(gstAmount)}
           </Text>
@@ -746,111 +777,39 @@ const GstScreen = () => {
         }
       />
 
-      {/* Search Bar with Manual Apply */}
-      <View className="px-4 pt-4 pb-2">
-        <View className={`flex-row items-center rounded-2xl px-4 h-14 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-          <Icon name="magnify" size={22} color="#9ca3af" />
-          <TextInput
-            className={`flex-1 ml-3 text-base ${isDarkMode ? "text-white" : "text-gray-800"}`}
-            placeholder="Search GST records..."
-            placeholderTextColor="#9ca3af"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleApplySearch}
-            returnKeyType="search"
+      {/* Stats Toggle Button */}
+      <TouchableOpacity
+        onPress={toggleStats}
+        className={`px-4 py-3 flex-row items-center justify-between ${
+          isDarkMode ? "bg-gray-800" : "bg-white"
+        } border-b ${isDarkMode ? "border-gray-700" : "border-gray-200"}`}
+      >
+        <View className="flex-row items-center">
+          <Icon
+            name="chart-bar"
+            size={20}
+            color={isDarkMode ? "#9CA3AF" : "#6B7280"}
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch} className="mr-2">
-              <Icon name="close-circle" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={handleApplySearch}
-            className="bg-blue-500 px-4 py-2 rounded-xl"
+          <Text
+            className={`text-sm font-medium ml-2 ${
+              isDarkMode ? "text-gray-300" : "text-gray-600"
+            }`}
           >
-            <Text className="text-white font-medium text-sm">Search</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Active Filter Indicator */}
-        {hasActiveSearch && (
-          <View className="flex-row items-center mt-2">
-            <View className="flex-row items-center bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full">
-              <Icon name="filter" size={14} color="#3B82F6" />
-              <Text className="text-xs text-blue-600 dark:text-blue-400 ml-1">
-                Filter: "{searchQuery}"
-              </Text>
-              <TouchableOpacity onPress={handleClearSearch} className="ml-2">
-                <Icon name="close" size={14} color="#3B82F6" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </View>
-
-      {/* Summary Cards */}
-      <View className="flex-row flex-wrap px-4 py-2">
-        <LinearGradient 
-          style={{borderRadius: 12, flex: 1, marginRight: 4}} 
-          colors={["#10b981", "#059669"]} 
-          className="rounded-xl p-3" 
-          start={{ x: 0, y: 0 }} 
-          end={{ x: 1, y: 1 }}
-        >
-          <Text className="text-white/80 text-xs">GST In (Sales)</Text>
-          <Text className="text-white text-lg font-bold">{formatCurrency(summary.gstIn)}</Text>
-          <View className="flex-row items-center mt-0.5">
-            <Icon name="arrow-up" size={12} color="#86efac" />
-            <Text className="text-white/80 text-xs ml-1">Sales GST</Text>
-          </View>
-        </LinearGradient>
-
-        <LinearGradient 
-          style={{borderRadius: 12, flex: 1, marginLeft: 4}} 
-          colors={["#ef4444", "#dc2626"]} 
-          className="rounded-xl p-3" 
-          start={{ x: 0, y: 0 }} 
-          end={{ x: 1, y: 1 }}
-        >
-          <Text className="text-white/80 text-xs">GST Out (Purchases)</Text>
-          <Text className="text-white text-lg font-bold">{formatCurrency(summary.gstOut)}</Text>
-          <View className="flex-row items-center mt-0.5">
-            <Icon name="arrow-down" size={12} color="#fca5a5" />
-            <Text className="text-white/80 text-xs ml-1">Purchase GST</Text>
-          </View>
-        </LinearGradient>
-      </View>
-
-      <View className="flex-row px-4 mb-2">
-        <View className={`rounded-xl p-3 flex-1 mr-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-          <View className="flex-row items-center">
-            <Icon name="calculator" size={16} color="#6366f1" />
-            <Text className={`ml-1 text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Net GST</Text>
-          </View>
-          <Text className={`text-lg font-bold mt-0.5 ${(summary.gstIn - summary.gstOut) >= 0 ? "text-green-600" : "text-red-600"}`}>
-            {formatCurrency(summary.gstIn - summary.gstOut)}
-          </Text>
-          <Text className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
-            {(summary.gstIn - summary.gstOut) >= 0 ? 'Payable' : 'Receivable'}
+            {showStats ? "Hide Statistics" : "Show Statistics"}
           </Text>
         </View>
+        <Icon
+          name={showStats ? "chevron-up" : "chevron-down"}
+          size={22}
+          color={isDarkMode ? "#9CA3AF" : "#6B7280"}
+        />
+      </TouchableOpacity>
 
-        <View className={`rounded-xl p-3 flex-1 ml-2 shadow-sm ${isDarkMode ? "bg-gray-800" : "bg-white"}`}>
-          <View className="flex-row items-center">
-            <Icon name="file-document" size={16} color="#8b5cf6" />
-            <Text className={`ml-1 text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Collections</Text>
-          </View>
-          <Text className={`text-lg font-bold mt-0.5 ${isDarkMode ? "text-white" : "text-gray-800"}`}>
-            {totalCount}
-          </Text>
-          <Text className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
-            Records
-          </Text>
-        </View>
-      </View>
+      {/* Stats Section */}
+      <StatsSection />
 
       {/* Filters - Month and Year */}
-      <View className={`mx-4 p-3 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm mb-2`}>
+      <View className={`mx-4 mt-3 p-3 rounded-2xl ${isDarkMode ? "bg-gray-800" : "bg-white"} shadow-sm mb-2`}>
         <View className="flex-row items-center justify-between">
           <Text className={`text-sm font-semibold ${isDarkMode ? "text-white" : "text-gray-800"}`}>Filters</Text>
           {(filters.month || filters.year) && (
@@ -1031,7 +990,7 @@ const GstScreen = () => {
                   No GST records found
                 </Text>
                 <Text className={`text-sm mt-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {searchQuery ? 'Try adjusting your search' : 'No data available for the selected filters'}
+                  No data available for the selected filters
                 </Text>
               </View>
             ) : (
