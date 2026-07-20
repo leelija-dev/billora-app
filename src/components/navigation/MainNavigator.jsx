@@ -18,6 +18,7 @@ import ProductsStackNavigator from "./stacks/ProductsStack";
 import ReportsStackNavigator from "./stacks/ReportsStack";
 import SellersStackNavigator from "./stacks/SellersStack";
 import SettingsStackNavigator from "./stacks/SettingsStack";
+import SocialLinkStackNavigator from "./stacks/SocialLinkStack";
 import StocksStackNavigator from "./stacks/StocksStack";
 import StoresStackNavigator from "./stacks/StoresStack";
 import UnitsStackNavigator from "./stacks/UnitsStack";
@@ -41,6 +42,7 @@ const COMPONENT_MAP = {
   Packages: PackagesStackNavigator,
   Stores: StoresStackNavigator,
   Sellers: SellersStackNavigator,
+  SocialLink: SocialLinkStackNavigator,
   GST: GstStackNavigator,
   Settings: SettingsStackNavigator,
 };

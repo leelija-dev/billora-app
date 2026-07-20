@@ -23,6 +23,7 @@ export const PERMISSIONS = {
   GST: 'gst',
   PLANS: 'plans',
   STOCK: 'stock',
+  SOCIAL_LINK: 'social-link',
 };
 
 export const PERMISSION_GROUPS = {
