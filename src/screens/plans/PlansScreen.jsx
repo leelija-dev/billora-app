@@ -1,9 +1,9 @@
 // screens/plans/PlansScreen.jsx
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Dimensions,
   Linking,
   RefreshControl,
   ScrollView,
@@ -13,17 +13,20 @@ import {
   View,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import Header from "../../components/common/Header";
-import { SuccessModal, ErrorModal, ConfirmationModal } from "../../components/common/CustomModal";
-import SubscriptionCard from "../../components/billing/SubscriptionCard";
 import PaymentHistory from "../../components/billing/PaymentHistory";
-import SubscriptionForm from "../../components/billing/SubscriptionForm";
+import SubscriptionCard from "../../components/billing/SubscriptionCard";
+import {
+  ConfirmationModal,
+  ErrorModal,
+  SuccessModal,
+} from "../../components/common/CustomModal";
+import Header from "../../components/common/Header";
 import { useAuthStore } from "../../store/authStore";
 import useBillingStore from "../../store/billingStore";
-import billingAPI from "../../api/billing";
-import { useThemeStore } from "../../store/themeStore";
 import { usePermissionStore } from "../../store/permissionStore";
-import Toast from "react-native-toast-message";
+import { useThemeStore } from "../../store/themeStore";
+
+const { width } = Dimensions.get("window");
 
 const PlansScreen = () => {
   const { isDarkMode } = useThemeStore();
@@ -39,6 +42,7 @@ const PlansScreen = () => {
     fetchPlans,
     fetchPaymentHistory,
     fetchRecentPlan,
+    fetchSubscription,
     reset,
   } = useBillingStore();
 
@@ -51,11 +55,10 @@ const PlansScreen = () => {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [showSubscriptionForm, setShowSubscriptionForm] = useState(false);
-  const [showUpgradeForm, setShowUpgradeForm] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [upgradeData, setUpgradeData] = useState(null);
+  const [confirmationModalVisible, setConfirmationModalVisible] =
+    useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [cancelAction, setCancelAction] = useState(null);
 
   // Get filtered menu items
   const menuItems = getFilteredMenuItems().map((item) => ({
@@ -82,23 +85,24 @@ const PlansScreen = () => {
       return () => {
         reset();
       };
-    }, [user?.id])
+    }, [user?.id]),
   );
 
   const loadData = async () => {
     try {
       setInitialLoading(true);
-      
+
       // Check plan mode from user
       if (user?.plan_mode) {
         setPlanMode(user.plan_mode);
       }
 
-      if (user?.plan_mode === 'paid') {
+      if (user?.plan_mode === "paid") {
         await Promise.all([
           fetchPlans(),
           fetchPaymentHistory(getUserId(), 1, 10),
           fetchRecentPlan(getUserId()),
+          fetchSubscription(getUserId()),
         ]);
       }
     } catch (error) {
@@ -154,175 +158,436 @@ const PlansScreen = () => {
   };
 
   // Get current plan from subscription
-  const currentPlan = subscription?.planDetails || plans.find(p => p.id === subscription?.planId);
+  const currentPlan =
+    subscription?.planDetails ||
+    plans.find((p) => p.id === subscription?.planId);
 
-  // Handle upgrade
+  // Handle upgrade - redirect to website
   const handleUpgrade = () => {
-    setShowSubscriptionForm(true);
-  };
-
-  // Handle renew
-  const handleRenew = async () => {
-    if (!currentPlan) {
-      setErrorMessage("No plan found to renew");
+    const pricingUrl = "https://thefastbill.com/pricing";
+    Linking.openURL(pricingUrl).catch((err) => {
+      console.error("Failed to open pricing page:", err);
+      setErrorMessage("Failed to open pricing page");
       setErrorModalVisible(true);
-      return;
-    }
-
-    const planPrice = parseFloat(currentPlan.price || currentPlan.amount || 0);
-    const discountPercentage = parseFloat(currentPlan.discount) || 0;
-    const gstPercentage = parseFloat(currentPlan.gst) || 18;
-
-    const discountAmount = (planPrice * discountPercentage) / 100;
-    const discountedPrice = planPrice - discountAmount;
-    const gst = (discountedPrice * gstPercentage) / 100;
-    const totalAmount = discountedPrice + gst;
-
-    setUpgradeData({
-      plan_id: currentPlan.id,
-      plan_name: currentPlan.name,
-      original_amount: planPrice,
-      discount_percentage: discountPercentage,
-      discount_amount: discountAmount,
-      discounted_amount: discountedPrice,
-      gst_percentage: gstPercentage,
-      gst_amount: gst,
-      total_amount: totalAmount,
-      customer_id: getUserId(),
     });
-
-    Alert.alert(
-      "Renew Plan",
-      `Renew ${currentPlan.name} for ${formatCurrency(totalAmount)}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Renew", onPress: processRenew },
-      ]
-    );
   };
 
-  const processRenew = async () => {
-    if (!upgradeData) return;
-
-    setIsProcessing(true);
-    try {
-      const response = await billingAPI.renewPlan({
-        plan_id: upgradeData.plan_id,
-        customer_id: upgradeData.customer_id,
-        amount: upgradeData.total_amount,
-      });
-
-      if (response?.data?.session_id) {
-        setSuccessMessage("Renewal initiated! Redirecting to payment...");
-        setSuccessModalVisible(true);
-        // In a real app, you would open Cashfree payment here
-        // For now, just redirect to pricing page
-        setTimeout(() => {
-          handlePurchasePlan();
-        }, 2000);
-      } else {
-        setErrorMessage(response?.data?.message || "Failed to initiate renewal");
-        setErrorModalVisible(true);
-      }
-    } catch (error) {
-      console.error("Renewal error:", error);
-      setErrorMessage(error.response?.data?.message || "Renewal failed");
+  // Handle renew - redirect to website
+  const handleRenew = () => {
+    const pricingUrl = "https://thefastbill.com/pricing";
+    Linking.openURL(pricingUrl).catch((err) => {
+      console.error("Failed to open pricing page:", err);
+      setErrorMessage("Failed to open pricing page");
       setErrorModalVisible(true);
-    } finally {
-      setIsProcessing(false);
-    }
+    });
   };
 
-  // Handle cancel
+  // Handle cancel confirmation
   const handleCancel = () => {
-    Alert.alert(
-      "Cancel Subscription",
-      "Are you sure you want to cancel your subscription? You will lose access to premium features.",
-      [
-        { text: "Keep Plan", style: "cancel" },
-        { text: "Cancel", style: "destructive", onPress: () => {
-          setSuccessMessage("Subscription cancelled successfully");
-          setSuccessModalVisible(true);
-        }},
-      ]
-    );
+    setCancelAction("cancel");
+    setConfirmationModalVisible(true);
   };
 
-  // Handle plan selection from form
-  const handlePlanSelect = (plan) => {
-    setSelectedPlan(plan);
-    setShowSubscriptionForm(false);
-    
-    // Calculate upgrade pricing
-    const newPlanPrice = parseFloat(plan.price || plan.amount || 0);
-    const gstPercentage = parseFloat(plan.gst) || 18;
-    const discountPercentage = parseFloat(plan.discount) || 0;
-    
-    const discountAmount = (newPlanPrice * discountPercentage) / 100;
-    const discountedPrice = newPlanPrice - discountAmount;
-    
-    let upgradeAmount = discountedPrice;
-    let currentPlanRemaining = 0;
-    
-    if (recentPlanData && recentPlanData.remainingAmount > 0) {
-      currentPlanRemaining = parseFloat(recentPlanData.remainingAmount) || 0;
-      upgradeAmount = Math.max(0, discountedPrice - currentPlanRemaining);
-    }
-    
-    const gst = (upgradeAmount * gstPercentage) / 100;
-    const totalAmount = upgradeAmount + gst;
-    
-    setUpgradeData({
-      plan_id: plan.id,
-      plan_name: plan.name,
-      original_amount: newPlanPrice,
-      discount_percentage: discountPercentage,
-      discount_amount: discountAmount,
-      discounted_amount: discountedPrice,
-      current_plan_remaining: currentPlanRemaining,
-      upgrade_amount: upgradeAmount,
-      gst: gst,
-      gst_percentage: gstPercentage,
-      total_amount: totalAmount,
-      customer_id: getUserId(),
-    });
-    
-    setShowUpgradeForm(true);
-  };
-
-  // Process upgrade
-  const processUpgrade = async () => {
-    if (!upgradeData) return;
-
+  const confirmCancel = async () => {
+    setConfirmationModalVisible(false);
     setIsProcessing(true);
-    try {
-      const response = await billingAPI.upgradePlan({
-        amount: upgradeData.total_amount,
-        plan_id: upgradeData.plan_id,
-        customer_id: upgradeData.customer_id,
-        upgrade_amount: upgradeData.upgrade_amount,
-        remaining_amount: upgradeData.current_plan_remaining,
-      });
 
-      if (response?.data?.session_id) {
-        setSuccessMessage("Upgrade initiated! Redirecting to payment...");
-        setSuccessModalVisible(true);
-        setShowUpgradeForm(false);
-        // In a real app, you would open Cashfree payment here
-        setTimeout(() => {
-          handlePurchasePlan();
-        }, 2000);
-      } else {
-        setErrorMessage(response?.data?.message || "Failed to initiate upgrade");
-        setErrorModalVisible(true);
-      }
+    try {
+      // Simulate cancel API call
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      setSuccessMessage("Subscription cancelled successfully");
+      setSuccessModalVisible(true);
+      // Refresh data
+      await loadData();
     } catch (error) {
-      console.error("Upgrade error:", error);
-      setErrorMessage(error.response?.data?.message || "Upgrade failed");
+      setErrorMessage("Failed to cancel subscription");
       setErrorModalVisible(true);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Get plan details
+  const getPlanDetails = () => {
+    if (!currentPlan) return null;
+
+    const features = [];
+    const planName = currentPlan.name || currentPlan.plan_name || "Basic";
+
+    if (planName.toLowerCase().includes("pro")) {
+      features.push(
+        "Advanced Analytics",
+        "Priority Support",
+        "Unlimited Posts",
+        "Team Collaboration",
+      );
+    } else if (planName.toLowerCase().includes("premium")) {
+      features.push(
+        "All Pro Features",
+        "AI Content Generation",
+        "Advanced Scheduling",
+        "24/7 Support",
+      );
+    } else {
+      features.push(
+        "Social Media Management",
+        "Analytics Dashboard",
+        "Post Scheduling",
+        "Basic Support",
+      );
+    }
+
+    return {
+      name: planName,
+      price: currentPlan.price || currentPlan.amount || 0,
+      features: features,
+      status: subscription?.status || "active",
+    };
+  };
+
+  // Render Stats Cards
+  const renderStatsCards = () => {
+    if (planMode !== "paid") return null;
+
+    const planInfo = getPlanDetails();
+    if (!planInfo) return null;
+
+    const statsData = [
+      {
+        id: 1,
+        title: "Plan Type",
+        value: planInfo.name,
+        icon: "crown",
+        color: "#8B5CF6",
+      },
+      {
+        id: 2,
+        title: "Amount",
+        value: formatCurrency(planInfo.price),
+        icon: "currency-inr",
+        color: "#10B981",
+      },
+      {
+        id: 3,
+        title: "Status",
+        value: subscription?.status === "active" ? "Active" : "Inactive",
+        icon: subscription?.status === "active" ? "check-circle" : "clock",
+        color: subscription?.status === "active" ? "#10B981" : "#F59E0B",
+      },
+      {
+        id: 4,
+        title: "Posts Used",
+        value: "45",
+        icon: "post",
+        color: "#3B82F6",
+      },
+    ];
+
+    return (
+      <View className="px-4 py-4">
+        <Text
+          className={`text-lg font-bold mb-3 ${isDarkMode ? "text-white" : "text-gray-900"}`}
+        >
+          Plan Overview
+        </Text>
+        <View className="flex-row flex-wrap justify-between">
+          {statsData.map((item) => (
+            <View key={item.id} className="w-[48%] mb-3">
+              <View
+                className={`rounded-2xl p-4 shadow-sm ${
+                  isDarkMode ? "bg-gray-800" : "bg-white"
+                }`}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text
+                      className={`text-xs uppercase tracking-wider ${
+                        isDarkMode ? "text-gray-400" : "text-gray-500"
+                      }`}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      className={`text-sm font-semibold mt-1 ${
+                        isDarkMode ? "text-white" : "text-gray-900"
+                      }`}
+                      numberOfLines={1}
+                    >
+                      {item.value}
+                    </Text>
+                  </View>
+                  <View
+                    className={`p-2 rounded-full ${
+                      isDarkMode ? "bg-opacity-20" : "bg-opacity-10"
+                    }`}
+                    style={{ backgroundColor: `${item.color}20` }}
+                  >
+                    <Icon name={item.icon} size={20} color={item.color} />
+                  </View>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  // Render Trial Banner
+  const renderTrialBanner = () => {
+    if (planMode !== "trial") return null;
+
+    return (
+      <View className="px-4 pt-6">
+        <View
+          className={`rounded-3xl p-6 border ${
+            isDarkMode
+              ? "bg-gradient-to-br from-blue-900/30 to-indigo-900/30 border-blue-800"
+              : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200"
+          }`}
+        >
+          <View className="flex-row items-start">
+            <View
+              className={`p-3 rounded-full ${
+                isDarkMode ? "bg-blue-900/30" : "bg-blue-100"
+              }`}
+            >
+              <Icon name="panda" size={28} color="#3B82F6" />
+            </View>
+            <View className="ml-4 flex-1">
+              <View className="flex-row items-center justify-between">
+                <Text
+                  className={`text-lg font-bold ${
+                    isDarkMode ? "text-blue-300" : "text-blue-800"
+                  }`}
+                >
+                  Trial Mode Active
+                </Text>
+                <View
+                  className={`px-3 py-1 rounded-full ${
+                    isDarkMode ? "bg-yellow-900/30" : "bg-yellow-100"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-medium ${
+                      isDarkMode ? "text-yellow-400" : "text-yellow-700"
+                    }`}
+                  >
+                    {recentPlanData?.days_left || 7} Days Left
+                  </Text>
+                </View>
+              </View>
+              <Text
+                className={`text-sm mt-2 ${
+                  isDarkMode ? "text-blue-400" : "text-blue-700"
+                }`}
+              >
+                You're currently exploring the platform with a{" "}
+                <Text className="font-bold">free trial</Text>. To continue
+                enjoying all features without interruption, please upgrade to a
+                paid plan.
+              </Text>
+              <View
+                className={`rounded-xl p-3 mt-4 ${
+                  isDarkMode ? "bg-blue-900/30" : "bg-sky-50"
+                }`}
+              >
+                <View className="flex-row items-center">
+                  <Icon name="alert" size={18} color="#0EA5E9" />
+                  <Text
+                    className={`text-sm ml-2 flex-1 ${
+                      isDarkMode ? "text-blue-300" : "text-blue-800"
+                    }`}
+                  >
+                    Your trial period will expire soon. Upgrade now to keep your
+                    data and access.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={handlePurchasePlan}
+                className="bg-blue-600 px-6 py-3.5 rounded-xl flex-row items-center justify-center mt-4 shadow-lg"
+                style={{
+                  shadowColor: "#3B82F6",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                }}
+              >
+                <Icon name="credit-card" size={20} color="#ffffff" />
+                <Text className="text-white font-semibold ml-2 text-base">
+                  Purchase a Plan
+                </Text>
+                <Icon
+                  name="arrow-right"
+                  size={20}
+                  color="#ffffff"
+                  style={{ marginLeft: 8 }}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // Render No Plan Banner
+  const renderNoPlanBanner = () => {
+    if (planMode !== "free" && planMode !== null) return null;
+
+    const features = [
+      { icon: "check-circle", text: "Social Media Management" },
+      { icon: "check-circle", text: "Analytics Dashboard" },
+      { icon: "check-circle", text: "Post Scheduling" },
+      { icon: "check-circle", text: "Basic Support" },
+    ];
+
+    return (
+      <View className="px-4 pt-6">
+        <View
+          className={`rounded-3xl p-6 border ${
+            isDarkMode
+              ? "bg-gradient-to-br from-purple-900/30 to-blue-900/30 border-purple-800"
+              : "bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200"
+          }`}
+        >
+          <View className="flex-row items-start">
+            <View
+              className={`p-3 rounded-full ${
+                isDarkMode ? "bg-purple-900/30" : "bg-purple-100"
+              }`}
+            >
+              <Icon name="crown" size={28} color="#8B5CF6" />
+            </View>
+            <View className="ml-4 flex-1">
+              <Text
+                className={`text-lg font-bold ${
+                  isDarkMode ? "text-purple-300" : "text-purple-800"
+                }`}
+              >
+                Choose Your Plan
+              </Text>
+              <Text
+                className={`text-sm mt-2 ${
+                  isDarkMode ? "text-purple-400" : "text-purple-700"
+                }`}
+              >
+                Select a plan that best fits your needs and unlock all premium
+                features to grow your business.
+              </Text>
+
+              {/* Features List */}
+              <View className="mt-4 space-y-2">
+                {features.map((feature, index) => (
+                  <View key={index} className="flex-row items-center">
+                    <Icon name={feature.icon} size={16} color="#8B5CF6" />
+                    <Text
+                      className={`text-sm ml-2 ${
+                        isDarkMode ? "text-purple-300" : "text-purple-700"
+                      }`}
+                    >
+                      {feature.text}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <View
+                className={`rounded-xl p-3 mt-4 ${
+                  isDarkMode ? "bg-purple-900/30" : "bg-purple-50"
+                }`}
+              >
+                <View className="flex-row items-center">
+                  <Icon name="information" size={18} color="#8B5CF6" />
+                  <Text
+                    className={`text-sm ml-2 flex-1 ${
+                      isDarkMode ? "text-purple-300" : "text-purple-800"
+                    }`}
+                  >
+                    Get started with our flexible plans starting from just
+                    ₹9/month.
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleViewPlans}
+                className="bg-purple-600 px-6 py-3.5 rounded-xl flex-row items-center justify-center mt-4 shadow-lg"
+                style={{
+                  shadowColor: "#8B5CF6",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                }}
+              >
+                <Icon name="credit-card" size={20} color="#ffffff" />
+                <Text className="text-white font-semibold ml-2 text-base">
+                  View Plans & Pricing
+                </Text>
+                <Icon
+                  name="arrow-right"
+                  size={20}
+                  color="#ffffff"
+                  style={{ marginLeft: 8 }}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // Render Subscription Features
+  const renderSubscriptionFeatures = () => {
+    if (planMode !== "paid" || !currentPlan) return null;
+
+    const planInfo = getPlanDetails();
+    if (!planInfo) return null;
+
+    return (
+      <View className="px-4 pt-6">
+        <Text
+          className={`text-lg font-bold mb-3 ${isDarkMode ? "text-white" : "text-gray-900"}`}
+        >
+          Plan Features
+        </Text>
+        <View
+          className={`rounded-3xl p-6 ${
+            isDarkMode ? "bg-gray-800" : "bg-white"
+          }`}
+        >
+          {planInfo.features.map((feature, index) => (
+            <View
+              key={index}
+              className={`flex-row items-center py-3 ${
+                index < planInfo.features.length - 1
+                  ? isDarkMode
+                    ? "border-b border-gray-700"
+                    : "border-b border-gray-100"
+                  : ""
+              }`}
+            >
+              <View
+                className={`p-1.5 rounded-full mr-3 ${
+                  isDarkMode ? "bg-green-900/30" : "bg-green-100"
+                }`}
+              >
+                <Icon name="check" size={14} color="#10B981" />
+              </View>
+              <Text
+                className={`flex-1 text-sm ${
+                  isDarkMode ? "text-gray-300" : "text-gray-700"
+                }`}
+              >
+                {feature}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
   };
 
   if (initialLoading) {
@@ -341,7 +606,9 @@ const PlansScreen = () => {
         />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#3B82F6" />
-          <Text className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+          <Text
+            className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+          >
             Loading billing information...
           </Text>
         </View>
@@ -373,7 +640,15 @@ const PlansScreen = () => {
             <Icon
               name="refresh"
               size={20}
-              color={loading ? (isDarkMode ? "#4B5563" : "#9CA3AF") : isDarkMode ? "#9CA3AF" : "#4b5563"}
+              color={
+                loading
+                  ? isDarkMode
+                    ? "#4B5563"
+                    : "#9CA3AF"
+                  : isDarkMode
+                    ? "#9CA3AF"
+                    : "#4b5563"
+              }
             />
           </TouchableOpacity>
         }
@@ -392,31 +667,63 @@ const PlansScreen = () => {
         }
         showsVerticalScrollIndicator={false}
       >
-        {planMode === 'paid' ? (
-          // Paid User View
+        {/* Banner Section */}
+        {planMode === "paid" ? (
           <>
-            {/* Current Plan Card */}
-            <View className="px-4 pt-6 pb-4">
-              <Text className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}>
-                Current Plan
-              </Text>
+            {/* Current Plan Header */}
+            <View className="px-4 pt-6 pb-2">
+              <View className="flex-row items-center justify-between">
+                <Text
+                  className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}
+                >
+                  My Subscription
+                </Text>
+                <View
+                  className={`px-3 py-1.5 rounded-full ${
+                    isDarkMode ? "bg-green-900/30" : "bg-green-100"
+                  }`}
+                >
+                  <View className="flex-row items-center">
+                    <View className="w-2 h-2 rounded-full bg-green-500 mr-2" />
+                    <Text
+                      className={`text-xs font-medium ${
+                        isDarkMode ? "text-green-400" : "text-green-700"
+                      }`}
+                    >
+                      Active
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
-            <SubscriptionCard
-              subscription={subscription}
-              onUpgrade={handleUpgrade}
-              onRenew={handleRenew}
-              onCancel={handleCancel}
-              loading={isProcessing}
-            />
+            {/* Subscription Card */}
+            <View className="px-3">
+              <SubscriptionCard
+                subscription={subscription}
+                onUpgrade={handleUpgrade}
+                onRenew={handleRenew}
+                onCancel={handleCancel}
+                loading={isProcessing}
+              />
+            </View>
 
-            {/* Payment History */}
-            <View className="px-4 pt-6 pb-4">
-              <Text className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}>
+            {/* Stats Cards */}
+            {renderStatsCards()}
+
+            {/* Plan Features */}
+            {renderSubscriptionFeatures()}
+
+            {/* Payment History Header */}
+            <View className="px-4 pt-6 pb-2">
+              <Text
+                className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"}`}
+              >
                 Payment History
               </Text>
             </View>
 
+            {/* Payment History */}
             <PaymentHistory
               payments={payments}
               loading={loading}
@@ -428,104 +735,10 @@ const PlansScreen = () => {
               }}
             />
           </>
-        ) : planMode === 'trial' ? (
-          // Trial Mode View
-          <View className="px-4 pt-6">
-            <View className={`rounded-3xl p-6 border ${
-              isDarkMode ? "bg-blue-900/20 border-blue-800" : "bg-gradient-to-r from-blue-50 to-sky-50 border-blue-200"
-            }`}>
-              <View className="flex-row items-start">
-                <View className={`p-3 rounded-full ${
-                  isDarkMode ? "bg-blue-900/30" : "bg-blue-100"
-                }`}>
-                  <Icon name="panda" size={24} color="#3B82F6" />
-                </View>
-                <View className="ml-4 flex-1">
-                  <Text className={`text-lg font-bold ${
-                    isDarkMode ? "text-blue-300" : "text-blue-800"
-                  }`}>
-                    Trial Mode Active
-                  </Text>
-                  <Text className={`text-sm mt-2 ${
-                    isDarkMode ? "text-blue-400" : "text-blue-700"
-                  }`}>
-                    You're currently exploring the platform with a <Text className="font-bold">free trial</Text>. 
-                    To continue enjoying all features without interruption, please upgrade to a paid plan.
-                  </Text>
-                  <View className={`rounded-xl p-3 mt-4 ${
-                    isDarkMode ? "bg-blue-900/30" : "bg-sky-50"
-                  }`}>
-                    <View className="flex-row items-center">
-                      <Icon name="alert" size={16} color="#0EA5E9" />
-                      <Text className={`text-sm ml-2 ${
-                        isDarkMode ? "text-blue-300" : "text-blue-800"
-                      }`}>
-                        Your trial period will expire soon. Upgrade now to keep your data and access.
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    onPress={handlePurchasePlan}
-                    className="bg-blue-600 px-6 py-3 rounded-xl flex-row items-center justify-center mt-4"
-                  >
-                    <Icon name="credit-card" size={20} color="#ffffff" />
-                    <Text className="text-white font-semibold ml-2">
-                      Purchase a Plan
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
         ) : (
-          // No Plan View
-          <View className="px-4 pt-6">
-            <View className={`rounded-3xl p-6 border ${
-              isDarkMode ? "bg-blue-900/20 border-blue-800" : "bg-gradient-to-r from-blue-50 to-sky-50 border-blue-200"
-            }`}>
-              <View className="flex-row items-start">
-                <View className={`p-3 rounded-full ${
-                  isDarkMode ? "bg-blue-900/30" : "bg-blue-100"
-                }`}>
-                  <Icon name="credit-card" size={24} color="#3B82F6" />
-                </View>
-                <View className="ml-4 flex-1">
-                  <Text className={`text-lg font-bold ${
-                    isDarkMode ? "text-blue-300" : "text-blue-800"
-                  }`}>
-                    No Active Plan Found
-                  </Text>
-                  <Text className={`text-sm mt-2 ${
-                    isDarkMode ? "text-blue-400" : "text-blue-700"
-                  }`}>
-                    It looks like you don't have an active subscription yet. 
-                    Choose a plan that best fits your needs and unlock all premium features.
-                  </Text>
-                  <View className={`rounded-xl p-3 mt-4 ${
-                    isDarkMode ? "bg-blue-900/30" : "bg-sky-50"
-                  }`}>
-                    <View className="flex-row items-center">
-                      <Icon name="information" size={16} color="#0EA5E9" />
-                      <Text className={`text-sm ml-2 ${
-                        isDarkMode ? "text-blue-300" : "text-blue-800"
-                      }`}>
-                        Get started with our flexible plans starting from just ₹9/month.
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    onPress={handleViewPlans}
-                    className="bg-blue-600 px-6 py-3 rounded-xl flex-row items-center justify-center mt-4"
-                  >
-                    <Icon name="credit-card" size={20} color="#ffffff" />
-                    <Text className="text-white font-semibold ml-2">
-                      View Plans & Pricing
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
+          <>
+            {planMode === "trial" ? renderTrialBanner() : renderNoPlanBanner()}
+          </>
         )}
       </ScrollView>
 
@@ -544,34 +757,20 @@ const PlansScreen = () => {
         onClose={() => setErrorModalVisible(false)}
       />
 
-      {/* Subscription Form Modal */}
-      {showSubscriptionForm && (
-        <SubscriptionForm
-          plans={plans}
-          currentPlan={currentPlan}
-          onSubmit={handlePlanSelect}
-          onCancel={() => setShowSubscriptionForm(false)}
-          isSubmitting={isProcessing}
-        />
-      )}
-
-      {/* Upgrade Confirmation Modal */}
-      {showUpgradeForm && upgradeData && (
-        <ConfirmationModal
-          visible={showUpgradeForm}
-          title="Upgrade Plan"
-          message={`Upgrade to ${upgradeData.plan_name} for ${formatCurrency(upgradeData.total_amount)}?\n\n${upgradeData.current_plan_remaining > 0 ? `Current plan remaining: ${formatCurrency(upgradeData.current_plan_remaining)}\n` : ""}Upgrade amount: ${formatCurrency(upgradeData.upgrade_amount)}\nGST (${upgradeData.gst_percentage}%): ${formatCurrency(upgradeData.gst)}`}
-          onConfirm={processUpgrade}
-          onCancel={() => {
-            setShowUpgradeForm(false);
-            setUpgradeData(null);
-          }}
-          confirmText="Upgrade"
-          cancelText="Cancel"
-          confirmButtonColor="#3B82F6"
-          loading={isProcessing}
-        />
-      )}
+      <ConfirmationModal
+        visible={confirmationModalVisible}
+        title="Cancel Subscription"
+        message="Are you sure you want to cancel your subscription? You will lose access to premium features and your data may be deleted after 30 days."
+        onConfirm={confirmCancel}
+        onCancel={() => {
+          setConfirmationModalVisible(false);
+          setCancelAction(null);
+        }}
+        confirmText="Yes, Cancel"
+        cancelText="Keep Plan"
+        confirmButtonColor="#EF4444"
+        loading={isProcessing}
+      />
     </View>
   );
 };

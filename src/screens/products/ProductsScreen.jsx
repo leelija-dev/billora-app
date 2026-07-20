@@ -187,49 +187,80 @@ const ProductScreen = ({ navigation }) => {
   const handleLoadMore = useCallback(async () => {
     // Check conditions properly
     if (isLoadingMore || loadingMore || loading) {
-      console.log('⏭️ Skipping - already loading');
+      console.log("⏭️ Skipping - already loading");
       return;
     }
-    
+
     if (!hasMore) {
-      console.log('⏭️ Skipping - no more data');
+      console.log("⏭️ Skipping - no more data");
       return;
     }
 
     if (currentPage >= lastPage) {
-      console.log('⏭️ Skipping - reached last page');
+      console.log("⏭️ Skipping - reached last page");
       return;
     }
 
-    console.log(`📜 Triggering loadMoreProducts - currentPage: ${currentPage}, lastPage: ${lastPage}`);
+    console.log(
+      `📜 Triggering loadMoreProducts - currentPage: ${currentPage}, lastPage: ${lastPage}`,
+    );
     setIsLoadingMore(true);
     const nextPage = currentPage + 1;
     await loadMoreProducts(nextPage);
     setIsLoadingMore(false);
     setHasTriggeredLoadMore(false);
-  }, [isLoadingMore, loadingMore, loading, hasMore, currentPage, lastPage, loadMoreProducts]);
+  }, [
+    isLoadingMore,
+    loadingMore,
+    loading,
+    hasMore,
+    currentPage,
+    lastPage,
+    loadMoreProducts,
+  ]);
 
   // Handle scroll for pagination
-  const handleScroll = useCallback((event) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const currentScrollPosition = contentOffset.y;
-    const scrollViewHeight = layoutMeasurement.height;
-    const totalContentHeight = contentSize.height;
-    
-    // Calculate scroll percentage
-    const maxScroll = totalContentHeight - scrollViewHeight;
-    const scrollPercentage = maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
-    
-    // Check if user has scrolled 50% of the screen height
-    const triggerThreshold = 50;
-    const shouldLoadMore = scrollPercentage >= triggerThreshold;
-    
-    if (shouldLoadMore && !hasTriggeredLoadMore && !isLoadingMore && !loadingMore && hasMore && !loading) {
-      console.log(`🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`);
-      setHasTriggeredLoadMore(true);
-      handleLoadMore();
-    }
-  }, [hasTriggeredLoadMore, isLoadingMore, loadingMore, hasMore, loading, handleLoadMore]);
+  const handleScroll = useCallback(
+    (event) => {
+      const { layoutMeasurement, contentOffset, contentSize } =
+        event.nativeEvent;
+      const currentScrollPosition = contentOffset.y;
+      const scrollViewHeight = layoutMeasurement.height;
+      const totalContentHeight = contentSize.height;
+
+      // Calculate scroll percentage
+      const maxScroll = totalContentHeight - scrollViewHeight;
+      const scrollPercentage =
+        maxScroll > 0 ? (currentScrollPosition / maxScroll) * 100 : 0;
+
+      // Check if user has scrolled 50% of the screen height
+      const triggerThreshold = 50;
+      const shouldLoadMore = scrollPercentage >= triggerThreshold;
+
+      if (
+        shouldLoadMore &&
+        !hasTriggeredLoadMore &&
+        !isLoadingMore &&
+        !loadingMore &&
+        hasMore &&
+        !loading
+      ) {
+        console.log(
+          `🎯 Triggering load more at ${Math.floor(scrollPercentage)}% scroll`,
+        );
+        setHasTriggeredLoadMore(true);
+        handleLoadMore();
+      }
+    },
+    [
+      hasTriggeredLoadMore,
+      isLoadingMore,
+      loadingMore,
+      hasMore,
+      loading,
+      handleLoadMore,
+    ],
+  );
 
   // Navigate to create product
   const handleCreateProduct = () => {
@@ -398,7 +429,9 @@ const ProductScreen = ({ navigation }) => {
         <Header title="Products" showBack={false} />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#3B82F6" />
-          <Text className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
+          <Text
+            className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+          >
             Loading products...
           </Text>
         </View>
@@ -579,13 +612,21 @@ const ProductScreen = ({ navigation }) => {
       </View>
 
       {/* Page Indicator */}
-      <View className={`px-4 py-2 flex-row justify-between items-center border-b ${
-        isDarkMode ? 'border-gray-800' : 'border-gray-100'
-      }`}>
-        <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          {totalProducts > 0 ? `Showing ${products.length} of ${totalProducts} products` : `${products.length} products`}
+      <View
+        className={`px-4 py-2 flex-row justify-between items-center border-b ${
+          isDarkMode ? "border-gray-800" : "border-gray-100"
+        }`}
+      >
+        <Text
+          className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+        >
+          {totalProducts > 0
+            ? `Showing ${products.length} of ${totalProducts} products`
+            : `${products.length} products`}
         </Text>
-        <Text className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+        <Text
+          className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+        >
           Page {currentPage}/{lastPage}
         </Text>
       </View>
@@ -610,20 +651,30 @@ const ProductScreen = ({ navigation }) => {
         {loading && products.length === 0 ? (
           <View className="py-12 items-center">
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text className={`mt-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <Text
+              className={`mt-4 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+            >
               Loading products...
             </Text>
           </View>
         ) : getFilteredProducts.length === 0 ? (
           <View className="py-20 items-center">
-            <Icon name="package-variant" size={80} color={isDarkMode ? '#334155' : '#D1D5DB'} />
-            <Text className={`text-lg mt-4 text-center ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            <Icon
+              name="package-variant"
+              size={80}
+              color={isDarkMode ? "#334155" : "#D1D5DB"}
+            />
+            <Text
+              className={`text-lg mt-4 text-center ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}
+            >
               No products found
             </Text>
-            <Text className={`text-sm mt-2 text-center ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              {searchText || filters.status !== 'all'
-                ? 'Try adjusting your filters'
-                : 'Add your first product'}
+            <Text
+              className={`text-sm mt-2 text-center ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+            >
+              {searchText || filters.status !== "all"
+                ? "Try adjusting your filters"
+                : "Add your first product"}
             </Text>
           </View>
         ) : (
@@ -645,20 +696,26 @@ const ProductScreen = ({ navigation }) => {
         {(isLoadingMore || loadingMore) && (
           <View className="py-6 items-center">
             <ActivityIndicator size="small" color="#3B82F6" />
-            <Text className={`mt-2 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+            <Text
+              className={`mt-2 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+            >
               Loading more products...
             </Text>
           </View>
         )}
 
         {/* No More Products */}
-        {!hasMore && products.length > 0 && products.length === totalProducts && (
-          <View className="py-4 items-center">
-            <Text className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              No more products to load
-            </Text>
-          </View>
-        )}
+        {!hasMore &&
+          products.length > 0 &&
+          products.length === totalProducts && (
+            <View className="py-4 items-center">
+              <Text
+                className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}
+              >
+                No more products to load
+              </Text>
+            </View>
+          )}
       </ScrollView>
 
       {/* Modals */}

@@ -194,6 +194,81 @@ const useBillingStore = create((set, get) => ({
     }
   },
 
+  // Fetch subscription data
+  fetchSubscription: async (userId) => {
+    set({ loading: true, error: null });
+    try {
+      const historyRes = await billingAPI.getPlanPurchaseHistory(userId, 1, 100);
+      
+      let historyData = [];
+      if (historyRes?.data?.data?.data && Array.isArray(historyRes.data.data.data)) {
+        historyData = historyRes.data.data.data;
+      } else if (historyRes?.data?.data && Array.isArray(historyRes.data.data)) {
+        historyData = historyRes.data.data;
+      } else if (historyRes?.data && Array.isArray(historyRes.data)) {
+        historyData = historyRes.data;
+      }
+
+      const successfulPurchases = historyData.filter(
+        (p) => p.payment_status === "success" && p.status === "active"
+      );
+
+      if (successfulPurchases.length > 0) {
+        const latestPurchase = successfulPurchases.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        )[0];
+
+        if (latestPurchase.plan_id) {
+          if (latestPurchase.plan) {
+            set({
+              subscription: {
+                id: latestPurchase.id,
+                plan: latestPurchase.plan.name || `Plan ${latestPurchase.plan_id}`,
+                planId: latestPurchase.plan_id,
+                status: latestPurchase.status || "active",
+                currentPeriodStart: latestPurchase.start_date,
+                currentPeriodEnd: latestPurchase.end_date,
+                amount: parseFloat(latestPurchase.price) || 0,
+                interval: latestPurchase.plan.interval || "month",
+                planDetails: latestPurchase.plan,
+                paymentId: latestPurchase.payment_id,
+              },
+              loading: false
+            });
+          } else {
+            const planRes = await billingAPI.getPlanById(latestPurchase.plan_id);
+            const planData = planRes?.data?.data || planRes?.data;
+            if (planData) {
+              set({
+                subscription: {
+                  id: latestPurchase.id,
+                  plan: planData.name || `Plan ${latestPurchase.plan_id}`,
+                  planId: latestPurchase.plan_id,
+                  status: latestPurchase.status || "active",
+                  currentPeriodStart: latestPurchase.start_date,
+                  currentPeriodEnd: latestPurchase.end_date,
+                  amount: parseFloat(latestPurchase.price) || 0,
+                  interval: planData.interval || "month",
+                  planDetails: planData,
+                  paymentId: latestPurchase.payment_id,
+                },
+                loading: false
+              });
+            }
+          }
+        }
+      } else {
+        set({ subscription: null, loading: false });
+      }
+    } catch (error) {
+      set({
+        error: error.response?.data?.message || 'Failed to fetch subscription',
+        loading: false
+      });
+      throw error;
+    }
+  },
+
   // Set subscription manually
   setSubscription: (subscriptionData) => {
     set({ subscription: subscriptionData });
