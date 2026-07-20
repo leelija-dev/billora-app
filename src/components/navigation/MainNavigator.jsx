@@ -20,6 +20,7 @@ import SellersStackNavigator from "./stacks/SellersStack";
 import SettingsStackNavigator from "./stacks/SettingsStack";
 import SocialLinkStackNavigator from "./stacks/SocialLinkStack";
 import StocksStackNavigator from "./stacks/StocksStack";
+import PlansStackNavigator from "./stacks/PlansStack";
 import StoresStackNavigator from "./stacks/StoresStack";
 import UnitsStackNavigator from "./stacks/UnitsStack";
 import InvoicesStackNavigator from "./stacks/InvoicesStack";
@@ -44,6 +45,7 @@ const COMPONENT_MAP = {
   Sellers: SellersStackNavigator,
   SocialLink: SocialLinkStackNavigator,
   GST: GstStackNavigator,
+  Plans: PlansStackNavigator,
   Settings: SettingsStackNavigator,
 };
 
